@@ -11,6 +11,7 @@ members = [
     "crates/jarvis-agent",
     "crates/jarvis-daemon",
     "crates/jarvis-cli",
+    "crates/jarvis-tui",
 ]
 
 [workspace.package]
@@ -71,6 +72,11 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 # Sandbox (M3)
 bollard = "0.18"
 git2 = { version = "0.20", default-features = false }
+
+# TUI (M4)
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+tui-input = "0.11"
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }

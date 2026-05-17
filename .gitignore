@@ -14,3 +14,4 @@ Cargo.lock.bak
 *.iml
 .DS_Store
 Thumbs.db
+/jarvis-tui.log

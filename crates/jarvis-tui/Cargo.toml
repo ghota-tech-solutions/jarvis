@@ -1,0 +1,31 @@
+[package]
+name = "jarvis-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Jarvis: ratatui-based terminal client. Talks to jarvis-daemon over gRPC."
+
+[[bin]]
+name = "jarvis-tui"
+path = "src/main.rs"
+
+[dependencies]
+jarvis-core.workspace = true
+jarvis-api.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tokio-util.workspace = true
+tonic.workspace = true
+prost.workspace = true
+futures.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+tui-input.workspace = true
