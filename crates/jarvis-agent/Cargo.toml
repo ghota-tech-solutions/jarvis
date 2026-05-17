@@ -10,6 +10,7 @@ jarvis-core.workspace = true
 jarvis-ledger.workspace = true
 jarvis-llm.workspace = true
 jarvis-tools.workspace = true
+jarvis-sandbox.workspace = true
 async-trait.workspace = true
 futures.workspace = true
 futures-util.workspace = true

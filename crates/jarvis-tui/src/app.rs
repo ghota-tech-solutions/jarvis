@@ -4,7 +4,7 @@
 //! by polling, and (b) the live event stream for the currently-selected task.
 
 use crate::theme::{Theme, DARK_DEFAULT};
-use jarvis_api::{jarvis_client::JarvisClient, Event, Task};
+use jarvis_api::{jarvis_client::JarvisClient, Event, ModelStatus, Task};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -43,6 +43,10 @@ pub struct AppState {
     pub theme: Theme,
     /// Current daemon endpoint (for status bar).
     pub daemon_url: String,
+    /// Registered model statuses (refreshed via GetStatus).
+    pub models: Vec<ModelStatus>,
+    /// Total running tasks at daemon level.
+    pub running_tasks: u32,
 }
 
 impl AppState {
@@ -59,6 +63,8 @@ impl AppState {
             show_all: false,
             theme: DARK_DEFAULT,
             daemon_url: String::new(),
+            models: Vec::new(),
+            running_tasks: 0,
         }
     }
 

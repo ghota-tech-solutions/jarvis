@@ -6,13 +6,20 @@ use futures::StreamExt;
 use jarvis_agent::{run_agent, AgentRun};
 use jarvis_api::{
     jarvis_server::{Jarvis, JarvisServer},
-    AskChunk, AskRequest, Event as ApiEvent, ListTasksRequest, PingRequest, PingResponse,
-    StreamEventsRequest, Task as ApiTask, TaskHandle, TaskList, TaskSpec, UsageStats,
+    AskChunk, AskRequest, DaemonStatus, Event as ApiEvent, ListTasksRequest,
+    ModelStatus as ApiModelStatus, PingRequest, PingResponse, StatusRequest, StreamEventsRequest,
+    Task as ApiTask, TaskHandle, TaskList, TaskSpec, UsageStats,
 };
-use jarvis_config::{Config, LocalProvider};
-use jarvis_core::{AgentId, Capabilities, ChatMessage, ChatRequest, LlmProvider, ProviderName, TaskId};
+use jarvis_config::{Config, LocalProvider, RemoteProvider};
+use jarvis_core::{
+    AgentId, Capabilities, ChatMessage, ChatRequest, LlmProvider, ProviderName, RequiredCapabilities,
+    RoutingPolicy, TaskId, TaskKind,
+};
 use jarvis_ledger::{EventRecord, Ledger, TaskRecord, TaskRuntimeInfo};
-use jarvis_llm::{OpenAiCompatConfig, OpenAiCompatProvider};
+use jarvis_llm::{
+    make_openai_compat_entry, LlmPool, ModelKind, ModelRegistry, OpenAiCompatConfig,
+    OpenAiCompatProvider, QuarantineConfig,
+};
 use jarvis_sandbox::{
     DockerSandbox, NativeSandbox, NetPolicy, Sandbox, SandboxKind, Worktree, WorktreeManager,
 };
@@ -30,15 +37,31 @@ use tonic::{transport::Server, Request, Response, Status};
 use tracing::{error, info, instrument, warn};
 
 pub async fn run(cfg: Config, bind: String) -> Result<()> {
-    let provider = build_default_provider(&cfg)
-        .context("no usable LLM provider in config")?;
+    let registry = build_registry(&cfg)?;
+    if registry.is_empty() {
+        return Err(anyhow!("no providers configured — add at least one [providers.local.*]"));
+    }
+    info!(models = registry.len(), "model registry built");
+
+    let pool = Arc::new(LlmPool::new(registry, QuarantineConfig {
+        threshold: cfg.routing.quarantine_after_failures,
+        window: chrono::Duration::minutes(cfg.routing.quarantine_window_minutes as i64),
+        duration: chrono::Duration::minutes(cfg.routing.quarantine_duration_minutes as i64),
+    }));
+    // Boot probe in the background — don't block daemon startup.
+    {
+        let pool = pool.clone();
+        tokio::spawn(async move { pool.probe_all().await });
+    }
+
+    // Pick the default planning provider for the Ask RPC (one-shot helper).
+    let ask_provider = pick_ask_provider(&pool).await;
 
     let ledger_path = cfg.daemon.data_dir.join("ledger.sqlite");
     let ledger = Ledger::open(&ledger_path).await.context("open ledger")?;
 
     let tools = build_tool_registry();
 
-    // Boot the sandbox factory. Native is always available; Docker is optional.
     let native: Arc<dyn Sandbox> = Arc::new(NativeSandbox);
     let docker = build_docker_sandbox(&cfg.sandbox).await;
     if docker.is_none() && cfg.sandbox.default_backend == "docker" {
@@ -47,7 +70,7 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
 
     let worktrees = WorktreeManager::new(cfg.daemon.data_dir.join("worktrees"));
 
-    let svc = JarvisService::new(provider, ledger, tools, native, docker, worktrees, cfg);
+    let svc = JarvisService::new(pool, ask_provider, ledger, tools, native, docker, worktrees, cfg);
 
     let addr: std::net::SocketAddr = bind.parse().context("parse daemon.addr")?;
     info!(%addr, ledger = %ledger_path.display(), "jarvis-daemon listening");
@@ -60,31 +83,83 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
     Ok(())
 }
 
-fn build_default_provider(cfg: &Config) -> Result<Arc<dyn LlmProvider>> {
-    let (name, lp) = cfg
-        .providers
-        .local
-        .iter()
-        .next()
-        .ok_or_else(|| anyhow!("no [providers.local.*] entry in config"))?;
-    let oc = build_local_provider_cfg(name, lp);
-    info!(provider = %oc.name, model = %oc.model, base_url = %oc.base_url, "boot provider");
-    Ok(Arc::new(OpenAiCompatProvider::new(oc)))
+fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
+    let mut r = ModelRegistry::new();
+    for (name, lp) in &cfg.providers.local {
+        let entry = make_openai_compat_entry(
+            name,
+            ModelKind::Local,
+            lp.url.clone(),
+            lp.model.clone(),
+            lp.api_key.clone().unwrap_or_default(),
+            lp.priority,
+            local_capabilities(lp),
+            0.0,
+            0.0,
+        );
+        info!(model = %entry.name, model_id = %entry.model_id, "registered local model");
+        r.insert(entry);
+    }
+    for (name, rp) in &cfg.providers.remote {
+        let entry = make_openai_compat_entry(
+            name,
+            ModelKind::Remote,
+            rp.url.clone(),
+            rp.model.clone(),
+            rp.api_key.clone(),
+            rp.priority,
+            remote_capabilities(rp),
+            rp.cost_per_mtok_in,
+            rp.cost_per_mtok_out,
+        );
+        info!(model = %entry.name, model_id = %entry.model_id, "registered remote model");
+        r.insert(entry);
+    }
+    Ok(r)
 }
 
-fn build_local_provider_cfg(name: &str, lp: &LocalProvider) -> OpenAiCompatConfig {
-    OpenAiCompatConfig {
-        name: ProviderName::new(format!("local:{name}")),
-        base_url: lp.url.clone(),
-        model: lp.model.clone(),
-        api_key: lp.api_key.clone().unwrap_or_default(),
-        capabilities: Capabilities {
-            ctx_len: lp.capabilities.ctx_len,
-            tool_calls: lp.capabilities.tool_calls,
-            json_schema: lp.capabilities.json_schema,
-            vision: lp.capabilities.vision,
-            supports_streaming: lp.capabilities.supports_streaming,
-        },
+fn local_capabilities(lp: &LocalProvider) -> Capabilities {
+    Capabilities {
+        ctx_len: lp.capabilities.ctx_len,
+        tool_calls: lp.capabilities.tool_calls,
+        json_schema: lp.capabilities.json_schema,
+        vision: lp.capabilities.vision,
+        supports_streaming: lp.capabilities.supports_streaming,
+    }
+}
+
+fn remote_capabilities(rp: &RemoteProvider) -> Capabilities {
+    Capabilities {
+        ctx_len: rp.capabilities.ctx_len,
+        tool_calls: rp.capabilities.tool_calls,
+        json_schema: rp.capabilities.json_schema,
+        vision: rp.capabilities.vision,
+        supports_streaming: rp.capabilities.supports_streaming,
+    }
+}
+
+/// One-shot Ask RPC uses a sensible default: highest-priority local model.
+/// Falls back to a stub provider if registry is empty (defensive — boot bails earlier).
+async fn pick_ask_provider(pool: &Arc<LlmPool>) -> Arc<dyn LlmProvider> {
+    use jarvis_llm::PickRequest;
+    let req = PickRequest {
+        kind: TaskKind::SimpleEdit,
+        routing_override: Some(RoutingPolicy::Auto),
+        ..PickRequest::for_planning()
+    };
+    match pool.pick(&req).await {
+        Ok(p) => p.provider,
+        Err(_) => {
+            // Empty pool was rejected at boot; this branch shouldn't trigger.
+            warn!("ask provider fallback: no model available");
+            Arc::new(OpenAiCompatProvider::new(OpenAiCompatConfig {
+                name: ProviderName::new("local:stub"),
+                base_url: "http://localhost:0/v1".to_string(),
+                model: "stub".to_string(),
+                api_key: String::new(),
+                capabilities: Capabilities::default(),
+            }))
+        }
     }
 }
 
@@ -119,7 +194,8 @@ async fn build_docker_sandbox(cfg: &jarvis_config::SandboxConfig) -> Option<Arc<
 }
 
 struct JarvisService {
-    provider: Arc<dyn LlmProvider>,
+    pool: Arc<LlmPool>,
+    ask_provider: Arc<dyn LlmProvider>,
     ledger: Ledger,
     tools: ToolRegistry,
     native: Arc<dyn Sandbox>,
@@ -137,8 +213,10 @@ struct RuntimeHandle {
 }
 
 impl JarvisService {
+    #[allow(clippy::too_many_arguments)]
     fn new(
-        provider: Arc<dyn LlmProvider>,
+        pool: Arc<LlmPool>,
+        ask_provider: Arc<dyn LlmProvider>,
         ledger: Ledger,
         tools: ToolRegistry,
         native: Arc<dyn Sandbox>,
@@ -147,7 +225,8 @@ impl JarvisService {
         cfg: Config,
     ) -> Self {
         Self {
-            provider,
+            pool,
+            ask_provider,
             ledger,
             tools,
             native,
@@ -157,6 +236,16 @@ impl JarvisService {
             started: Instant::now(),
             running: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn parse_routing(&self, raw: &str) -> Result<RoutingPolicy, Status> {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            return Ok(parse_routing_str(&self.cfg.routing.default_policy)
+                .unwrap_or(RoutingPolicy::Auto));
+        }
+        parse_routing_str(raw).ok_or_else(|| Status::invalid_argument(format!("invalid routing: {raw}")))
     }
 
     #[allow(clippy::result_large_err)]
@@ -249,7 +338,7 @@ impl Jarvis for JarvisService {
             stream: true,
         };
         let mut llm_stream = self
-            .provider
+            .ask_provider
             .complete_stream(chat_req)
             .await
             .map_err(|e| Status::internal(format!("provider: {e}")))?;
@@ -370,22 +459,29 @@ impl Jarvis for JarvisService {
             sandbox: sandbox.clone(),
             net_policy: net.clone(),
         };
+        // Routing policy / required caps for this run.
+        let routing = self.parse_routing(&spec.routing_policy)?;
+        let required = parse_required_caps(&spec.require_caps);
+
         let run = AgentRun {
             task_id: task.id,
             workdir: worktree.path.clone(),
             max_steps: if spec.max_steps == 0 { 20 } else { spec.max_steps },
             agent_id: AgentId::new(),
             cancel,
+            routing,
+            required,
+            kind: TaskKind::Planning,
         };
 
-        let provider = self.provider.clone();
+        let pool = self.pool.clone();
         let ledger = self.ledger.clone();
         let tools = self.tools.clone();
         let running = self.running.clone();
         let worktrees = self.worktrees.clone();
         let task_id = task.id;
         tokio::spawn(async move {
-            let outcome = run_agent(run, provider, ledger, tools, ctx).await;
+            let outcome = run_agent(run, pool, ledger, tools, ctx).await;
             match &outcome {
                 Ok(o) => info!(task = %task_id, ?o, "agent finished"),
                 Err(e) => error!(task = %task_id, error = %e, "agent failed"),
@@ -512,9 +608,73 @@ impl Jarvis for JarvisService {
 
         Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
     }
+
+    #[instrument(skip_all)]
+    async fn get_status(
+        &self,
+        _req: Request<StatusRequest>,
+    ) -> std::result::Result<Response<DaemonStatus>, Status> {
+        let statuses = self.pool.status_all().await;
+        let api_models: Vec<ApiModelStatus> = statuses
+            .into_iter()
+            .map(|m| {
+                let until_micros = m
+                    .quarantined_until
+                    .map(|t| t.timestamp_micros())
+                    .unwrap_or(0);
+                ApiModelStatus {
+                    name: m.name.as_str().to_string(),
+                    kind: m.kind.as_str().to_string(),
+                    model_id: m.model_id,
+                    priority: m.priority,
+                    online: m.online,
+                    quarantined: m.quarantined,
+                    quarantined_until_micros: until_micros,
+                    failures_in_window: m.failures_in_window,
+                    ctx_len: 0,
+                    tool_calls: false,
+                    json_schema: false,
+                    vision: false,
+                }
+            })
+            .collect();
+        let running = self.running.lock().await.len() as u32;
+        Ok(Response::new(DaemonStatus {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            uptime_seconds: self.started.elapsed().as_secs() as i64,
+            models: api_models,
+            running_tasks: running,
+        }))
+    }
 }
 
 #[allow(clippy::result_large_err)]
 fn parse_task_id(s: &str) -> std::result::Result<TaskId, Status> {
     TaskId::from_str(s).map_err(|_| Status::invalid_argument("invalid task id"))
+}
+
+fn parse_routing_str(s: &str) -> Option<RoutingPolicy> {
+    let s = s.trim();
+    match s {
+        "auto" | "" => Some(RoutingPolicy::Auto),
+        "local_only" => Some(RoutingPolicy::LocalOnly),
+        "remote_only" => Some(RoutingPolicy::RemoteOnly),
+        other => other
+            .strip_prefix("model:")
+            .map(|n| RoutingPolicy::Model(ProviderName::new(n.trim()))),
+    }
+}
+
+fn parse_required_caps(caps: &[String]) -> RequiredCapabilities {
+    let mut r = RequiredCapabilities::default();
+    for c in caps {
+        match c.trim().to_ascii_lowercase().as_str() {
+            "tool_calls" => r.tool_calls = true,
+            "json_schema" => r.json_schema = true,
+            "vision" => r.vision = true,
+            "streaming" => r.streaming = true,
+            _ => {}
+        }
+    }
+    r
 }

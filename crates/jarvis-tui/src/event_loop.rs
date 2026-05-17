@@ -14,8 +14,8 @@ use anyhow::{Context, Result};
 use crossterm::event::{Event as CtEvent, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
 use jarvis_api::{
-    jarvis_client::JarvisClient, ListTasksRequest, PingRequest, StreamEventsRequest, TaskHandle,
-    TaskSpec,
+    jarvis_client::JarvisClient, ListTasksRequest, PingRequest, StatusRequest, StreamEventsRequest,
+    TaskHandle, TaskSpec,
 };
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -48,6 +48,7 @@ pub async fn run(app: App) -> Result<()> {
     }
 
     spawn_task_poller(app.clone(), global_cancel.clone());
+    spawn_status_poller(app.clone(), global_cancel.clone());
     spawn_event_streamer(app.clone(), events_cancel.clone(), global_cancel.clone());
 
     let mut input = Input::default();
@@ -327,6 +328,8 @@ async fn submit_task(app: &App, goal: String, events_cancel: Arc<Mutex<Cancellat
             net_policy: String::new(),
             use_worktree: false,
             base_ref: String::new(),
+            routing_policy: String::new(),
+            require_caps: Vec::new(),
         };
         match client.submit_task(spec).await {
             Ok(h) => {
@@ -360,6 +363,27 @@ fn spawn_task_poller(app: App, cancel: CancellationToken) {
         loop {
             tokio::select! {
                 _ = interval.tick() => refresh_tasks(&mut client, &state).await,
+                _ = cancel.cancelled() => return,
+            }
+        }
+    });
+}
+
+fn spawn_status_poller(app: App, cancel: CancellationToken) {
+    let App { state, mut client } = app;
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    if let Ok(resp) = client.get_status(StatusRequest {}).await {
+                        let s = resp.into_inner();
+                        let mut st = state.lock().await;
+                        st.daemon_info = format!("v{} · up {}s", s.version, s.uptime_seconds);
+                        st.models = s.models;
+                        st.running_tasks = s.running_tasks;
+                    }
+                }
                 _ = cancel.cancelled() => return,
             }
         }

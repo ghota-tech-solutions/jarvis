@@ -4,11 +4,13 @@ use crate::prompt;
 use crate::protocol::{parse_reply, ActionKind, AgentError, AgentReply, Outcome};
 use futures_util::StreamExt;
 use jarvis_core::{
-    AgentId, ChatRequest, LlmProvider, TaskId,
+    AgentId, ChatRequest, ProviderName, RequiredCapabilities, RoutingPolicy, TaskId, TaskKind,
 };
 use jarvis_ledger::{EventKind, Ledger, NewEvent, TaskStatus};
+use jarvis_llm::{LlmPool, PickRequest};
 use jarvis_tools::{ToolCtx, ToolRegistry};
 use serde_json::json;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -24,12 +26,18 @@ pub struct AgentRun {
     pub max_steps: u32,
     pub agent_id: AgentId,
     pub cancel: CancellationToken,
+    /// Routing policy for this task. Default = Auto.
+    pub routing: RoutingPolicy,
+    /// Capabilities the agent's planner needs.
+    pub required: RequiredCapabilities,
+    /// Kind hint for the router's auto-rules.
+    pub kind: TaskKind,
 }
 
-#[instrument(skip(provider, ledger, tools, ctx), fields(task = %run.task_id, agent = %run.agent_id))]
+#[instrument(skip(pool, ledger, tools, ctx), fields(task = %run.task_id, agent = %run.agent_id))]
 pub async fn run_agent(
     run: AgentRun,
-    provider: Arc<dyn LlmProvider>,
+    pool: Arc<LlmPool>,
     ledger: Ledger,
     tools: ToolRegistry,
     ctx: ToolCtx,
@@ -49,7 +57,7 @@ pub async fn run_agent(
             return Ok(Outcome::Aborted);
         }
 
-        // 1) Pull recent context from the ledger and call the LLM.
+        // 1) Pull recent context from the ledger.
         let history = ledger.recent_events(run.task_id, 40).await?;
         let messages = prompt::build_messages(&task.goal, &task.workdir, &tool_schemas, &history);
 
@@ -64,36 +72,106 @@ pub async fn run_agent(
             )
             .await?;
 
-        let chat_req = ChatRequest {
-            messages,
-            temperature: Some(0.2),
-            max_tokens: Some(1024),
-            stream: true,
-        };
-
-        let mut stream = provider.complete_stream(chat_req).await?;
-        let mut text = String::new();
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(c) => {
-                    if !c.delta.is_empty() {
-                        text.push_str(&c.delta);
-                        // Live preview as low-volume llm_chunk events; collapsed per step.
-                        // Skipping per-token spam keeps the ledger readable.
-                    }
-                }
+        // 2) Pick a model — try, on failure quarantine + forbid + retry until exhausted.
+        let mut forbidden: HashSet<ProviderName> = HashSet::new();
+        let text = loop {
+            let pick_req = PickRequest {
+                required: run.required.clone(),
+                kind: run.kind,
+                estimated_tokens: 0,
+                routing_override: Some(run.routing.clone()),
+                forbidden: forbidden.clone(),
+            };
+            let picked = match pool.pick(&pick_req).await {
+                Ok(p) => p,
                 Err(e) => {
-                    let payload = json!({ "step": step, "error": e.to_string() });
+                    let payload = json!({ "step": step, "kind": "pool", "error": e.to_string() });
                     ledger
                         .append(
                             NewEvent::new(run.task_id, EventKind::Error, payload)
                                 .with_agent(run.agent_id),
                         )
                         .await?;
-                    return finish_failed(&ledger, run.task_id, &format!("llm: {e}")).await;
+                    return finish_failed(&ledger, run.task_id, &format!("router: {e}")).await;
+                }
+            };
+            ledger
+                .append(
+                    NewEvent::new(
+                        run.task_id,
+                        EventKind::Attempt,
+                        json!({
+                            "step": step,
+                            "model": picked.name.as_str(),
+                            "model_id": picked.model_id,
+                            "kind": picked.kind.as_str(),
+                        }),
+                    )
+                    .with_agent(run.agent_id),
+                )
+                .await?;
+
+            let chat_req = ChatRequest {
+                messages: messages.clone(),
+                temperature: Some(0.2),
+                max_tokens: Some(1024),
+                stream: true,
+            };
+
+            let mut stream = match picked.provider.complete_stream(chat_req).await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!(model = %picked.name, error = %e, "stream open failed; quarantining and retrying");
+                    pool.record_failure(&picked.name).await;
+                    forbidden.insert(picked.name.clone());
+                    ledger
+                        .append(
+                            NewEvent::new(
+                                run.task_id,
+                                EventKind::Error,
+                                json!({"step": step, "model": picked.name.as_str(), "kind": "open_stream", "error": e.to_string()}),
+                            )
+                            .with_agent(run.agent_id),
+                        )
+                        .await?;
+                    continue;
+                }
+            };
+
+            let mut text = String::new();
+            let mut stream_failed = false;
+            while let Some(item) = stream.next().await {
+                match item {
+                    Ok(c) => {
+                        if !c.delta.is_empty() {
+                            text.push_str(&c.delta);
+                        }
+                    }
+                    Err(e) => {
+                        warn!(model = %picked.name, error = %e, "stream error; quarantining and retrying");
+                        pool.record_failure(&picked.name).await;
+                        forbidden.insert(picked.name.clone());
+                        ledger
+                            .append(
+                                NewEvent::new(
+                                    run.task_id,
+                                    EventKind::Error,
+                                    json!({"step": step, "model": picked.name.as_str(), "kind": "stream", "error": e.to_string()}),
+                                )
+                                .with_agent(run.agent_id),
+                            )
+                            .await?;
+                        stream_failed = true;
+                        break;
+                    }
                 }
             }
-        }
+            if stream_failed {
+                continue;
+            }
+            pool.record_success(&picked.name).await;
+            break text;
+        };
 
         // 2) Parse the reply.
         let reply = match parse_reply(&text) {

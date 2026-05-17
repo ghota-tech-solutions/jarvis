@@ -14,6 +14,9 @@ service Jarvis {
   rpc ListTasks(ListTasksRequest) returns (TaskList);
   rpc CancelTask(TaskHandle) returns (Empty);
   rpc StreamEvents(StreamEventsRequest) returns (stream Event);
+
+  // M5: daemon-wide status snapshot (models, uptime, running tasks).
+  rpc GetStatus(StatusRequest) returns (DaemonStatus);
 }
 
 // ---------- M1 ----------
@@ -67,6 +70,38 @@ message TaskSpec {
   bool use_worktree = 6;
   // M3: optional git ref to branch from. Defaults to HEAD.
   string base_ref = 7;
+  // M5: routing policy. "" → config default; "auto"|"local_only"|"remote_only"
+  // |"model:<name>" (strict force).
+  string routing_policy = 8;
+  // M5: required capabilities. Recognised entries: "tool_calls", "json_schema",
+  // "vision". Pool will filter candidate models accordingly.
+  repeated string require_caps = 9;
+}
+
+// ---------- Status / model registry ----------
+
+message StatusRequest {}
+
+message DaemonStatus {
+  string version = 1;
+  int64 uptime_seconds = 2;
+  repeated ModelStatus models = 3;
+  uint32 running_tasks = 4;
+}
+
+message ModelStatus {
+  string name = 1;
+  string kind = 2;          // "local" | "remote"
+  string model_id = 3;
+  int32 priority = 4;
+  bool online = 5;
+  bool quarantined = 6;
+  int64 quarantined_until_micros = 7;
+  uint32 failures_in_window = 8;
+  uint32 ctx_len = 9;
+  bool tool_calls = 10;
+  bool json_schema = 11;
+  bool vision = 12;
 }
 
 message Task {

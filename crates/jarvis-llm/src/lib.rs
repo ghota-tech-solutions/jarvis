@@ -1,8 +1,10 @@
-//! jarvis-llm — LLM provider implementations.
-//!
-//! M1 ships only the OpenAI-compatible provider, pointed at the local Gemma server.
-//! M5 adds the DeepSeek remote provider, the model registry, and the capability-aware router.
+//! jarvis-llm — LLM provider implementations + model registry + capability-aware
+//! pool with quarantine and failover.
 
 mod openai_compat;
+mod pool;
+mod registry;
 
 pub use openai_compat::{OpenAiCompatConfig, OpenAiCompatProvider};
+pub use pool::{LlmPool, ModelStatus, PickRequest, PickedModel, PoolError, QuarantineConfig};
+pub use registry::{make_openai_compat_entry, ModelEntry, ModelKind, ModelRegistry};

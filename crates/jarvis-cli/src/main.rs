@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use futures::StreamExt;
 use jarvis_api::{
-    jarvis_client::JarvisClient, AskRequest, ListTasksRequest, PingRequest, StreamEventsRequest,
-    TaskHandle, TaskSpec,
+    jarvis_client::JarvisClient, AskRequest, ListTasksRequest, PingRequest, StatusRequest,
+    StreamEventsRequest, TaskHandle, TaskSpec,
 };
 use std::io::{self, Write};
 use std::time::Duration;
@@ -36,6 +36,8 @@ enum Cmd {
         #[arg(long)]
         max_tokens: Option<u32>,
     },
+    /// Show daemon-wide status (models, uptime, running tasks).
+    Status,
     /// Manage agent tasks.
     Task {
         #[command(subcommand)]
@@ -95,6 +97,15 @@ struct AddTaskArgs {
     /// Base git ref to branch the worktree from (default: HEAD).
     #[arg(long)]
     base_ref: Option<String>,
+    /// Routing policy: auto | local_only | remote_only | model:&lt;name&gt;.
+    #[arg(long = "routing")]
+    routing: Option<String>,
+    /// Strict force a model by name (shorthand for --routing model:&lt;name&gt;).
+    #[arg(long)]
+    model: Option<String>,
+    /// Required capabilities (repeatable): tool_calls, json_schema, vision.
+    #[arg(long = "require")]
+    require: Vec<String>,
     /// Watch events live after submission.
     #[arg(long)]
     watch: bool,
@@ -150,6 +161,22 @@ async fn main() -> Result<()> {
                 );
             }
         }
+        Cmd::Status => {
+            let s = client.get_status(StatusRequest {}).await?.into_inner();
+            println!("daemon: v{}  ·  up {}s  ·  {} running tasks", s.version, s.uptime_seconds, s.running_tasks);
+            println!();
+            println!("  {:<26} {:<7} {:<3} {:<7} model_id", "model", "kind", "pri", "status");
+            for m in s.models {
+                let status = if !m.online {
+                    "offline"
+                } else if m.quarantined {
+                    "quar"
+                } else {
+                    "ok"
+                };
+                println!("  {:<26} {:<7} {:<3} {:<7} {}", m.name, m.kind, m.priority, status, m.model_id);
+            }
+        }
         Cmd::Task { cmd } => task_cmd(&mut client, cmd).await?,
     }
     Ok(())
@@ -166,6 +193,8 @@ async fn task_cmd(client: &mut JarvisClient<Channel>, cmd: TaskCmd) -> Result<()
                     .map(|p| p.display().to_string())
                     .unwrap_or_default()
             });
+            // --model is shorthand for --routing model:<name>; --routing wins if both given.
+            let routing_policy = a.routing.clone().or_else(|| a.model.as_ref().map(|m| format!("model:{m}"))).unwrap_or_default();
             let spec = TaskSpec {
                 goal: a.goal.join(" "),
                 workdir,
@@ -174,6 +203,8 @@ async fn task_cmd(client: &mut JarvisClient<Channel>, cmd: TaskCmd) -> Result<()
                 net_policy: a.net_policy.unwrap_or_default(),
                 use_worktree: a.worktree,
                 base_ref: a.base_ref.unwrap_or_default(),
+                routing_policy,
+                require_caps: a.require,
             };
             let h = client.submit_task(spec).await?.into_inner();
             println!("submitted task: {}", h.id);

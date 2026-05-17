@@ -232,12 +232,43 @@ fn render_sidebar(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
         }
     }
 
+    // Section: Models (M5)
+    if !state.models.is_empty() {
+        section(&mut lines, "Models", t);
+        for m in &state.models {
+            let (sym, color) = if !m.online {
+                ("·", t.fade)
+            } else if m.quarantined {
+                ("✗", t.error)
+            } else {
+                ("●", t.good)
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("{sym} "), Style::default().fg(color)),
+                Span::styled(
+                    short_model_name(&m.name),
+                    Style::default().fg(t.body),
+                ),
+                Span::styled(
+                    format!(" · {}", m.kind),
+                    Style::default().fg(t.dim),
+                ),
+            ]));
+        }
+    }
+
     // Section: daemon
     section(&mut lines, "Daemon", t);
     lines.push(Line::from(vec![Span::styled(
         state.daemon_info.clone(),
         Style::default().fg(t.dim),
     )]));
+    if state.running_tasks > 0 {
+        lines.push(Line::from(vec![Span::styled(
+            format!("running · {}", state.running_tasks),
+            Style::default().fg(t.warn),
+        )]));
+    }
 
     let p = Paragraph::new(lines).wrap(Wrap { trim: false });
     f.render_widget(p, inner);
@@ -489,6 +520,11 @@ fn visual_len(s: &str) -> usize {
 
 fn short_id(id: &str) -> String {
     id.split('-').next().unwrap_or(id).to_string()
+}
+
+/// "local:gemma" → "gemma"; "remote:deepseek_pro" → "deepseek_pro".
+fn short_model_name(name: &str) -> String {
+    name.split_once(':').map(|(_, n)| n.to_string()).unwrap_or_else(|| name.to_string())
 }
 
 fn clip(s: &str, max: usize) -> String {
