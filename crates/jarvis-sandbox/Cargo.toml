@@ -1,0 +1,24 @@
+[package]
+name = "jarvis-sandbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Jarvis: Sandbox trait + Native + Docker backends + worktrees."
+
+[dependencies]
+jarvis-core.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+futures.workspace = true
+futures-util.workspace = true
+bollard.workspace = true
+git2.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

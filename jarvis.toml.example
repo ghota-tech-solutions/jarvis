@@ -1,0 +1,33 @@
+# Jarvis configuration — copy to jarvis.toml and tweak.
+# Env vars (HERMES_LOCAL_*, DEEPSEEK_API_KEY) override these via ${VAR} interpolation.
+
+[daemon]
+addr = "127.0.0.1:7777"
+data_dir = ".jarvis"
+
+# --- Local providers (multi-entries supported in M5) -----------------
+[providers.local.gemma]
+url = "${HERMES_LOCAL_URL}"
+model = "${HERMES_LOCAL_MODEL}"
+api_key = "${HERMES_LOCAL_API_KEY}"
+priority = 10
+capabilities = { ctx_len = 128000, tool_calls = true, json_schema = true, vision = false }
+
+# --- Remote providers (enabled in M5) --------------------------------
+# [providers.remote.deepseek_pro]
+# url = "https://api.deepseek.com/v1"
+# model = "deepseek-v4-pro"
+# api_key = "${DEEPSEEK_API_KEY}"
+# capabilities = { ctx_len = 200000, tool_calls = true, json_schema = true, vision = false }
+
+[routing]
+default_policy = "auto"
+monthly_remote_usd_cap = 50
+
+[sandbox]
+default_backend = "native"          # native | docker
+default_net_policy = "egress_only"  # none | egress_only | full (docker only)
+docker_image = "alpine:3.20"
+docker_memory = "2g"
+docker_cpus = 2.0
+docker_autopull = true

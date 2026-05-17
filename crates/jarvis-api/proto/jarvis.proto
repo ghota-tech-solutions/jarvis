@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package jarvis.v1;
+
+// Jarvis daemon gRPC API.
+// M1: Ping, Ask.
+// M2: SubmitTask, GetTask, ListTasks, StreamEvents, CancelTask.
+service Jarvis {
+  rpc Ping(PingRequest) returns (PingResponse);
+  rpc Ask(AskRequest) returns (stream AskChunk);
+
+  rpc SubmitTask(TaskSpec) returns (TaskHandle);
+  rpc GetTask(TaskHandle) returns (Task);
+  rpc ListTasks(ListTasksRequest) returns (TaskList);
+  rpc CancelTask(TaskHandle) returns (Empty);
+  rpc StreamEvents(StreamEventsRequest) returns (stream Event);
+}
+
+// ---------- M1 ----------
+
+message PingRequest {}
+message PingResponse {
+  string version = 1;
+  int64 uptime_seconds = 2;
+}
+
+message AskRequest {
+  string prompt = 1;
+  string provider = 2;
+  optional float temperature = 3;
+  optional uint32 max_tokens = 4;
+}
+
+message AskChunk {
+  string delta = 1;
+  optional UsageStats usage = 2;
+  optional string finish_reason = 3;
+}
+
+message UsageStats {
+  uint32 prompt_tokens = 1;
+  uint32 completion_tokens = 2;
+  uint32 total_tokens = 3;
+}
+
+// ---------- M2 ----------
+
+message Empty {}
+
+message TaskHandle {
+  // UUID v4 of the task, as a hyphenated string.
+  string id = 1;
+}
+
+message TaskSpec {
+  string goal = 1;
+  // Working directory the agent operates on. Resolved relative to daemon cwd.
+  string workdir = 2;
+  // Optional cap on agent loop iterations (defaults to a sane value if 0).
+  uint32 max_steps = 3;
+  // M3: sandbox backend. "" → config default, "native", "docker".
+  string sandbox = 4;
+  // M3: network policy when sandbox == docker. "" → "egress_only",
+  // valid: "none" | "egress_only" | "full".
+  string net_policy = 5;
+  // M3: if true and workdir is inside a git repo, create a fresh worktree.
+  bool use_worktree = 6;
+  // M3: optional git ref to branch from. Defaults to HEAD.
+  string base_ref = 7;
+}
+
+message Task {
+  string id = 1;
+  string goal = 2;
+  string status = 3;     // pending | running | completed | failed | cancelled
+  string workdir = 4;
+  int64 created_at = 5;  // unix micros
+  optional int64 completed_at = 6;
+  optional string error = 7;
+  // M3:
+  string sandbox = 8;            // backend that ran the task
+  string net_policy = 9;
+  string worktree_path = 10;     // empty if no worktree was created
+  string worktree_branch = 11;
+}
+
+message ListTasksRequest {
+  // If true include completed/failed/cancelled tasks; otherwise only active ones.
+  bool include_finished = 1;
+  uint32 limit = 2;
+}
+
+message TaskList {
+  repeated Task tasks = 1;
+}
+
+message StreamEventsRequest {
+  // If empty, streams all events.
+  string task_id = 1;
+  // If true, keeps streaming new events as they arrive.
+  bool follow = 2;
+  // If non-zero, only events with id > since_id are returned.
+  int64 since_id = 3;
+}
+
+message Event {
+  int64 id = 1;
+  int64 ts_micros = 2;
+  string task_id = 3;
+  string agent_id = 4;      // empty if not agent-scoped
+  string kind = 5;          // attempt|observation|decision|tool_call|tool_result|error|verdict|spawn|llm_chunk
+  string subject = 6;       // empty if none
+  // JSON-encoded payload (M2). May migrate to CBOR later.
+  string payload_json = 7;
+  int64 parent_evt = 8;     // 0 if none
+}

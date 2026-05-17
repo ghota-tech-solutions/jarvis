@@ -1,0 +1,19 @@
+[package]
+name = "jarvis-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Jarvis: gRPC contract (proto + generated client/server)."
+
+[dependencies]
+jarvis-core.workspace = true
+prost.workspace = true
+tonic.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+futures-core = "0.3"
+serde.workspace = true
+
+[build-dependencies]
+tonic-build.workspace = true
+protoc-bin-vendored.workspace = true

@@ -1,0 +1,16 @@
+/target
+/jarvis.toml
+Cargo.lock.bak
+**/*.rs.bk
+.env
+.env.local
+.jarvis/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

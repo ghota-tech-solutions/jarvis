@@ -1,0 +1,85 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/jarvis-core",
+    "crates/jarvis-api",
+    "crates/jarvis-config",
+    "crates/jarvis-llm",
+    "crates/jarvis-ledger",
+    "crates/jarvis-tools",
+    "crates/jarvis-sandbox",
+    "crates/jarvis-agent",
+    "crates/jarvis-daemon",
+    "crates/jarvis-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Ghota <villers@ghotatechsolutions.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ghotatech/jarvis"
+rust-version = "1.95"
+
+[workspace.dependencies]
+# Local crates
+jarvis-core = { path = "crates/jarvis-core" }
+jarvis-api = { path = "crates/jarvis-api" }
+jarvis-config = { path = "crates/jarvis-config" }
+jarvis-llm = { path = "crates/jarvis-llm" }
+jarvis-ledger = { path = "crates/jarvis-ledger" }
+jarvis-tools = { path = "crates/jarvis-tools" }
+jarvis-sandbox = { path = "crates/jarvis-sandbox" }
+jarvis-agent = { path = "crates/jarvis-agent" }
+
+# Async / runtime
+tokio = { version = "1.43", features = ["full"] }
+tokio-stream = "0.1"
+tokio-util = { version = "0.7", features = ["rt"] }
+async-trait = "0.1"
+futures = "0.3"
+futures-util = "0.3"
+
+# Errors / logging
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# LLM
+async-openai = "0.27"
+
+# gRPC
+tonic = "0.13"
+prost = "0.13"
+tonic-build = "0.13"
+protoc-bin-vendored = "3"
+
+# Config
+figment = { version = "0.10", features = ["toml", "env"] }
+dotenvy = "0.15"
+
+# Storage (M2)
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "chrono"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
+# Sandbox (M3)
+bollard = "0.18"
+git2 = { version = "0.20", default-features = false }
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[profile.dev]
+opt-level = 0
+debug = 1
