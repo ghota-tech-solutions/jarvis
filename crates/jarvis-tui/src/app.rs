@@ -3,21 +3,20 @@
 //! The TUI keeps a small in-memory mirror of (a) the daemon's task list, refreshed
 //! by polling, and (b) the live event stream for the currently-selected task.
 
+use crate::theme::{Theme, DARK_DEFAULT};
 use jarvis_api::{jarvis_client::JarvisClient, Event, Task};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
-pub const EVENTS_BUFFER_CAP: usize = 500;
+pub const EVENTS_BUFFER_CAP: usize = 1000;
 pub const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(2000);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Focus {
-    /// Browsing the task list.
-    Tasks,
-    /// Composing a new task in the modal.
-    NewTask,
+    /// Default: input bar accepts text or single-key shortcuts.
+    Normal,
     /// Confirming a destructive action (cancel).
     ConfirmCancel,
     /// Showing keybinds.
@@ -40,12 +39,16 @@ pub struct AppState {
     pub quit: bool,
     /// Toggled by 'a': true = show all (incl. finished), false = active only.
     pub show_all: bool,
+    /// Active color theme.
+    pub theme: Theme,
+    /// Current daemon endpoint (for status bar).
+    pub daemon_url: String,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
-            focus: Focus::Tasks,
+            focus: Focus::Normal,
             tasks: Vec::new(),
             selected: 0,
             events: VecDeque::with_capacity(EVENTS_BUFFER_CAP),
@@ -54,6 +57,8 @@ impl AppState {
             daemon_info: String::from("connecting…"),
             quit: false,
             show_all: false,
+            theme: DARK_DEFAULT,
+            daemon_url: String::new(),
         }
     }
 
@@ -112,9 +117,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(channel: Channel) -> Self {
+    pub fn new(channel: Channel, daemon_url: String) -> Self {
+        let mut s = AppState::new();
+        s.daemon_url = daemon_url;
         Self {
-            state: Arc::new(Mutex::new(AppState::new())),
+            state: Arc::new(Mutex::new(s)),
             client: JarvisClient::new(channel),
         }
     }
