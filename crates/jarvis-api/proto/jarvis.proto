@@ -76,6 +76,11 @@ message TaskSpec {
   // M5: required capabilities. Recognised entries: "tool_calls", "json_schema",
   // "vision". Pool will filter candidate models accordingly.
   repeated string require_caps = 9;
+  // M5.6: parent task id. When set, the new task is created as a child:
+  // the parent's worktree/sandbox/net_policy are inherited if the corresponding
+  // fields are left empty, and the ledger records the parent link so the TUI
+  // can render a chronological conversation across the chain.
+  string parent_task_id = 10;
 }
 
 // ---------- Status / model registry ----------

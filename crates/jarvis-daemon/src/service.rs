@@ -379,20 +379,49 @@ impl Jarvis for JarvisService {
         if spec.goal.trim().is_empty() {
             return Err(Status::invalid_argument("goal is empty"));
         }
-        let source_workdir = if spec.workdir.is_empty() {
-            std::env::current_dir().unwrap_or(PathBuf::from("."))
+        // Resolve parent task (if any) so we can inherit sensible defaults.
+        let parent_record = if spec.parent_task_id.is_empty() {
+            None
         } else {
+            let parent_id = parse_task_id(&spec.parent_task_id)?;
+            Some(
+                self.ledger
+                    .get_task(parent_id)
+                    .await
+                    .map_err(|_| Status::not_found("parent task not found"))?,
+            )
+        };
+
+        // Workdir: explicit > parent's > cwd.
+        let source_workdir = if !spec.workdir.is_empty() {
             PathBuf::from(&spec.workdir)
+        } else if let Some(p) = &parent_record {
+            PathBuf::from(&p.workdir)
+        } else {
+            std::env::current_dir().unwrap_or(PathBuf::from("."))
+        };
+
+        // Sandbox: explicit > parent's > config default.
+        let sandbox_pref = if !spec.sandbox.is_empty() {
+            spec.sandbox.clone()
+        } else {
+            parent_record.as_ref().map(|p| p.sandbox.clone()).unwrap_or_default()
+        };
+        let net_pref = if !spec.net_policy.is_empty() {
+            spec.net_policy.clone()
+        } else {
+            parent_record.as_ref().map(|p| p.net_policy.clone()).unwrap_or_default()
         };
 
         // Pick sandbox + net policy (fail fast on bad inputs).
-        let (sandbox, kind) = self.pick_sandbox(&spec.sandbox)?;
-        let net = self.pick_net(&spec.net_policy)?;
+        let (sandbox, kind) = self.pick_sandbox(&sandbox_pref)?;
+        let net = self.pick_net(&net_pref)?;
 
         // Create the task row before the worktree so the worktree can use the task id.
+        let parent_id = parent_record.as_ref().map(|p| p.id);
         let task = self
             .ledger
-            .create_task(&spec.goal, &source_workdir.display().to_string(), None)
+            .create_task(&spec.goal, &source_workdir.display().to_string(), parent_id)
             .await
             .map_err(|e| Status::internal(format!("ledger: {e}")))?;
 

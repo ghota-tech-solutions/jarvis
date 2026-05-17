@@ -106,6 +106,9 @@ struct AddTaskArgs {
     /// Required capabilities (repeatable): tool_calls, json_schema, vision.
     #[arg(long = "require")]
     require: Vec<String>,
+    /// Continue a conversation: parent task id (UUID). Inherits workdir / sandbox.
+    #[arg(long = "parent")]
+    parent: Option<String>,
     /// Watch events live after submission.
     #[arg(long)]
     watch: bool,
@@ -205,6 +208,7 @@ async fn task_cmd(client: &mut JarvisClient<Channel>, cmd: TaskCmd) -> Result<()
                 base_ref: a.base_ref.unwrap_or_default(),
                 routing_policy,
                 require_caps: a.require,
+                parent_task_id: a.parent.unwrap_or_default(),
             };
             let h = client.submit_task(spec).await?.into_inner();
             println!("submitted task: {}", h.id);

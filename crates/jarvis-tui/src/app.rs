@@ -110,6 +110,7 @@ impl AppState {
         self.error = None;
     }
 
+    #[allow(dead_code)]
     pub fn clear_messages(&mut self) {
         self.error = None;
         self.status = None;

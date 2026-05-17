@@ -305,9 +305,9 @@ fn render_status(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
         )
     };
     let hints = if state.tasks.is_empty() {
-        "  type a goal, Enter to submit  ·  :  for commands  ·  ?  help "
+        "  type a goal, Enter to submit  ·  :help  for commands "
     } else {
-        "  j/k navigate  ·  Enter submit  ·  :cmd  ·  ?  help "
+        "  ↑/↓ navigate  ·  Enter continues  ·  :new fresh  ·  :help "
     };
     let right = Span::styled(hints, Style::default().fg(t.fade));
 
@@ -329,9 +329,24 @@ fn render_input(f: &mut Frame, area: Rect, state: &AppState, input: &Input, t: &
         "describe a goal and press Enter"
     };
     let value = input.value();
+    let placeholder = match (value.is_empty(), state.selected_task()) {
+        (false, _) => "",
+        (true, Some(t)) => {
+            // Hint shows we're continuing the selected task.
+            let _ = t;
+            placeholder
+        }
+        (true, None) => placeholder,
+    };
+    let _ = placeholder;
     let text_span = if value.is_empty() {
+        let hint = if state.selected_task().is_some() {
+            "continue this task  ·  :new <goal>  ·  :cancel  ·  :help"
+        } else {
+            "describe a goal and press Enter  ·  :help"
+        };
         Span::styled(
-            placeholder.to_string(),
+            hint.to_string(),
             Style::default().fg(t.fade).add_modifier(Modifier::ITALIC),
         )
     } else {
@@ -366,7 +381,7 @@ fn render_confirm_modal(f: &mut Frame, state: &AppState, t: &Theme) {
 }
 
 fn render_help_modal(f: &mut Frame, t: &Theme) {
-    let area = centered_rect(60, 18, f.area());
+    let area = centered_rect(64, 16, f.area());
     f.render_widget(Clear, area);
     let lines = vec![
         Line::from(vec![Span::styled(
@@ -374,19 +389,21 @@ fn render_help_modal(f: &mut Frame, t: &Theme) {
             Style::default().fg(t.heading).add_modifier(Modifier::BOLD),
         )]),
         Line::from(""),
-        Line::from(vec![Span::styled("Navigation", Style::default().fg(t.accent))]),
-        Line::from("  ↑/↓, j/k     previous / next task"),
-        Line::from("  r            refresh now"),
-        Line::from("  a            toggle active / all"),
+        Line::from(vec![Span::styled("Navigation (input must be empty)", Style::default().fg(t.accent))]),
+        Line::from("  ↑/↓           previous / next task"),
+        Line::from("  PgUp/PgDn     jump 10 tasks"),
         Line::from(""),
         Line::from(vec![Span::styled("Compose", Style::default().fg(t.accent))]),
-        Line::from("  type + Enter submits a new task"),
-        Line::from("  :<command>   slash command (cancel, refresh, all, theme, q)"),
+        Line::from("  type + Enter  continues the selected task (creates a child)"),
+        Line::from("  :new <goal>   start a fresh, unparented task"),
+        Line::from("  :cancel       cancel the selected task"),
+        Line::from("  :refresh      force a list refresh"),
+        Line::from("  :all          toggle active ↔ all"),
+        Line::from("  :theme dark|light"),
+        Line::from("  :q            quit"),
         Line::from(""),
-        Line::from(vec![Span::styled("Actions", Style::default().fg(t.accent))]),
-        Line::from("  c            cancel selected task"),
-        Line::from("  ?            toggle this help"),
-        Line::from("  q / Esc      quit"),
+        Line::from("  Esc           clear input  /  quit if empty"),
+        Line::from("  Ctrl+C        force quit"),
         Line::from(""),
         Line::from(vec![Span::styled("Press any key to dismiss.", Style::default().fg(t.dim))]),
     ];

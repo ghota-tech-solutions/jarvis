@@ -85,22 +85,16 @@ pub async fn run(app: App) -> Result<()> {
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    crossterm::execute!(
-        stdout,
-        crossterm::terminal::EnterAlternateScreen,
-        crossterm::event::EnableMouseCapture,
-    )?;
+    // No mouse capture: lets the user select/copy text natively and scroll
+    // with the wheel (the terminal sees the events instead of us swallowing them).
+    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     Terminal::new(backend).context("ratatui::Terminal::new")
 }
 
 fn restore_terminal(mut terminal: Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
     crossterm::terminal::disable_raw_mode()?;
-    crossterm::execute!(
-        terminal.backend_mut(),
-        crossterm::terminal::LeaveAlternateScreen,
-        crossterm::event::DisableMouseCapture,
-    )?;
+    crossterm::execute!(terminal.backend_mut(), crossterm::terminal::LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     Ok(())
 }
@@ -135,7 +129,7 @@ async fn handle_normal_key(
 ) -> Result<()> {
     let is_empty = input.value().is_empty();
 
-    // Global quit (works regardless of input content).
+    // Ctrl+C always quits.
     if matches!(k.code, KeyCode::Char('c')) && k.modifiers.contains(KeyModifiers::CONTROL) {
         app.state.lock().await.quit = true;
         return Ok(());
@@ -151,7 +145,11 @@ async fn handle_normal_key(
             if let Some(cmd) = raw.strip_prefix(':') {
                 run_slash_command(cmd.trim(), app, events_cancel).await;
             } else {
-                submit_task(app, raw, events_cancel.clone()).await;
+                // Default: continuation. If a task is selected, the new task
+                // becomes its child (inherits workdir/sandbox/net). Use `:new`
+                // for a fresh, unparented task.
+                let parent = app.state.lock().await.selected_task_id();
+                submit_task(app, raw, parent, events_cancel.clone()).await;
             }
             return Ok(());
         }
@@ -163,68 +161,42 @@ async fn handle_normal_key(
             }
             return Ok(());
         }
+        // Navigation keys only fire on empty input — they don't conflict with
+        // typing because arrows aren't characters.
+        KeyCode::Up | KeyCode::Down if is_empty => {
+            let down = matches!(k.code, KeyCode::Down);
+            let mut s = app.state.lock().await;
+            let prev_sel = s.selected_task_id();
+            if down {
+                s.next();
+            } else {
+                s.prev();
+            }
+            if s.selected_task_id() != prev_sel {
+                s.clear_events();
+                drop(s);
+                rotate_event_stream(events_cancel).await;
+            }
+            return Ok(());
+        }
+        KeyCode::PageUp | KeyCode::PageDown if is_empty => {
+            let down = matches!(k.code, KeyCode::PageDown);
+            let mut s = app.state.lock().await;
+            let prev_sel = s.selected_task_id();
+            for _ in 0..10 {
+                if down { s.next(); } else { s.prev(); }
+            }
+            if s.selected_task_id() != prev_sel {
+                s.clear_events();
+                drop(s);
+                rotate_event_stream(events_cancel).await;
+            }
+            return Ok(());
+        }
         _ => {}
     }
 
-    // Empty input → single-key shortcuts.
-    if is_empty {
-        match (k.code, k.modifiers) {
-            (KeyCode::Char('q'), _) => {
-                app.state.lock().await.quit = true;
-                return Ok(());
-            }
-            (KeyCode::Char('?'), _) => {
-                app.state.lock().await.focus = Focus::Help;
-                return Ok(());
-            }
-            (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
-                let mut s = app.state.lock().await;
-                let prev_sel = s.selected_task_id();
-                s.next();
-                if s.selected_task_id() != prev_sel {
-                    s.clear_events();
-                    drop(s);
-                    rotate_event_stream(events_cancel).await;
-                }
-                return Ok(());
-            }
-            (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
-                let mut s = app.state.lock().await;
-                let prev_sel = s.selected_task_id();
-                s.prev();
-                if s.selected_task_id() != prev_sel {
-                    s.clear_events();
-                    drop(s);
-                    rotate_event_stream(events_cancel).await;
-                }
-                return Ok(());
-            }
-            (KeyCode::Char('a'), _) => {
-                let mut s = app.state.lock().await;
-                s.show_all = !s.show_all;
-                s.clear_messages();
-                return Ok(());
-            }
-            (KeyCode::Char('r'), _) => {
-                let mut client = app.client.clone();
-                let state = app.state.clone();
-                tokio::spawn(async move { refresh_tasks(&mut client, &state).await });
-                return Ok(());
-            }
-            (KeyCode::Char('c'), _) => {
-                let id = { app.state.lock().await.selected_task_id() };
-                if id.is_some() {
-                    app.state.lock().await.focus = Focus::ConfirmCancel;
-                } else {
-                    app.state.lock().await.set_error("no task selected");
-                }
-                return Ok(());
-            }
-            _ => {}
-        }
-    }
-
-    // Otherwise: forward to the input field.
+    // Anything else (including letters) is just text input.
     input.handle_event(&CtEvent::Key(k));
     Ok(())
 }
@@ -278,7 +250,8 @@ async fn run_slash_command(
             if rest.is_empty() {
                 app.state.lock().await.set_error("usage: :new <goal>");
             } else {
-                submit_task(app, rest.to_string(), events_cancel.clone()).await;
+                // Explicit :new always starts a fresh, unparented conversation.
+                submit_task(app, rest.to_string(), None, events_cancel.clone()).await;
             }
         }
         other => {
@@ -313,12 +286,23 @@ async fn handle_confirm_key(k: KeyEvent, app: &App) -> Result<()> {
     Ok(())
 }
 
-async fn submit_task(app: &App, goal: String, events_cancel: Arc<Mutex<CancellationToken>>) {
+async fn submit_task(
+    app: &App,
+    goal: String,
+    parent_task_id: Option<String>,
+    events_cancel: Arc<Mutex<CancellationToken>>,
+) {
     let mut client = app.client.clone();
     let state = app.state.clone();
-    let workdir = std::env::current_dir()
-        .map(|p| p.display().to_string())
-        .unwrap_or_default();
+    // When continuing a conversation we let the daemon inherit workdir from
+    // the parent (sending empty here triggers inheritance).
+    let workdir = if parent_task_id.is_some() {
+        String::new()
+    } else {
+        std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
+    };
     tokio::spawn(async move {
         let spec = TaskSpec {
             goal,
@@ -330,6 +314,7 @@ async fn submit_task(app: &App, goal: String, events_cancel: Arc<Mutex<Cancellat
             base_ref: String::new(),
             routing_policy: String::new(),
             require_caps: Vec::new(),
+            parent_task_id: parent_task_id.unwrap_or_default(),
         };
         match client.submit_task(spec).await {
             Ok(h) => {
