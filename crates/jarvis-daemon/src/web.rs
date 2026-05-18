@@ -829,7 +829,7 @@ fn render_index(
       }});
     </script>
     <table class="tasks">
-      <thead><tr><th>id</th><th>status</th><th>sandbox</th><th>goal</th><th>created</th></tr></thead>
+      <thead><tr><th>id</th><th>status</th><th>backend</th><th>goal</th><th>turns</th><th>updated</th></tr></thead>
       <tbody hx-get="/api/tasks?all=true&format=html" hx-trigger="every 2s" hx-target="this" hx-swap="innerHTML">{task_rows}</tbody>
     </table>
   </main>
@@ -918,34 +918,101 @@ fn relative_time(micros: i64) -> String {
     }
 }
 
+/// One row per conversation: the root's goal heads the row, the leaf's status
+/// is the displayed status, and a turn count shows how many follow-ups live in
+/// the chain. Mirrors the way the projects nav and detail page see the data.
 fn render_task_rows(tasks: &[TaskRecord]) -> String {
+    let conversations = group_into_conversations(tasks);
     let mut s = String::new();
-    if tasks.is_empty() {
-        s.push_str(r#"<tr><td colspan="5" class="muted">no tasks yet</td></tr>"#);
+    if conversations.is_empty() {
+        s.push_str(r#"<tr><td colspan="6" class="muted">no tasks yet</td></tr>"#);
         return s;
     }
-    for t in tasks {
-        let backend = if t.sandbox.is_empty() {
+    for c in conversations {
+        let backend = if c.leaf_sandbox.is_empty() {
             String::from("-")
-        } else if t.sandbox == "native" {
+        } else if c.leaf_sandbox == "native" {
             "native".to_string()
         } else {
-            format!("{}/{}", t.sandbox, t.net_policy)
+            format!("{}/{}", c.leaf_sandbox, c.leaf_net_policy)
         };
-        let created = chrono::DateTime::<chrono::Utc>::from_timestamp_micros(t.created_at)
-            .map(|d| d.format("%H:%M:%S").to_string())
-            .unwrap_or_default();
+        let turns = if c.turn_count > 1 {
+            format!(r#"<span class="turns-badge">{}</span>"#, c.turn_count)
+        } else {
+            r#"<span class="muted small">1</span>"#.to_string()
+        };
         s.push_str(&format!(
-            r#"<tr class="t-{status}"><td><a href="/task/{id}">{short}</a></td><td>{status}</td><td>{backend}</td><td>{goal}</td><td class="muted">{created}</td></tr>"#,
-            id = t.id,
-            short = short(&t.id.to_string()),
-            status = html_escape(&t.status.to_string()),
+            r#"<tr class="t-{status}"><td><a href="/task/{id}">{short}</a></td><td>{status}</td><td>{backend}</td><td>{goal}</td><td>{turns}</td><td class="muted">{updated}</td></tr>"#,
+            id = c.root_id,
+            short = short(&c.root_id.to_string()),
+            status = html_escape(&c.leaf_status),
             backend = html_escape(&backend),
-            goal = html_escape(&clip(&t.goal, 120)),
-            created = created,
+            goal = html_escape(&clip(&c.root_goal, 120)),
+            updated = relative_time(c.updated_at),
         ));
     }
     s
+}
+
+#[derive(Debug)]
+struct ConversationRow {
+    root_id: TaskId,
+    root_goal: String,
+    leaf_status: String,
+    leaf_sandbox: String,
+    leaf_net_policy: String,
+    turn_count: usize,
+    updated_at: i64,
+}
+
+fn group_into_conversations(tasks: &[TaskRecord]) -> Vec<ConversationRow> {
+    use std::collections::HashMap;
+    if tasks.is_empty() {
+        return Vec::new();
+    }
+    let by_id: HashMap<TaskId, &TaskRecord> = tasks.iter().map(|t| (t.id, t)).collect();
+    fn root_of<'a>(start: &'a TaskRecord, by_id: &HashMap<TaskId, &'a TaskRecord>) -> &'a TaskRecord {
+        let mut current = start;
+        let mut depth = 0;
+        while let Some(parent_id) = current.parent {
+            depth += 1;
+            if depth > 64 {
+                break;
+            }
+            match by_id.get(&parent_id) {
+                Some(p) => current = p,
+                None => break,
+            }
+        }
+        current
+    }
+    let mut by_root: HashMap<TaskId, Vec<&TaskRecord>> = HashMap::new();
+    for t in tasks {
+        let r = root_of(t, &by_id);
+        by_root.entry(r.id).or_default().push(t);
+    }
+    let mut rows: Vec<ConversationRow> = by_root
+        .into_iter()
+        .filter_map(|(root_id, members)| {
+            let root = by_id.get(&root_id)?;
+            let leaf = members
+                .iter()
+                .max_by_key(|t| t.created_at)
+                .copied()
+                .unwrap_or(root);
+            Some(ConversationRow {
+                root_id,
+                root_goal: root.goal.clone(),
+                leaf_status: leaf.status.to_string(),
+                leaf_sandbox: leaf.sandbox.clone(),
+                leaf_net_policy: leaf.net_policy.clone(),
+                turn_count: members.len(),
+                updated_at: leaf.created_at,
+            })
+        })
+        .collect();
+    rows.sort_by_key(|c| std::cmp::Reverse(c.updated_at));
+    rows
 }
 
 fn render_model_rows(models: &[jarvis_llm::ModelStatus]) -> String {
@@ -1368,6 +1435,7 @@ tr.t-completed td:nth-child(2) { color: var(--ok); }
 tr.t-running td:nth-child(2) { color: var(--warn); }
 tr.t-failed td:nth-child(2) { color: var(--err); }
 tr.t-cancelled td:nth-child(2) { color: var(--fade); }
+.turns-badge { display: inline-block; min-width: 18px; text-align: center; background: rgba(212,180,120,0.15); color: var(--accent); padding: 0.05em 0.5em; border-radius: 10px; font-size: 11px; font-weight: 600; }
 
 /* Forms */
 form.newtask textarea, form.continue textarea { width: 100%; background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); padding: 0.6em 0.7em; font-family: inherit; font-size: 13px; resize: vertical; border-radius: 4px; }
