@@ -3,7 +3,6 @@
 
 mod sidecar;
 
-use tauri::Manager;
 use tracing::warn;
 
 fn main() {

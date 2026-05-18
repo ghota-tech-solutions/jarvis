@@ -14,7 +14,7 @@ use serde::Serialize;
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tracing::{info, warn};
 
 const DAEMON_ADDR: &str = "127.0.0.1:7777";
