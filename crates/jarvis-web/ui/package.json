@@ -1,0 +1,27 @@
+{
+  "name": "jarvis-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SolidJS SPA for Jarvis — Connect/gRPC-Web client of the daemon.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.5",
+    "@solidjs/router": "^0.15.3",
+    "@tanstack/solid-query": "^5.66.0",
+    "nanostores": "^0.11.4",
+    "@nanostores/persistent": "^0.10.2",
+    "@nanostores/solid": "^0.5.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.14",
+    "vite-plugin-solid": "^2.11.6",
+    "typescript": "^5.7.3",
+    "@types/node": "^22.13.5"
+  }
+}

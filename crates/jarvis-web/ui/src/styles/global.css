@@ -1,0 +1,57 @@
+:root {
+  color-scheme: dark;
+  --body: rgb(196, 196, 196);
+  --dim: rgb(128, 128, 128);
+  --fade: rgb(80, 80, 80);
+  --heading: rgb(230, 220, 200);
+  --accent: rgb(212, 180, 120);
+  --assistant: rgb(180, 200, 220);
+  --good: rgb(140, 180, 110);
+  --error: rgb(220, 110, 90);
+  --warn: rgb(220, 175, 90);
+  --focus: rgb(240, 240, 240);
+  --bg: rgb(10, 10, 10);
+  --bg-elev: rgb(18, 18, 18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--body);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+pre {
+  font-family:
+    ui-monospace,
+    'Cascadia Code',
+    'JetBrains Mono',
+    Menlo,
+    Consolas,
+    monospace;
+}
