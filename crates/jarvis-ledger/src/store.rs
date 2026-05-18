@@ -241,6 +241,55 @@ impl Ledger {
         rows.iter().map(row_to_event).collect()
     }
 
+    /// Walk the parent chain. Returns ancestors oldest→newest (root first),
+    /// including the requested task itself at the end.
+    pub async fn walk_ancestors(&self, leaf: TaskId) -> Result<Vec<TaskRecord>, LedgerError> {
+        let mut chain: Vec<TaskRecord> = Vec::new();
+        let mut current = Some(leaf);
+        while let Some(id) = current {
+            // Cycle guard.
+            if chain.iter().any(|t| t.id == id) {
+                break;
+            }
+            let t = self.get_task(id).await?;
+            current = t.parent;
+            chain.push(t);
+            if chain.len() > 64 {
+                // Hard cap; deeper chains are nearly always bugs.
+                break;
+            }
+        }
+        chain.reverse();
+        Ok(chain)
+    }
+
+    /// Events for ANY of the given task ids, in id order.
+    pub async fn query_events_multi(
+        &self,
+        task_ids: &[TaskId],
+        since_id: i64,
+        limit: u32,
+    ) -> Result<Vec<EventRecord>, LedgerError> {
+        if task_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let limit = if limit == 0 { 10_000 } else { limit as i64 };
+        let placeholders = std::iter::repeat_n("?", task_ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id, ts, task_id, agent_id, kind, subject, payload, parent_evt \
+             FROM events WHERE task_id IN ({placeholders}) AND id > ? ORDER BY id ASC LIMIT ?",
+        );
+        let mut q = sqlx::query(&sql);
+        for t in task_ids {
+            q = q.bind(uuid_bytes(t.as_uuid()));
+        }
+        q = q.bind(since_id).bind(limit);
+        let rows = q.fetch_all(&self.pool).await?;
+        rows.iter().map(row_to_event).collect()
+    }
+
     /// Fast last-N events for a task (used by agent loop to build context).
     pub async fn recent_events(
         &self,

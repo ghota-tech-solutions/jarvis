@@ -287,6 +287,7 @@ async fn watch_task(
         task_id: id.unwrap_or_default(),
         follow: !no_follow,
         since_id: if tail_only { i64::MAX } else { 0 },
+        include_ancestors: !tail_only,
     };
     let mut stream = client.stream_events(req).await?.into_inner();
     while let Some(item) = stream.next().await {

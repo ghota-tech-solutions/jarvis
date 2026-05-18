@@ -401,6 +401,7 @@ fn spawn_event_streamer(
                     task_id: task_id.clone(),
                     follow: true,
                     since_id: 0,
+                    include_ancestors: true,
                 })
                 .await;
             let mut stream = match stream_res {

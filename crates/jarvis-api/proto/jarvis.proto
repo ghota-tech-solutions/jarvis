@@ -141,6 +141,9 @@ message StreamEventsRequest {
   bool follow = 2;
   // If non-zero, only events with id > since_id are returned.
   int64 since_id = 3;
+  // M5.7: include events from the task's parent chain in backfill. The follow
+  // stream only tails new events for `task_id` itself.
+  bool include_ancestors = 4;
 }
 
 message Event {

@@ -596,11 +596,25 @@ impl Jarvis for JarvisService {
             Some(parse_task_id(&req.task_id)?)
         };
 
-        let backfill = self
-            .ledger
-            .query_events(task_filter, req.since_id, 0)
-            .await
-            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+        let backfill = match (task_filter, req.include_ancestors) {
+            (Some(t), true) => {
+                let chain = self
+                    .ledger
+                    .walk_ancestors(t)
+                    .await
+                    .map_err(|e| Status::internal(format!("ledger ancestors: {e}")))?;
+                let ids: Vec<_> = chain.iter().map(|tr| tr.id).collect();
+                self.ledger
+                    .query_events_multi(&ids, req.since_id, 0)
+                    .await
+                    .map_err(|e| Status::internal(format!("ledger multi: {e}")))?
+            }
+            _ => self
+                .ledger
+                .query_events(task_filter, req.since_id, 0)
+                .await
+                .map_err(|e| Status::internal(format!("ledger: {e}")))?,
+        };
         let mut live = self.ledger.subscribe();
         let (tx, rx) = mpsc::channel::<std::result::Result<ApiEvent, Status>>(128);
 
