@@ -1,0 +1,25 @@
+[package]
+name = "jarvis-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Jarvis desktop app — Tauri 2 wrapper around the SolidJS SPA, ships the daemon as a sidecar."
+
+[[bin]]
+name = "jarvis-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-store = "2"
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+anyhow.workspace = true

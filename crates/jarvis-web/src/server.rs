@@ -16,8 +16,10 @@ use tracing::info;
 use crate::auth::{self, AuthToken};
 use crate::VERSION;
 
-/// Default bind address when `JARVIS_SPA_ADDR` is unset.
-pub const DEFAULT_SPA_ADDR: &str = "127.0.0.1:7879";
+/// Default bind address when `JARVIS_SPA_ADDR` is unset. Binds on all
+/// interfaces so the SPA is reachable from other devices on the LAN — the
+/// auth bearer token gates access.
+pub const DEFAULT_SPA_ADDR: &str = "0.0.0.0:7879";
 
 /// Resolve the SPA bind address: env override, or fallback to default.
 pub fn resolve_addr() -> String {

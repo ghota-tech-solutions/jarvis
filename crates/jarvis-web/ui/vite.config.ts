@@ -4,13 +4,14 @@ import solid from 'vite-plugin-solid';
 export default defineConfig({
   plugins: [solid()],
   server: {
-    host: '127.0.0.1',
+    // Bind on all interfaces so phones / other devices on the LAN can
+    // open the SPA at http://<host-lan-ip>:5173.
+    host: '0.0.0.0',
     port: 5173,
     strictPort: true,
     proxy: {
-      // gRPC-Web calls go straight to the daemon; the proxy keeps them
-      // same-origin in dev so we don't need CORS on the tonic-web layer.
-      // Path prefix matches the proto package: jarvis.v1.Jarvis/<Method>.
+      // gRPC-Web calls go through the proxy in dev so the browser stays
+      // same-origin (no CORS on the daemon's tonic-web layer needed).
       '/jarvis.v1.Jarvis': {
         target: 'http://127.0.0.1:7777',
         changeOrigin: true,
