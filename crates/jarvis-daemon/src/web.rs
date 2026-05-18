@@ -629,47 +629,111 @@ async fn api_git(Query(q): Query<GitQuery>) -> Response {
     let info = tokio::task::spawn_blocking(move || git_status(&workdir)).await;
     match info {
         Ok(Some(info)) => Html(render_git_card(&info)).into_response(),
-        _ => Html(
-            r#"<div class="muted small">not a git repo</div>"#.to_string(),
-        )
-        .into_response(),
+        _ => Html(render_git_empty()).into_response(),
     }
 }
 
+fn render_git_empty() -> String {
+    r#"<div class="git-empty"><div class="glyph">⎇</div><div class="git-empty-title">Not under version control</div><div class="muted small">This workdir is not in a git repository.</div></div>"#.to_string()
+}
+
 fn render_git_card(info: &GitInfo) -> String {
-    let mut files_html = String::new();
-    for f in info.files.iter().take(16) {
-        let cls = match f.status.as_str() {
-            "new" => "add",
-            "deleted" => "rem",
-            _ => "mod",
-        };
-        files_html.push_str(&format!(
-            r#"<div class="git-file"><span class="git-tag {cls}">{tag}</span> <code>{path}</code></div>"#,
-            tag = match f.status.as_str() {
-                "new" => "A",
-                "deleted" => "D",
-                "modified" => "M",
-                "renamed" => "R",
-                _ => "?",
-            },
-            path = html_escape(&f.path),
-        ));
-    }
-    let more = if info.files.len() > 16 {
-        format!(
-            r#"<div class="muted small">… and {} more</div>"#,
-            info.files.len() - 16
-        )
-    } else {
-        String::new()
+    let mut out = String::new();
+
+    // Branch + ahead/behind row.
+    let ab_html = match &info.upstream {
+        Some(u) if u.ahead + u.behind > 0 => {
+            let ahead = if u.ahead > 0 {
+                format!(r#"<span class="git-ahead">↑{}</span>"#, u.ahead)
+            } else {
+                String::new()
+            };
+            let behind = if u.behind > 0 {
+                format!(r#"<span class="git-behind">↓{}</span>"#, u.behind)
+            } else {
+                String::new()
+            };
+            format!(r#"<span class="git-ahead-behind">{ahead}{behind}</span>"#)
+        }
+        Some(_) => String::from(r#"<span class="muted small">in sync</span>"#),
+        None => String::new(),
     };
-    format!(
-        r#"<div class="kv"><span>branch</span><b>{branch}</b></div><div class="kv"><span>changes</span><b><span class="add">+{add}</span> <span class="rem">-{rem}</span></b></div>{files_html}{more}"#,
+    out.push_str(&format!(
+        r#"<div class="git-section"><div class="git-row git-row-head"><span class="git-icon">⎇</span><span class="git-branch">{branch}</span>{ab}</div>"#,
         branch = html_escape(&info.branch),
-        add = info.changes_added,
-        rem = info.changes_removed,
-    )
+        ab = ab_html,
+    ));
+
+    // Changes row (totals).
+    if info.changes_added + info.changes_removed > 0 || !info.files.is_empty() {
+        out.push_str(&format!(
+            r#"<div class="git-row"><span class="git-icon">✎</span><span class="git-row-label">Changes</span><span class="git-meta"><span class="add">+{add}</span> <span class="rem">-{rem}</span></span></div>"#,
+            add = info.changes_added,
+            rem = info.changes_removed,
+        ));
+    } else {
+        out.push_str(r#"<div class="git-row"><span class="git-icon">✎</span><span class="git-row-label">Changes</span><span class="muted small">clean</span></div>"#);
+    }
+    out.push_str("</div>");
+
+    // Files section (when there are some).
+    if !info.files.is_empty() {
+        out.push_str(r#"<div class="git-section"><div class="git-section-title">Files</div>"#);
+        for f in info.files.iter().take(16) {
+            let (tag, cls) = match f.status.as_str() {
+                "new" => ("A", "add"),
+                "deleted" => ("D", "rem"),
+                "modified" => ("M", "mod"),
+                "renamed" => ("R", "mod"),
+                _ => ("?", "mod"),
+            };
+            out.push_str(&format!(
+                r#"<div class="git-row git-row-file"><span class="git-tag {cls}">{tag}</span><span class="git-row-label monoline">{path}</span></div>"#,
+                path = html_escape(&f.path),
+            ));
+        }
+        if info.files.len() > 16 {
+            out.push_str(&format!(
+                r#"<div class="muted small" style="padding:0.2em 0.4em;">… and {} more</div>"#,
+                info.files.len() - 16,
+            ));
+        }
+        out.push_str("</div>");
+    }
+
+    // Recent commits section.
+    if !info.commits.is_empty() {
+        out.push_str(r#"<div class="git-section"><div class="git-section-title">Recent commits</div>"#);
+        for c in &info.commits {
+            out.push_str(&format!(
+                r#"<div class="git-row git-row-commit" title="{full}"><span class="git-hash">{hash}</span><span class="git-row-label">{subject}</span><span class="git-meta">{age}</span></div>"#,
+                full = html_escape(&format!("{}\n— {} ago, by {}", c.subject, format_age(c.age_seconds), c.author)),
+                hash = html_escape(&c.hash),
+                subject = html_escape(&c.subject),
+                age = format_age(c.age_seconds),
+            ));
+        }
+        out.push_str("</div>");
+    }
+
+    out
+}
+
+fn format_age(secs: i64) -> String {
+    let s = secs.max(0);
+    if s < 60 {
+        format!("{s}s")
+    } else if s < 3600 {
+        format!("{}m", s / 60)
+    } else if s < 86400 {
+        format!("{}h", s / 3600)
+    } else if s < 86400 * 30 {
+        format!("{}d", s / 86400)
+    } else if s < 86400 * 365 {
+        format!("{}mo", s / (86400 * 30))
+    } else {
+        format!("{}y", s / (86400 * 365))
+    }
 }
 
 #[derive(Serialize)]
@@ -679,6 +743,10 @@ struct GitInfo {
     changes_added: usize,
     changes_removed: usize,
     files: Vec<GitFileChange>,
+    /// M6.7-F: most-recent commits on HEAD (oldest at end of the vec).
+    commits: Vec<GitCommit>,
+    /// M6.7-F: upstream tracking branch + ahead/behind, when configured.
+    upstream: Option<UpstreamInfo>,
 }
 
 #[derive(Serialize)]
@@ -687,8 +755,23 @@ struct GitFileChange {
     status: String,    // "modified" | "new" | "deleted" | "renamed"
 }
 
+#[derive(Serialize)]
+struct GitCommit {
+    hash: String,
+    subject: String,
+    author: String,
+    age_seconds: i64,
+}
+
+#[derive(Serialize)]
+struct UpstreamInfo {
+    name: String,
+    ahead: usize,
+    behind: usize,
+}
+
 fn git_status(workdir: &str) -> Option<GitInfo> {
-    use git2::{Repository, Status, StatusOptions};
+    use git2::{BranchType, Repository, Sort, Status, StatusOptions};
     let repo = Repository::discover(workdir).ok()?;
     let branch = repo
         .head()
@@ -738,12 +821,62 @@ fn git_status(workdir: &str) -> Option<GitInfo> {
         }
     }
 
+    // Most-recent commits on HEAD.
+    let now_secs = chrono::Utc::now().timestamp();
+    let mut commits: Vec<GitCommit> = Vec::new();
+    if let Ok(mut walk) = repo.revwalk() {
+        let _ = walk.set_sorting(Sort::TIME | Sort::TOPOLOGICAL);
+        if walk.push_head().is_ok() {
+            for oid in walk.take(8).flatten() {
+                if let Ok(commit) = repo.find_commit(oid) {
+                    let hash: String = oid.to_string().chars().take(7).collect();
+                    let subject = commit
+                        .summary()
+                        .unwrap_or("(no message)")
+                        .chars()
+                        .take(120)
+                        .collect::<String>();
+                    let author = commit.author().name().unwrap_or("").to_string();
+                    let age_seconds = (now_secs - commit.time().seconds()).max(0);
+                    commits.push(GitCommit {
+                        hash,
+                        subject,
+                        author,
+                        age_seconds,
+                    });
+                }
+            }
+        }
+    }
+
+    // Upstream tracking (ahead/behind).
+    let upstream = (|| -> Option<UpstreamInfo> {
+        let local = repo.find_branch(&branch, BranchType::Local).ok()?;
+        let upstream_branch = local.upstream().ok()?;
+        let upstream_name = upstream_branch
+            .name()
+            .ok()
+            .flatten()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let local_oid = local.get().target()?;
+        let upstream_oid = upstream_branch.get().target()?;
+        let (ahead, behind) = repo.graph_ahead_behind(local_oid, upstream_oid).ok()?;
+        Some(UpstreamInfo {
+            name: upstream_name,
+            ahead,
+            behind,
+        })
+    })();
+
     Some(GitInfo {
         available: true,
         branch,
         changes_added: added_total,
         changes_removed: removed_total,
         files,
+        commits,
+        upstream,
     })
 }
 
@@ -2197,12 +2330,36 @@ form.continue textarea { min-height: 2.2em; max-height: 300px; overflow-y: auto;
 .dot.err { color: var(--err); }
 .dot.off { color: var(--fade); }
 
-.git-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0.6em; margin-bottom: 0.4em; }
-.git-file { padding: 0.15em 0.2em; font-size: 12px; display: flex; gap: 0.4em; align-items: baseline; }
-.git-tag { display: inline-block; width: 16px; text-align: center; font-size: 10px; font-weight: 600; padding: 0.05em 0.2em; border-radius: 2px; }
+.git-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 0.5em; margin-bottom: 0.4em; }
+
+/* Git panel sections (M6.7-F) */
+.git-section { margin-bottom: 0.7em; }
+.git-section + .git-section { border-top: 1px solid var(--line); padding-top: 0.5em; }
+.git-section-title { color: var(--fade); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0.3em 0.3em; font-weight: 600; }
+.git-row { display: grid; grid-template-columns: 16px 1fr auto; gap: 0.5em; padding: 0.18em 0.4em; align-items: center; font-size: 12px; border-radius: 3px; }
+.git-row:hover { background: rgba(255,255,255,0.03); }
+.git-row .git-icon { color: var(--dim); text-align: center; font-size: 12px; }
+.git-row .git-branch { color: var(--heading); font-weight: 600; }
+.git-row .git-row-label { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.git-row .git-meta { color: var(--fade); font-size: 11px; font-variant-numeric: tabular-nums; }
+.git-row .git-hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); font-size: 11px; min-width: 50px; }
+.git-row-commit .git-row-label { color: var(--dim); font-size: 12px; }
+.git-row-commit:hover .git-row-label { color: var(--fg); }
+.git-row-file .monoline { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+
+.git-ahead-behind { font-size: 11px; font-variant-numeric: tabular-nums; }
+.git-ahead { color: var(--good); margin-right: 0.3em; }
+.git-behind { color: var(--warn); }
+
+.git-tag { display: inline-block; width: 14px; text-align: center; font-size: 10px; font-weight: 700; padding: 0.05em 0.2em; border-radius: 2px; line-height: 1.3; }
 .git-tag.add { background: var(--add-bg); color: var(--add-fg); }
 .git-tag.rem { background: var(--rem-bg); color: var(--rem-fg); }
 .git-tag.mod { background: rgba(220,175,90,0.15); color: var(--warn); }
+
+/* Empty state when workdir isn't a git repo */
+.git-empty { text-align: center; padding: 1.4em 0.5em; color: var(--dim); }
+.git-empty .glyph { font-size: 22px; color: var(--fade); margin-bottom: 0.4em; line-height: 1; }
+.git-empty-title { color: var(--fg); font-weight: 600; margin-bottom: 0.3em; font-size: 12px; }
 
 @media (max-width: 1200px) {
   .shell { grid-template-columns: 220px 1fr; }

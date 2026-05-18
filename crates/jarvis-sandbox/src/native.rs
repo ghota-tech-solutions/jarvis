@@ -42,8 +42,8 @@ impl Sandbox for NativeSandbox {
 
         Ok(SandboxOutput {
             exit_code: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            stdout: decode_stdio(&output.stdout),
+            stderr: decode_stdio(&output.stderr),
             timed_out: false,
             backend: "native".to_string(),
         })
@@ -53,8 +53,16 @@ impl Sandbox for NativeSandbox {
 fn shell_cmd(cmd: &str) -> Command {
     #[cfg(windows)]
     {
+        // `cmd.exe /U /C` forces every built-in (dir, type, where, set, …) to
+        // emit Unicode (UTF-16LE) on its stdout, regardless of the active
+        // console codepage. Combined with the UTF-16 decoder in `decode_stdio`
+        // below, this is how we get clean accented characters on French/German
+        // Windows where the default OEM codepage is CP850. We tried
+        // `chcp 65001 && {cmd}` first — some Windows builds ignore the new
+        // codepage for built-ins until the cmd process is fully reinitialised,
+        // so `/U` is the only reliable knob.
         let mut c = Command::new("cmd.exe");
-        c.arg("/C").arg(cmd);
+        c.arg("/U").arg("/C").arg(cmd);
         c
     }
     #[cfg(not(windows))]
@@ -62,6 +70,32 @@ fn shell_cmd(cmd: &str) -> Command {
         let mut c = Command::new("/bin/sh");
         c.arg("-c").arg(cmd);
         c
+    }
+}
+
+/// Decode child-process stdout/stderr bytes.
+/// * On Windows we requested UTF-16LE output via `cmd /U`, so the bytes are
+///   little-endian u16 pairs that need decoding.
+/// * Everywhere else, plain UTF-8 with lossy fallback.
+fn decode_stdio(bytes: &[u8]) -> String {
+    #[cfg(windows)]
+    {
+        // Strip an optional UTF-16LE BOM (FF FE).
+        let stripped = if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
+            &bytes[2..]
+        } else {
+            bytes
+        };
+        // Ensure even length — odd trailing byte means truncated final code unit.
+        let units: Vec<u16> = stripped
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        String::from_utf16_lossy(&units)
+    }
+    #[cfg(not(windows))]
+    {
+        String::from_utf8_lossy(bytes).into_owned()
     }
 }
 
