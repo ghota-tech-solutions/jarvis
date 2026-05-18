@@ -123,8 +123,9 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
     // only via the public gRPC API — no internal type sharing.
     let spa_handle = if cfg.web.enable {
         let spa_addr = jarvis_web::resolve_addr();
+        let spa_data_dir = cfg.daemon.data_dir.clone();
         Some(tokio::spawn(async move {
-            if let Err(e) = jarvis_web::serve(spa_addr).await {
+            if let Err(e) = jarvis_web::serve(spa_addr, &spa_data_dir).await {
                 warn!(error = %e, "jarvis-web SPA server stopped");
             }
         }))

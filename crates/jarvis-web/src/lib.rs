@@ -12,8 +12,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod auth;
 pub mod server;
 
+pub use auth::{AuthToken, TOKEN_FILE};
 pub use server::{resolve_addr, router, serve, DEFAULT_SPA_ADDR};
 
 /// Crate version, mirrors workspace.package.version. Surfaced over the web API so
