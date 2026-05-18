@@ -7,10 +7,12 @@ use jarvis_agent::{run_agent, AgentRun, HookSpec};
 use jarvis_api::{
     jarvis_server::{Jarvis, JarvisServer},
     AskChunk, AskRequest, CommitInfo, CommitPhaseRequest, CostReport, DaemonStatus, DiffGroup,
-    DiffGroupList, Empty, Event as ApiEvent, FileDiff, FleetEdge, FleetNode, FleetUpdate,
-    ListTasksRequest, ModelSpend, ModelStatus as ApiModelStatus, PingRequest, PingResponse,
-    StatusRequest, StreamEventsRequest, Task as ApiTask, TaskHandle, TaskList, TaskSpec,
-    TimelineEvent as ApiTimelineEvent, TimelineSnapshot, TimelineSpan, UsageStats,
+    DiffGroupList, EditMemoryRequest, Empty, Event as ApiEvent, FileDiff, FleetEdge, FleetNode,
+    FleetUpdate, ListMemoriesRequest, ListTasksRequest, Memory as ApiMemory, MemoryHandle,
+    MemoryList, ModelSpend, ModelStatus as ApiModelStatus, PingRequest, PingResponse,
+    PromoteMemoryRequest, StatusRequest, StreamEventsRequest, Task as ApiTask, TaskHandle,
+    TaskList, TaskSpec, TimelineEvent as ApiTimelineEvent, TimelineSnapshot, TimelineSpan,
+    UsageStats,
 };
 use jarvis_config::Config;
 use jarvis_core::{
@@ -1079,6 +1081,90 @@ impl Jarvis for JarvisService {
         Ok(Response::new(Empty {}))
     }
 
+    async fn list_memories(
+        &self,
+        request: Request<ListMemoriesRequest>,
+    ) -> std::result::Result<Response<MemoryList>, Status> {
+        use jarvis_ledger::{MemoryScope, MemoryStatus};
+        use std::str::FromStr;
+        let req = request.into_inner();
+        let scope = if req.scope.is_empty() {
+            None
+        } else {
+            Some(MemoryScope::from_str(&req.scope).map_err(|_| {
+                Status::invalid_argument(format!("invalid scope: {}", req.scope))
+            })?)
+        };
+        let scope_value = if req.scope_value.is_empty() {
+            None
+        } else {
+            Some(req.scope_value.as_str())
+        };
+        let status = if req.status.is_empty() {
+            None
+        } else {
+            Some(MemoryStatus::from_str(&req.status).map_err(|_| {
+                Status::invalid_argument(format!("invalid status: {}", req.status))
+            })?)
+        };
+        let records = self
+            .ledger
+            .list_memories(scope, scope_value, status, req.limit)
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+        let memories: Vec<ApiMemory> = records.iter().map(memory_to_api).collect();
+        Ok(Response::new(MemoryList { memories }))
+    }
+
+    async fn promote_memory(
+        &self,
+        request: Request<PromoteMemoryRequest>,
+    ) -> std::result::Result<Response<ApiMemory>, Status> {
+        let req = request.into_inner();
+        let new_text = if req.text.trim().is_empty() {
+            None
+        } else {
+            Some(req.text.as_str())
+        };
+        let record = self
+            .ledger
+            .set_memory_status(req.id, jarvis_ledger::MemoryStatus::Active, new_text)
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+        Ok(Response::new(memory_to_api(&record)))
+    }
+
+    async fn forget_memory(
+        &self,
+        request: Request<MemoryHandle>,
+    ) -> std::result::Result<Response<Empty>, Status> {
+        let id = request.into_inner().id;
+        self.ledger
+            .set_memory_status(id, jarvis_ledger::MemoryStatus::Forgotten, None)
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn edit_memory(
+        &self,
+        request: Request<EditMemoryRequest>,
+    ) -> std::result::Result<Response<ApiMemory>, Status> {
+        use jarvis_ledger::{MemoryKind, MemoryScope};
+        use std::str::FromStr;
+        let req = request.into_inner();
+        let scope = MemoryScope::from_str(&req.scope)
+            .map_err(|_| Status::invalid_argument(format!("scope: {}", req.scope)))?;
+        let kind = MemoryKind::from_str(&req.kind)
+            .map_err(|_| Status::invalid_argument(format!("kind: {}", req.kind)))?;
+        let record = self
+            .ledger
+            .edit_memory(req.id, &req.text, scope, &req.scope_value, kind)
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+        Ok(Response::new(memory_to_api(&record)))
+    }
+
     async fn get_timeline(
         &self,
         request: Request<TaskHandle>,
@@ -1459,6 +1545,21 @@ fn commit_paths(
         subject: subject.to_string(),
         ts_micros: chrono::Utc::now().timestamp_micros(),
     })
+}
+
+fn memory_to_api(m: &jarvis_ledger::MemoryRecord) -> ApiMemory {
+    ApiMemory {
+        id: m.id,
+        scope: m.scope.as_str().to_string(),
+        scope_value: m.scope_value.clone(),
+        kind: m.kind.as_str().to_string(),
+        text: m.text.clone(),
+        status: m.status.as_str().to_string(),
+        source_task_id: m.source_task_id.map(|t| t.to_string()).unwrap_or_default(),
+        created_at_micros: m.created_at,
+        updated_at_micros: m.updated_at,
+        usage_count: m.usage_count.max(0) as u32,
+    }
 }
 
 fn revert_paths(workdir: &std::path::Path, paths: &[String]) -> anyhow::Result<()> {

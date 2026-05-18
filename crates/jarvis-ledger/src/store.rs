@@ -343,6 +343,178 @@ impl Ledger {
     /// less than two real turns of history. This variant returns the last N
     /// `decision` / `tool_result` / `error` / `continuation` / `verdict`
     /// events so N maps to roughly N agent moves.
+    // ---------- M9: memories ----------
+
+    pub async fn create_memory(
+        &self,
+        m: crate::memory::NewMemory,
+    ) -> Result<crate::memory::MemoryRecord, LedgerError> {
+        let now = now_micros();
+        let res = sqlx::query(
+            "INSERT INTO memories \
+             (scope, scope_value, kind, text, status, source_task_id, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(m.scope.as_str())
+        .bind(&m.scope_value)
+        .bind(m.kind.as_str())
+        .bind(&m.text)
+        .bind(m.status.as_str())
+        .bind(m.source_task_id.map(|t| uuid_bytes(t.as_uuid())))
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+        Ok(crate::memory::MemoryRecord {
+            id: res.last_insert_rowid(),
+            scope: m.scope,
+            scope_value: m.scope_value,
+            kind: m.kind,
+            text: m.text,
+            status: m.status,
+            source_task_id: m.source_task_id,
+            created_at: now,
+            updated_at: now,
+            usage_count: 0,
+        })
+    }
+
+    pub async fn list_memories(
+        &self,
+        scope: Option<crate::memory::MemoryScope>,
+        scope_value: Option<&str>,
+        status: Option<crate::memory::MemoryStatus>,
+        limit: u32,
+    ) -> Result<Vec<crate::memory::MemoryRecord>, LedgerError> {
+        let limit = if limit == 0 { 200 } else { limit as i64 };
+        let mut sql = String::from(
+            "SELECT id, scope, scope_value, kind, text, status, source_task_id, \
+                    created_at, updated_at, usage_count \
+             FROM memories WHERE 1=1",
+        );
+        if scope.is_some() {
+            sql.push_str(" AND scope = ?");
+        }
+        if scope_value.is_some() {
+            sql.push_str(" AND scope_value = ?");
+        }
+        if status.is_some() {
+            sql.push_str(" AND status = ?");
+        } else {
+            sql.push_str(" AND status != 'forgotten'");
+        }
+        sql.push_str(" ORDER BY updated_at DESC LIMIT ?");
+        let mut q = sqlx::query(&sql);
+        if let Some(s) = scope {
+            q = q.bind(s.as_str());
+        }
+        if let Some(v) = scope_value {
+            q = q.bind(v.to_string());
+        }
+        if let Some(s) = status {
+            q = q.bind(s.as_str());
+        }
+        q = q.bind(limit);
+        let rows = q.fetch_all(&self.pool).await?;
+        rows.iter().map(row_to_memory).collect()
+    }
+
+    pub async fn get_memory(
+        &self,
+        id: i64,
+    ) -> Result<crate::memory::MemoryRecord, LedgerError> {
+        let row = sqlx::query(
+            "SELECT id, scope, scope_value, kind, text, status, source_task_id, \
+                    created_at, updated_at, usage_count \
+             FROM memories WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(LedgerError::NotFound)?;
+        row_to_memory(&row)
+    }
+
+    pub async fn set_memory_status(
+        &self,
+        id: i64,
+        status: crate::memory::MemoryStatus,
+        new_text: Option<&str>,
+    ) -> Result<crate::memory::MemoryRecord, LedgerError> {
+        let now = now_micros();
+        if let Some(t) = new_text {
+            sqlx::query(
+                "UPDATE memories SET status = ?, text = ?, updated_at = ? WHERE id = ?",
+            )
+            .bind(status.as_str())
+            .bind(t)
+            .bind(now)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        } else {
+            sqlx::query("UPDATE memories SET status = ?, updated_at = ? WHERE id = ?")
+                .bind(status.as_str())
+                .bind(now)
+                .bind(id)
+                .execute(&self.pool)
+                .await?;
+        }
+        self.get_memory(id).await
+    }
+
+    pub async fn edit_memory(
+        &self,
+        id: i64,
+        text: &str,
+        scope: crate::memory::MemoryScope,
+        scope_value: &str,
+        kind: crate::memory::MemoryKind,
+    ) -> Result<crate::memory::MemoryRecord, LedgerError> {
+        let now = now_micros();
+        sqlx::query(
+            "UPDATE memories SET text = ?, scope = ?, scope_value = ?, kind = ?, \
+                    updated_at = ? WHERE id = ?",
+        )
+        .bind(text)
+        .bind(scope.as_str())
+        .bind(scope_value)
+        .bind(kind.as_str())
+        .bind(now)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        self.get_memory(id).await
+    }
+
+    /// Return all `active` memories whose scope matches the given workdir,
+    /// plus all `active` `global` memories. Used by the agent loop to inject
+    /// learnings into the system prompt.
+    pub async fn active_memories_for_workdir(
+        &self,
+        workdir: &str,
+    ) -> Result<Vec<crate::memory::MemoryRecord>, LedgerError> {
+        let rows = sqlx::query(
+            "SELECT id, scope, scope_value, kind, text, status, source_task_id, \
+                    created_at, updated_at, usage_count \
+             FROM memories \
+             WHERE status = 'active' AND (scope = 'global' OR (scope = 'workdir' AND scope_value = ?)) \
+             ORDER BY updated_at DESC LIMIT 64",
+        )
+        .bind(workdir)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter().map(row_to_memory).collect()
+    }
+
+    pub async fn increment_memory_usage(&self, id: i64) -> Result<(), LedgerError> {
+        sqlx::query("UPDATE memories SET usage_count = usage_count + 1 WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn recent_relevant_events(
         &self,
         task_id: TaskId,
@@ -445,6 +617,37 @@ fn row_to_event(row: &sqlx::sqlite::SqliteRow) -> Result<EventRecord, LedgerErro
     })
 }
 
+fn row_to_memory(row: &sqlx::sqlite::SqliteRow) -> Result<crate::memory::MemoryRecord, LedgerError> {
+    use std::str::FromStr;
+    let id: i64 = row.try_get("id")?;
+    let scope_s: String = row.try_get("scope")?;
+    let scope_value: String = row.try_get("scope_value")?;
+    let kind_s: String = row.try_get("kind")?;
+    let text: String = row.try_get("text")?;
+    let status_s: String = row.try_get("status")?;
+    let source_bytes: Option<Vec<u8>> = row.try_get("source_task_id")?;
+    let created_at: i64 = row.try_get("created_at")?;
+    let updated_at: i64 = row.try_get("updated_at")?;
+    let usage_count: i64 = row.try_get("usage_count")?;
+    Ok(crate::memory::MemoryRecord {
+        id,
+        scope: crate::memory::MemoryScope::from_str(&scope_s)
+            .map_err(|_| LedgerError::Invalid(format!("memory scope: {scope_s}")))?,
+        scope_value,
+        kind: crate::memory::MemoryKind::from_str(&kind_s)
+            .map_err(|_| LedgerError::Invalid(format!("memory kind: {kind_s}")))?,
+        text,
+        status: crate::memory::MemoryStatus::from_str(&status_s)
+            .map_err(|_| LedgerError::Invalid(format!("memory status: {status_s}")))?,
+        source_task_id: source_bytes
+            .map(|b| uuid_from_bytes(&b).map(jarvis_core::TaskId))
+            .transpose()?,
+        created_at,
+        updated_at,
+        usage_count,
+    })
+}
+
 fn uuid_bytes(u: &Uuid) -> Vec<u8> {
     u.as_bytes().to_vec()
 }
@@ -504,6 +707,24 @@ BEFORE DELETE ON events
 BEGIN
     SELECT RAISE(ABORT, 'events table is append-only');
 END;
+
+-- M9: long-term memories. Unlike events, this table is mutable —
+-- promote/forget/edit are first-class CRUD operations.
+CREATE TABLE IF NOT EXISTS memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope TEXT NOT NULL,                   -- 'workdir' | 'global'
+    scope_value TEXT NOT NULL DEFAULT '',  -- workdir path; '' for global
+    kind TEXT NOT NULL,                    -- 'pattern' | 'preference' | 'fact'
+    text TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'candidate', -- 'candidate' | 'active' | 'forgotten'
+    source_task_id BLOB REFERENCES tasks(id),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    usage_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, scope_value, status);
+CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status, updated_at);
 "#;
 
 #[cfg(test)]

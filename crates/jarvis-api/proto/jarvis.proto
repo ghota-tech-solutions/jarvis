@@ -41,6 +41,13 @@ service Jarvis {
   // M8: revert one diff group's file edits (best-effort; works only if
   // the files have not been touched outside the agent since).
   rpc RejectPhase(CommitPhaseRequest) returns (Empty);
+
+  // M9: long-term learned facts about the user / project. The agent
+  // proposes candidates on verdict; the user promotes / edits / forgets.
+  rpc ListMemories(ListMemoriesRequest) returns (MemoryList);
+  rpc PromoteMemory(PromoteMemoryRequest) returns (Memory);
+  rpc ForgetMemory(MemoryHandle) returns (Empty);
+  rpc EditMemory(EditMemoryRequest) returns (Memory);
 }
 
 // ---------- M1 ----------
@@ -326,4 +333,56 @@ message CommitInfo {
   string branch = 2;
   string subject = 3;
   int64 ts_micros = 4;
+}
+
+// ---------- M9: Memory promotion ----------
+
+message Memory {
+  int64 id = 1;
+  // "workdir" → applies only when a task's workdir matches `scope_value`.
+  // "global"  → applies everywhere.
+  string scope = 2;
+  string scope_value = 3;             // workdir path; empty for "global"
+  // "pattern" | "preference" | "fact"
+  string kind = 4;
+  string text = 5;
+  // "candidate" | "active" | "forgotten"
+  string status = 6;
+  // Task that generated this candidate (empty if hand-authored).
+  string source_task_id = 7;
+  int64 created_at_micros = 8;
+  int64 updated_at_micros = 9;
+  // Times this memory was actually injected into a task's system prompt.
+  uint32 usage_count = 10;
+}
+
+message ListMemoriesRequest {
+  // Filter by scope (empty = all). "workdir" requires `scope_value`.
+  string scope = 1;
+  string scope_value = 2;
+  // Filter by status. Empty = active + candidate (everything not forgotten).
+  string status = 3;
+  uint32 limit = 4;
+}
+
+message MemoryList {
+  repeated Memory memories = 1;
+}
+
+message MemoryHandle {
+  int64 id = 1;
+}
+
+message PromoteMemoryRequest {
+  int64 id = 1;
+  // Optional override of the proposed text; empty keeps the original.
+  string text = 2;
+}
+
+message EditMemoryRequest {
+  int64 id = 1;
+  string text = 2;
+  string scope = 3;
+  string scope_value = 4;
+  string kind = 5;
 }

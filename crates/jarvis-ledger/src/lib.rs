@@ -5,8 +5,10 @@
 //!
 //! Payloads are JSON strings in M2 (debuggable). May migrate to CBOR later.
 
+pub mod memory;
 mod model;
 mod store;
 
+pub use memory::{MemoryKind, MemoryRecord, MemoryScope, MemoryStatus, NewMemory};
 pub use model::{EventKind, EventRecord, NewEvent, TaskRecord, TaskRuntimeInfo, TaskStatus};
 pub use store::{Ledger, LedgerError};
