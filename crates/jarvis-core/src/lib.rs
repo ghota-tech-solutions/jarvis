@@ -5,6 +5,7 @@ mod error;
 mod ids;
 mod provider;
 mod routing;
+mod text;
 
 pub use capabilities::{Capabilities, RequiredCapabilities};
 pub use error::{Error, Result};
@@ -12,4 +13,5 @@ pub use ids::{AgentId, EventId, ProviderName, TaskId};
 pub use provider::{
     ChatMessage, ChatRequest, ChatResponse, ChatRole, CompletionChunk, LlmProvider, Usage,
 };
-pub use routing::{RoutingPolicy, TaskKind};
+pub use routing::{RoutingPolicy, SandboxMode, TaskKind};
+pub use text::{clip, clip_chars};

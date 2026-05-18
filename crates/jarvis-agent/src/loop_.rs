@@ -4,7 +4,8 @@ use crate::prompt;
 use crate::protocol::{parse_reply, ActionKind, AgentError, AgentReply, Outcome};
 use futures_util::StreamExt;
 use jarvis_core::{
-    AgentId, ChatRequest, ProviderName, RequiredCapabilities, RoutingPolicy, TaskId, TaskKind,
+    AgentId, ChatRequest, ProviderName, RequiredCapabilities, RoutingPolicy, SandboxMode, TaskId,
+    TaskKind,
 };
 use jarvis_ledger::{EventKind, Ledger, NewEvent, TaskStatus};
 use jarvis_llm::{LlmPool, PickRequest};
@@ -32,6 +33,55 @@ pub struct AgentRun {
     pub required: RequiredCapabilities,
     /// Kind hint for the router's auto-rules.
     pub kind: TaskKind,
+    /// How many times we may force a continuation audit after `done`. The first
+    /// audit catches premature completion; subsequent ones catch the model
+    /// re-declaring `done` without new evidence. 0 = no autopilot.
+    pub continuation_budget: u32,
+    /// Post-tool verification hooks. Each hook's regex is matched against the
+    /// tool name; matches run via the sandbox and their output is fed back to
+    /// the agent as a synthetic `tool_result` (tool name = `hook:<label>`).
+    pub hooks: Vec<HookSpec>,
+    /// What the agent is allowed to do. In `ReadOnly`, any tool with
+    /// `side_effects = true` is blocked before invocation and the agent gets
+    /// a synthetic error observation explaining the policy.
+    pub sandbox_mode: SandboxMode,
+}
+
+/// Compiled post-tool hook. Construct once at task-dispatch time so the regex
+/// cost amortizes across all subsequent tool invocations.
+#[derive(Clone)]
+pub struct HookSpec {
+    pub label: String,
+    pub matcher: regex::Regex,
+    pub cmd: String,
+    pub workdir: Option<PathBuf>,
+    pub timeout: std::time::Duration,
+}
+
+impl std::fmt::Debug for HookSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HookSpec")
+            .field("label", &self.label)
+            .field("matcher", &self.matcher.as_str())
+            .field("cmd", &self.cmd)
+            .field("timeout", &self.timeout)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Append a tagged event for this task/agent in one line. Centralizes the
+/// boilerplate of `NewEvent::new(...).with_agent(agent_id)` so the call sites
+/// in the agent loop stay legible.
+async fn log_event(
+    ledger: &Ledger,
+    run: &AgentRun,
+    kind: EventKind,
+    payload: serde_json::Value,
+) -> Result<(), AgentError> {
+    ledger
+        .append(NewEvent::new(run.task_id, kind, payload).with_agent(run.agent_id))
+        .await?;
+    Ok(())
 }
 
 #[instrument(skip(pool, ledger, tools, ctx), fields(task = %run.task_id, agent = %run.agent_id))]
@@ -57,20 +107,19 @@ pub async fn run_agent(
             return Ok(Outcome::Aborted);
         }
 
-        // 1) Pull recent context from the ledger.
-        let history = ledger.recent_events(run.task_id, 40).await?;
+        // 1) Pull recent context from the ledger. We use the relevant-only
+        //    query so 80 here means 80 agent moves (decisions/tool results),
+        //    not 80 raw rows that would be flooded by streaming chunks.
+        let history = ledger.recent_relevant_events(run.task_id, 80).await?;
         let messages = prompt::build_messages(&task.goal, &task.workdir, &tool_schemas, &history);
 
-        ledger
-            .append(
-                NewEvent::new(
-                    run.task_id,
-                    EventKind::Heartbeat,
-                    json!({ "step": step, "max_steps": run.max_steps }),
-                )
-                .with_agent(run.agent_id),
-            )
-            .await?;
+        log_event(
+            &ledger,
+            &run,
+            EventKind::Heartbeat,
+            json!({ "step": step, "max_steps": run.max_steps }),
+        )
+        .await?;
 
         // 2) Pick a model — try, on failure quarantine + forbid + retry until exhausted.
         let mut forbidden: HashSet<ProviderName> = HashSet::new();
@@ -85,31 +134,28 @@ pub async fn run_agent(
             let picked = match pool.pick(&pick_req).await {
                 Ok(p) => p,
                 Err(e) => {
-                    let payload = json!({ "step": step, "kind": "pool", "error": e.to_string() });
-                    ledger
-                        .append(
-                            NewEvent::new(run.task_id, EventKind::Error, payload)
-                                .with_agent(run.agent_id),
-                        )
-                        .await?;
+                    log_event(
+                        &ledger,
+                        &run,
+                        EventKind::Error,
+                        json!({ "step": step, "kind": "pool", "error": e.to_string() }),
+                    )
+                    .await?;
                     return finish_failed(&ledger, run.task_id, &format!("router: {e}")).await;
                 }
             };
-            ledger
-                .append(
-                    NewEvent::new(
-                        run.task_id,
-                        EventKind::Attempt,
-                        json!({
-                            "step": step,
-                            "model": picked.name.as_str(),
-                            "model_id": picked.model_id,
-                            "kind": picked.kind.as_str(),
-                        }),
-                    )
-                    .with_agent(run.agent_id),
-                )
-                .await?;
+            log_event(
+                &ledger,
+                &run,
+                EventKind::Attempt,
+                json!({
+                    "step": step,
+                    "model": picked.name.as_str(),
+                    "model_id": picked.model_id,
+                    "kind": picked.kind.as_str(),
+                }),
+            )
+            .await?;
 
             let chat_req = ChatRequest {
                 messages: messages.clone(),
@@ -124,16 +170,13 @@ pub async fn run_agent(
                     warn!(model = %picked.name, error = %e, "stream open failed; quarantining and retrying");
                     pool.record_failure(&picked.name).await;
                     forbidden.insert(picked.name.clone());
-                    ledger
-                        .append(
-                            NewEvent::new(
-                                run.task_id,
-                                EventKind::Error,
-                                json!({"step": step, "model": picked.name.as_str(), "kind": "open_stream", "error": e.to_string()}),
-                            )
-                            .with_agent(run.agent_id),
-                        )
-                        .await?;
+                    log_event(
+                        &ledger,
+                        &run,
+                        EventKind::Error,
+                        json!({"step": step, "model": picked.name.as_str(), "kind": "open_stream", "error": e.to_string()}),
+                    )
+                    .await?;
                     continue;
                 }
             };
@@ -161,12 +204,7 @@ pub async fn run_agent(
                                     "delta": chunk_buffer,
                                 });
                                 chunk_buffer.clear();
-                                ledger
-                                    .append(
-                                        NewEvent::new(run.task_id, EventKind::LlmChunk, payload)
-                                            .with_agent(run.agent_id),
-                                    )
-                                    .await?;
+                                log_event(&ledger, &run, EventKind::LlmChunk, payload).await?;
                             }
                         }
                     }
@@ -174,16 +212,13 @@ pub async fn run_agent(
                         warn!(model = %picked.name, error = %e, "stream error; quarantining and retrying");
                         pool.record_failure(&picked.name).await;
                         forbidden.insert(picked.name.clone());
-                        ledger
-                            .append(
-                                NewEvent::new(
-                                    run.task_id,
-                                    EventKind::Error,
-                                    json!({"step": step, "model": picked.name.as_str(), "kind": "stream", "error": e.to_string()}),
-                                )
-                                .with_agent(run.agent_id),
-                            )
-                            .await?;
+                        log_event(
+                            &ledger,
+                            &run,
+                            EventKind::Error,
+                            json!({"step": step, "model": picked.name.as_str(), "kind": "stream", "error": e.to_string()}),
+                        )
+                        .await?;
                         stream_failed = true;
                         break;
                     }
@@ -192,16 +227,13 @@ pub async fn run_agent(
             // Flush any trailing buffer.
             if !chunk_buffer.is_empty() {
                 chunk_seq += 1;
-                ledger
-                    .append(
-                        NewEvent::new(
-                            run.task_id,
-                            EventKind::LlmChunk,
-                            json!({"step": step, "seq": chunk_seq, "delta": chunk_buffer}),
-                        )
-                        .with_agent(run.agent_id),
-                    )
-                    .await?;
+                log_event(
+                    &ledger,
+                    &run,
+                    EventKind::LlmChunk,
+                    json!({"step": step, "seq": chunk_seq, "delta": chunk_buffer}),
+                )
+                .await?;
             }
             if stream_failed {
                 continue;
@@ -215,63 +247,81 @@ pub async fn run_agent(
             Ok(r) => r,
             Err(e) => {
                 warn!(error = %e, step, "could not parse LLM reply; injecting correction");
-                ledger
-                    .append(
-                        NewEvent::new(
-                            run.task_id,
-                            EventKind::Error,
-                            json!({
-                                "step": step,
-                                "kind": "parse_reply",
-                                "raw": text.chars().take(2000).collect::<String>(),
-                                "message": e.to_string(),
-                            }),
-                        )
-                        .with_agent(run.agent_id),
-                    )
-                    .await?;
+                log_event(
+                    &ledger,
+                    &run,
+                    EventKind::Error,
+                    json!({
+                        "step": step,
+                        "kind": "parse_reply",
+                        "raw": text.chars().take(2000).collect::<String>(),
+                        "message": e.to_string(),
+                    }),
+                )
+                .await?;
                 // Push a synthetic observation telling the model how to reply, then loop.
-                ledger
-                    .append(
-                        NewEvent::new(
-                            run.task_id,
-                            EventKind::Observation,
-                            json!({
-                                "system_correction": "Your last reply was not valid JSON. Reply with one JSON object matching the schema in the system prompt."
-                            }),
-                        )
-                        .with_agent(run.agent_id),
-                    )
-                    .await?;
+                log_event(
+                    &ledger,
+                    &run,
+                    EventKind::Observation,
+                    json!({
+                        "system_correction": "Your last reply was not valid JSON. Reply with one JSON object matching the schema in the system prompt."
+                    }),
+                )
+                .await?;
                 continue;
             }
         };
 
         // 3) Log the decision.
-        ledger
-            .append(
-                NewEvent::new(
-                    run.task_id,
-                    EventKind::Decision,
-                    serde_json::to_value(&reply).unwrap_or(json!(null)),
-                )
-                .with_agent(run.agent_id),
-            )
-            .await?;
+        log_event(
+            &ledger,
+            &run,
+            EventKind::Decision,
+            serde_json::to_value(&reply).unwrap_or(json!(null)),
+        )
+        .await?;
 
         // 4) Act.
         match reply.action {
             ActionKind::Done => {
-                ledger
-                    .append(
-                        NewEvent::new(
-                            run.task_id,
-                            EventKind::Verdict,
-                            json!({"verdict":"pass", "message": reply.message }),
-                        )
-                        .with_agent(run.agent_id),
+                // Count prior continuation audits in this task's history.
+                let continuations_used = history
+                    .iter()
+                    .filter(|e| matches!(e.kind, EventKind::Continuation))
+                    .count() as u32;
+                // Only force an audit if the agent actually did work (tool calls).
+                // Informational answers (no tools called) bypass the audit since
+                // there is no environment state to verify against.
+                let did_tool_work = history
+                    .iter()
+                    .any(|e| matches!(e.kind, EventKind::ToolResult));
+                if did_tool_work && continuations_used < run.continuation_budget {
+                    let attempt = continuations_used + 1;
+                    let budget = run.continuation_budget;
+                    info!(step, attempt, budget, "agent: forcing continuation audit");
+                    log_event(
+                        &ledger,
+                        &run,
+                        EventKind::Continuation,
+                        json!({
+                            "attempt": attempt,
+                            "budget": budget,
+                            "after_message": reply.message,
+                        }),
                     )
                     .await?;
+                    // Loop back: next iteration will rebuild messages with the
+                    // continuation event rendered as a user audit prompt.
+                    continue;
+                }
+                log_event(
+                    &ledger,
+                    &run,
+                    EventKind::Verdict,
+                    json!({"verdict":"pass", "message": reply.message }),
+                )
+                .await?;
                 ledger
                     .set_task_status(run.task_id, TaskStatus::Completed, None)
                     .await?;
@@ -317,6 +367,35 @@ async fn run_tool_step(
         )
         .await?;
 
+    // Sandbox mode gate: ReadOnly blocks any tool whose schema declares
+    // side_effects=true BEFORE the tool ever runs. The agent gets a clear
+    // observation back so it can either pick a read-only alternative or
+    // surface the limitation in its verdict.
+    if matches!(run.sandbox_mode, SandboxMode::ReadOnly)
+        && tools
+            .get(tool_name)
+            .map(|t| t.schema().side_effects)
+            .unwrap_or(false)
+    {
+        let payload = json!({
+            "tool": tool_name,
+            "args": args.clone(),
+            "summary": "blocked: sandbox mode is read_only",
+            "data": {
+                "error": "sandbox_mode=read_only",
+                "hint": "this tool would mutate state — pick a read-only tool (fs_read, grep, glob) or report the limitation in your verdict",
+            },
+            "is_error": true,
+        });
+        let mut ev = NewEvent::new(run.task_id, EventKind::ToolResult, payload)
+            .with_agent(run.agent_id);
+        if let Some(s) = subject {
+            ev = ev.with_subject(s);
+        }
+        ledger.append(ev).await?;
+        return Ok(());
+    }
+
     let args_for_result = args.clone();
     let result = tools.invoke(tool_name, args, ctx).await;
     let event = match result {
@@ -353,6 +432,83 @@ async fn run_tool_step(
         event = event.with_subject(s);
     }
     ledger.append(event).await?;
+
+    // Post-tool hooks. Each matching hook runs via the sandbox and emits its
+    // own synthetic tool_result so the next agent turn sees the verification
+    // outcome inline with the other observations. We never run hooks for
+    // synthetic hook events themselves (the tool_name prefix prevents that).
+    if !run.hooks.is_empty() && !tool_name.starts_with("hook:") {
+        for hook in &run.hooks {
+            if !hook.matcher.is_match(tool_name) {
+                continue;
+            }
+            run_one_hook(ledger, ctx, run, hook).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn run_one_hook(
+    ledger: &Ledger,
+    ctx: &ToolCtx,
+    run: &AgentRun,
+    hook: &HookSpec,
+) -> Result<(), AgentError> {
+    use jarvis_sandbox::SandboxSpec;
+    let workdir = hook
+        .workdir
+        .clone()
+        .unwrap_or_else(|| ctx.workdir.clone());
+    let spec = SandboxSpec {
+        cmd: hook.cmd.clone(),
+        workdir,
+        env: std::collections::HashMap::new(),
+        timeout: hook.timeout,
+        net: ctx.net_policy.clone(),
+    };
+    let synth_name = format!("hook:{}", hook.label);
+    let outcome = ctx.sandbox.exec(spec).await;
+    let event = match outcome {
+        Ok(out) => {
+            let is_error = out.exit_code != 0 || out.timed_out;
+            let summary = if out.timed_out {
+                format!("{} · timed out", hook.label)
+            } else {
+                format!("{} · exit {}", hook.label, out.exit_code)
+            };
+            NewEvent::new(
+                run.task_id,
+                EventKind::ToolResult,
+                json!({
+                    "tool": synth_name,
+                    "args": { "cmd": hook.cmd },
+                    "summary": summary,
+                    "data": {
+                        "exit_code": out.exit_code,
+                        "stdout": jarvis_core::clip(&out.stdout, 8 * 1024),
+                        "stderr": jarvis_core::clip(&out.stderr, 8 * 1024),
+                        "backend": out.backend,
+                        "timed_out": out.timed_out,
+                    },
+                    "is_error": is_error,
+                }),
+            )
+        }
+        Err(e) => NewEvent::new(
+            run.task_id,
+            EventKind::ToolResult,
+            json!({
+                "tool": synth_name,
+                "args": { "cmd": hook.cmd },
+                "summary": format!("{} failed to spawn", hook.label),
+                "data": { "error": e.to_string() },
+                "is_error": true,
+            }),
+        ),
+    };
+    ledger
+        .append(event.with_agent(run.agent_id))
+        .await?;
     Ok(())
 }
 

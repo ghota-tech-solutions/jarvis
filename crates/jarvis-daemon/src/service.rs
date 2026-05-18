@@ -3,14 +3,14 @@
 
 use anyhow::{anyhow, Context, Result};
 use futures::StreamExt;
-use jarvis_agent::{run_agent, AgentRun};
+use jarvis_agent::{run_agent, AgentRun, HookSpec};
 use jarvis_api::{
     jarvis_server::{Jarvis, JarvisServer},
     AskChunk, AskRequest, DaemonStatus, Event as ApiEvent, ListTasksRequest,
     ModelStatus as ApiModelStatus, PingRequest, PingResponse, StatusRequest, StreamEventsRequest,
     Task as ApiTask, TaskHandle, TaskList, TaskSpec, UsageStats,
 };
-use jarvis_config::{Config, LocalProvider, RemoteProvider};
+use jarvis_config::Config;
 use jarvis_core::{
     AgentId, Capabilities, ChatMessage, ChatRequest, LlmProvider, ProviderName, RequiredCapabilities,
     RoutingPolicy, TaskId, TaskKind,
@@ -24,7 +24,10 @@ use jarvis_mcp::{McpClient, McpServerSpec, McpToolAdapter};
 use jarvis_sandbox::{
     DockerSandbox, NativeSandbox, NetPolicy, Sandbox, SandboxKind, Worktree, WorktreeManager,
 };
-use jarvis_tools::{FsReadTool, FsWriteTool, ShellTool, ToolCtx, ToolRegistry};
+use jarvis_tools::{
+    ApplyPatchTool, FsReadTool, FsWriteTool, GlobTool, GrepTool, ShellTool, ToolCtx, ToolRegistry,
+    UpdatePlanTool,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -137,7 +140,7 @@ fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
             lp.model.clone(),
             lp.api_key.clone().unwrap_or_default(),
             lp.priority,
-            local_capabilities(lp),
+            lp.capabilities.clone().into(),
             0.0,
             0.0,
         );
@@ -152,7 +155,7 @@ fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
             rp.model.clone(),
             rp.api_key.clone(),
             rp.priority,
-            remote_capabilities(rp),
+            rp.capabilities.clone().into(),
             rp.cost_per_mtok_in,
             rp.cost_per_mtok_out,
         );
@@ -160,26 +163,6 @@ fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
         r.insert(entry);
     }
     Ok(r)
-}
-
-fn local_capabilities(lp: &LocalProvider) -> Capabilities {
-    Capabilities {
-        ctx_len: lp.capabilities.ctx_len,
-        tool_calls: lp.capabilities.tool_calls,
-        json_schema: lp.capabilities.json_schema,
-        vision: lp.capabilities.vision,
-        supports_streaming: lp.capabilities.supports_streaming,
-    }
-}
-
-fn remote_capabilities(rp: &RemoteProvider) -> Capabilities {
-    Capabilities {
-        ctx_len: rp.capabilities.ctx_len,
-        tool_calls: rp.capabilities.tool_calls,
-        json_schema: rp.capabilities.json_schema,
-        vision: rp.capabilities.vision,
-        supports_streaming: rp.capabilities.supports_streaming,
-    }
 }
 
 /// One-shot Ask RPC uses a sensible default: highest-priority local model.
@@ -216,11 +199,49 @@ pub struct McpServerStatus {
     pub error: Option<String>,
 }
 
+/// Compile `[hooks.post_tool]` config entries into runtime `HookSpec`s.
+/// Invalid regex or empty match patterns are logged and skipped — we never
+/// fail task dispatch because of a typo'd hook.
+pub fn compile_hooks(cfg: &jarvis_config::HooksConfig) -> Vec<HookSpec> {
+    let mut out = Vec::with_capacity(cfg.post_tool.len());
+    for h in &cfg.post_tool {
+        let pat = h.r#match.trim();
+        if pat.is_empty() {
+            warn!("hooks.post_tool: skipping entry with empty `match`");
+            continue;
+        }
+        let re = match regex::Regex::new(pat) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(pattern = pat, error = %e, "hooks.post_tool: invalid regex — skipping");
+                continue;
+            }
+        };
+        let label = h
+            .label
+            .clone()
+            .or_else(|| h.cmd.split_whitespace().next().map(|s| s.to_string()))
+            .unwrap_or_else(|| "hook".to_string());
+        out.push(HookSpec {
+            label,
+            matcher: re,
+            cmd: h.cmd.clone(),
+            workdir: h.workdir.clone(),
+            timeout: std::time::Duration::from_secs(h.timeout_s),
+        });
+    }
+    out
+}
+
 async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerStatus>>) {
     let mut r = ToolRegistry::new();
     r.register(FsReadTool);
     r.register(FsWriteTool);
     r.register(ShellTool);
+    r.register(ApplyPatchTool);
+    r.register(GrepTool);
+    r.register(GlobTool);
+    r.register(UpdatePlanTool);
 
     let mut statuses: Vec<McpServerStatus> = Vec::new();
     for (name, spec) in &cfg.mcp.servers {
@@ -234,39 +255,37 @@ async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerSt
             env: spec.env.clone(),
             workdir: spec.workdir.clone(),
         };
-        match McpClient::connect(mcp_spec).await {
-            Ok(client) => match client.list_tools().await {
-                Ok(tools) => {
-                    let tool_names: Vec<String> = tools.iter().map(|t| t.name.clone()).collect();
-                    info!(server = %name, count = tools.len(), "mcp tools discovered");
-                    for tool in tools {
-                        let adapter = McpToolAdapter::new(name, tool, client.clone());
-                        r.register(adapter);
-                    }
-                    statuses.push(McpServerStatus {
-                        name: name.clone(),
-                        connected: true,
-                        tools: tool_names,
-                        error: None,
-                    });
+        // Two-stage fallible startup (connect → tools/list) flattened into a
+        // single Result so the error-path doesn't fork the happy path.
+        let result: std::result::Result<(jarvis_mcp::McpClient, Vec<_>), (String, String)> =
+            match McpClient::connect(mcp_spec).await {
+                Ok(client) => match client.list_tools().await {
+                    Ok(tools) => Ok((client, tools)),
+                    Err(e) => Err(("tools/list".into(), e.to_string())),
+                },
+                Err(e) => Err(("connect".into(), e.to_string())),
+            };
+        match result {
+            Ok((client, tools)) => {
+                let tool_names: Vec<String> = tools.iter().map(|t| t.name.clone()).collect();
+                info!(server = %name, count = tools.len(), "mcp tools discovered");
+                for tool in tools {
+                    r.register(McpToolAdapter::new(name, tool, client.clone()));
                 }
-                Err(e) => {
-                    warn!(server = %name, error = %e, "mcp tools/list failed");
-                    statuses.push(McpServerStatus {
-                        name: name.clone(),
-                        connected: false,
-                        tools: Vec::new(),
-                        error: Some(format!("tools/list: {e}")),
-                    });
-                }
-            },
-            Err(e) => {
-                warn!(server = %name, error = %e, "mcp connect failed");
+                statuses.push(McpServerStatus {
+                    name: name.clone(),
+                    connected: true,
+                    tools: tool_names,
+                    error: None,
+                });
+            }
+            Err((stage, msg)) => {
+                warn!(server = %name, stage = %stage, error = %msg, "mcp startup failed");
                 statuses.push(McpServerStatus {
                     name: name.clone(),
                     connected: false,
                     tools: Vec::new(),
-                    error: Some(format!("connect: {e}")),
+                    error: Some(format!("{stage}: {msg}")),
                 });
             }
         }
@@ -574,6 +593,12 @@ impl Jarvis for JarvisService {
         let routing = self.parse_routing(&spec.routing_policy)?;
         let required = parse_required_caps(&spec.require_caps);
 
+        let sandbox_mode = self
+            .cfg
+            .sandbox
+            .default_mode
+            .parse()
+            .unwrap_or_default();
         let run = AgentRun {
             task_id: task.id,
             workdir: worktree.path.clone(),
@@ -583,6 +608,9 @@ impl Jarvis for JarvisService {
             routing,
             required,
             kind: TaskKind::Planning,
+            continuation_budget: 1,
+            hooks: compile_hooks(&self.cfg.hooks),
+            sandbox_mode,
         };
 
         let pool = self.pool.clone();

@@ -13,5 +13,5 @@ mod loop_;
 mod prompt;
 mod protocol;
 
-pub use loop_::{run_agent, AgentRun};
+pub use loop_::{run_agent, AgentRun, HookSpec};
 pub use protocol::{AgentError, Outcome};

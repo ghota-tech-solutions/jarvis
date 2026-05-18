@@ -2,6 +2,7 @@
 //! stdin/stdout, advertises two tools:
 //!   * `echo`   — returns its `text` arg verbatim.
 //!   * `add`    — returns `a + b` as text.
+//!
 //! That's enough to exercise initialize → tools/list → tools/call.
 
 use serde_json::{json, Value};

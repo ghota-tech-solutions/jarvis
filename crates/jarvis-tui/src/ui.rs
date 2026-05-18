@@ -276,7 +276,7 @@ fn render_sidebar(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
                 Span::styled(cursor, Style::default().fg(t.focus)),
                 Span::styled(format!("{} ", short_id(&task.id)), Style::default().fg(t.dim)),
                 Span::styled(
-                    clip(&task.goal, area.width.saturating_sub(15) as usize),
+                    jarvis_core::clip_chars(&task.goal, area.width.saturating_sub(15) as usize),
                     Style::default().fg(status_color(&task.status, t)),
                 ),
             ]));
@@ -351,7 +351,7 @@ fn render_sidebar(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
             lines.push(Line::from(vec![
                 Span::styled(cursor.to_string(), cursor_style),
                 Span::styled(
-                    clip(&c.root_goal, 32),
+                    jarvis_core::clip_chars(&c.root_goal, 32),
                     Style::default().fg(status_color(&c.leaf_status, t)),
                 ),
                 Span::styled(turn_badge, Style::default().fg(t.accent)),
@@ -957,15 +957,6 @@ fn short_model_name(name: &str) -> String {
     name.split_once(':').map(|(_, n)| n.to_string()).unwrap_or_else(|| name.to_string())
 }
 
-fn clip(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        let mut t: String = s.chars().take(max.saturating_sub(1)).collect();
-        t.push('…');
-        t
-    }
-}
 
 #[allow(dead_code)]
 fn _silence_task_warning(_t: &Task) {}

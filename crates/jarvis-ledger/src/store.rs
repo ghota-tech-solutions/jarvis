@@ -311,6 +311,36 @@ impl Ledger {
         rows.reverse();
         Ok(rows)
     }
+
+    /// Like `recent_events` but pre-filtered to the event kinds the agent's
+    /// prompt builder actually consumes. Critical for context economy: a
+    /// streamed LLM turn produces 20-30 `llm_chunk` rows plus a few
+    /// heartbeat/attempt rows; a naive `recent_events(40)` therefore carries
+    /// less than two real turns of history. This variant returns the last N
+    /// `decision` / `tool_result` / `error` / `continuation` / `verdict`
+    /// events so N maps to roughly N agent moves.
+    pub async fn recent_relevant_events(
+        &self,
+        task_id: TaskId,
+        n: u32,
+    ) -> Result<Vec<EventRecord>, LedgerError> {
+        let n = n.max(1) as i64;
+        let mut rows = sqlx::query(
+            "SELECT id, ts, task_id, agent_id, kind, subject, payload, parent_evt \
+             FROM events WHERE task_id = ? \
+             AND kind IN ('decision','tool_result','error','continuation','verdict') \
+             ORDER BY id DESC LIMIT ?",
+        )
+        .bind(uuid_bytes(task_id.as_uuid()))
+        .bind(n)
+        .fetch_all(&self.pool)
+        .await?
+        .iter()
+        .map(row_to_event)
+        .collect::<Result<Vec<_>, _>>()?;
+        rows.reverse();
+        Ok(rows)
+    }
 }
 
 fn row_to_task(row: &sqlx::sqlite::SqliteRow) -> Result<TaskRecord, LedgerError> {

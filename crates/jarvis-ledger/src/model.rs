@@ -25,6 +25,10 @@ pub enum EventKind {
     LlmChunk,
     /// Periodic agent heartbeat / status snapshot.
     Heartbeat,
+    /// Forced continuation — daemon injected an audit prompt after a premature
+    /// `done` verdict. Rendered as a user message on the next turn. The agent
+    /// either re-confirms `done` with evidence or resumes work.
+    Continuation,
 }
 
 impl EventKind {
@@ -40,6 +44,7 @@ impl EventKind {
             Self::Spawn => "spawn",
             Self::LlmChunk => "llm_chunk",
             Self::Heartbeat => "heartbeat",
+            Self::Continuation => "continuation",
         }
     }
 }
@@ -64,6 +69,7 @@ impl std::str::FromStr for EventKind {
             "spawn" => Self::Spawn,
             "llm_chunk" => Self::LlmChunk,
             "heartbeat" => Self::Heartbeat,
+            "continuation" => Self::Continuation,
             _ => return Err(()),
         })
     }

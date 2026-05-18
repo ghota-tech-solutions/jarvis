@@ -28,6 +28,49 @@ pub struct Config {
     pub web: WebConfig,
     #[serde(default)]
     pub mcp: McpConfig,
+    #[serde(default)]
+    pub hooks: HooksConfig,
+}
+
+/// Hooks let the user wire arbitrary verification commands to fire after the
+/// agent runs a tool. The canonical use case is auto-`cargo check` after every
+/// `apply_patch` / `fs_write` so the agent can't lie about success — if the
+/// hook fails, the captured output is fed back as an observation on the next
+/// turn.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HooksConfig {
+    /// Runs after a tool's `tool_result` lands in the ledger. Multiple hooks
+    /// can match the same tool — they all run, in declaration order.
+    #[serde(default)]
+    pub post_tool: Vec<PostToolHook>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PostToolHook {
+    /// Regex matched against the tool name (e.g. `apply_patch|fs_write`).
+    pub r#match: String,
+    /// Shell command to run. Resolved by `jarvis-sandbox::native::shell_cmd` so
+    /// it inherits the Windows `chcp 65001` + UTF-8 fallback chain.
+    pub cmd: String,
+    /// Where to run. Defaults to the task's workdir.
+    #[serde(default)]
+    pub workdir: Option<PathBuf>,
+    /// Cap before the command is killed; default 60 s.
+    #[serde(default = "default_hook_timeout")]
+    pub timeout_s: u64,
+    /// Short label shown in the ledger / UI ("cargo check", "lint", etc.).
+    /// Defaults to the first word of `cmd`.
+    #[serde(default)]
+    pub label: Option<String>,
+}
+
+fn default_hook_timeout() -> u64 {
+    60
+}
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -54,59 +97,48 @@ pub struct McpServer {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct WebConfig {
-    #[serde(default = "default_web_enable")]
     pub enable: bool,
-    #[serde(default = "default_web_addr")]
     pub addr: String,
 }
 
 impl Default for WebConfig {
     fn default() -> Self {
         Self {
-            enable: default_web_enable(),
-            addr: default_web_addr(),
+            enable: true,
+            addr: "127.0.0.1:7878".to_string(),
         }
     }
 }
 
-fn default_web_enable() -> bool {
-    true
-}
-fn default_web_addr() -> String {
-    "127.0.0.1:7878".to_string()
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct SandboxConfig {
     /// "native" or "docker". Default: "native".
-    #[serde(default = "default_backend")]
     pub default_backend: String,
     /// "none" | "egress_only" | "full". Default: "egress_only".
-    #[serde(default = "default_net_policy")]
     pub default_net_policy: String,
+    /// "read_only" | "workspace_write" | "danger_full_access". Default:
+    /// "workspace_write". Per-task override available at submit time.
+    pub default_mode: String,
     /// Docker image used by DockerSandbox.
-    #[serde(default = "default_docker_image")]
     pub docker_image: String,
     /// Docker memory limit (e.g. "2g"). Optional.
-    #[serde(default)]
     pub docker_memory: Option<String>,
     /// Docker CPU limit (fractional). Optional.
-    #[serde(default)]
     pub docker_cpus: Option<f64>,
     /// Auto-pull the image at boot.
-    #[serde(default)]
     pub docker_autopull: bool,
 }
 
 impl Default for SandboxConfig {
     fn default() -> Self {
         Self {
-            default_backend: default_backend(),
-            default_net_policy: default_net_policy(),
-            docker_image: default_docker_image(),
+            default_backend: "native".to_string(),
+            default_net_policy: "egress_only".to_string(),
+            default_mode: "workspace_write".to_string(),
+            docker_image: "alpine:3.20".to_string(),
             docker_memory: None,
             docker_cpus: None,
             docker_autopull: false,
@@ -114,39 +146,20 @@ impl Default for SandboxConfig {
     }
 }
 
-fn default_backend() -> String {
-    "native".to_string()
-}
-fn default_net_policy() -> String {
-    "egress_only".to_string()
-}
-fn default_docker_image() -> String {
-    "alpine:3.20".to_string()
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct DaemonConfig {
-    #[serde(default = "default_addr")]
     pub addr: String,
-    #[serde(default = "default_data_dir")]
     pub data_dir: PathBuf,
 }
 
 impl Default for DaemonConfig {
     fn default() -> Self {
         Self {
-            addr: default_addr(),
-            data_dir: default_data_dir(),
+            addr: "127.0.0.1:7777".to_string(),
+            data_dir: PathBuf::from(".jarvis"),
         }
     }
-}
-
-fn default_addr() -> String {
-    "127.0.0.1:7777".to_string()
-}
-fn default_data_dir() -> PathBuf {
-    PathBuf::from(".jarvis")
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -193,37 +206,25 @@ fn default_priority() -> i32 {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct CapabilitiesDecl {
-    #[serde(default = "default_ctx")]
     pub ctx_len: u32,
-    #[serde(default)]
     pub tool_calls: bool,
-    #[serde(default)]
     pub json_schema: bool,
-    #[serde(default)]
     pub vision: bool,
-    #[serde(default = "default_true")]
     pub supports_streaming: bool,
 }
 
 impl Default for CapabilitiesDecl {
     fn default() -> Self {
         Self {
-            ctx_len: default_ctx(),
+            ctx_len: 8192,
             tool_calls: false,
             json_schema: false,
             vision: false,
             supports_streaming: true,
         }
     }
-}
-
-fn default_ctx() -> u32 {
-    8192
-}
-fn default_true() -> bool {
-    true
 }
 
 impl From<CapabilitiesDecl> for jarvis_core::Capabilities {
@@ -239,46 +240,27 @@ impl From<CapabilitiesDecl> for jarvis_core::Capabilities {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct RoutingConfig {
-    #[serde(default = "default_policy")]
     pub default_policy: String,
-    #[serde(default)]
     pub monthly_remote_usd_cap: f64,
-    #[serde(default)]
     pub escalation_chain: Vec<String>,
-    #[serde(default = "default_quarantine_failures")]
     pub quarantine_after_failures: u32,
-    #[serde(default = "default_quarantine_window")]
     pub quarantine_window_minutes: u32,
-    #[serde(default = "default_quarantine_duration")]
     pub quarantine_duration_minutes: u32,
 }
 
 impl Default for RoutingConfig {
     fn default() -> Self {
         Self {
-            default_policy: default_policy(),
+            default_policy: "auto".to_string(),
             monthly_remote_usd_cap: 0.0,
             escalation_chain: Vec::new(),
-            quarantine_after_failures: default_quarantine_failures(),
-            quarantine_window_minutes: default_quarantine_window(),
-            quarantine_duration_minutes: default_quarantine_duration(),
+            quarantine_after_failures: 3,
+            quarantine_window_minutes: 10,
+            quarantine_duration_minutes: 15,
         }
     }
-}
-
-fn default_policy() -> String {
-    "auto".to_string()
-}
-fn default_quarantine_failures() -> u32 {
-    3
-}
-fn default_quarantine_window() -> u32 {
-    10
-}
-fn default_quarantine_duration() -> u32 {
-    15
 }
 
 #[derive(Debug, thiserror::Error)]

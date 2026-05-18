@@ -31,3 +31,42 @@ docker_image = "alpine:3.20"
 docker_memory = "2g"
 docker_cpus = 2.0
 docker_autopull = true
+
+# --- Post-tool hooks: auto-verification after the agent runs a tool ---------
+# Each entry runs after `tool_result` lands in the ledger, and its output is
+# fed back to the agent as a synthetic observation on the next turn. The point:
+# the agent can no longer LIE about success — `cargo check` either passes or
+# returns errors the next turn must address.
+#
+# `match` is a regex on the tool name. Multiple hooks can match the same tool;
+# they all fire in declaration order. Hooks DO NOT trigger other hooks
+# (synthetic `hook:*` events are skipped).
+#
+# Rust example: type-check after every patch / write.
+# [[hooks.post_tool]]
+# match = "apply_patch|fs_write"
+# cmd = "cargo check --message-format short"
+# timeout_s = 90
+# label = "cargo-check"
+#
+# TypeScript example:
+# [[hooks.post_tool]]
+# match = "apply_patch|fs_write"
+# cmd = "npx tsc --noEmit"
+# label = "tsc"
+#
+# Run unit tests after the agent says "done" (matches the `done`-marker tool
+# name some agents use — adapt to your verb of choice):
+# [[hooks.post_tool]]
+# match = "shell"
+# cmd = "cargo test --workspace --lib"
+# timeout_s = 180
+# label = "tests"
+
+# --- macOS / Apple Silicon notes -------------------------------------------
+# When you move this to an M-series Mac with mlx_lm.server:
+#   url   = "http://127.0.0.1:8080/v1"
+#   model = "mlx-community/Qwen2.5-Coder-32B-Instruct-4bit"  # or your MLX repo
+#   (mlx_lm.server speaks OpenAI-compatible JSON — same provider impl as Gemma)
+# The `[hooks.post_tool]` block above works identically; `chcp` is a no-op on
+# macOS, and the native sandbox uses `/bin/sh -c` (UTF-8 by default).

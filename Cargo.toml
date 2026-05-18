@@ -83,6 +83,7 @@ tui-input = "0.11"
 # Web (M6)
 axum = "0.8"
 tower-http = { version = "0.6", features = ["trace", "compression-gzip"] }
+maud = "0.27"
 
 # Diffs (M6.5)
 similar = "2"
@@ -93,6 +94,10 @@ pulldown-cmark = { version = "0.13", default-features = false, features = ["html
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
+
+# Code search (grep/glob tools)
+regex = "1.11"
+ignore = "0.4"
 
 [profile.release]
 lto = "thin"

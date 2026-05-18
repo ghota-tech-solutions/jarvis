@@ -16,7 +16,7 @@ impl Sandbox for NativeSandbox {
     }
 
     async fn exec(&self, spec: SandboxSpec) -> Result<SandboxOutput, SandboxError> {
-        debug!(cmd = %clip(&spec.cmd, 120), workdir = %spec.workdir.display(), "native: exec");
+        debug!(cmd = %jarvis_core::clip(&spec.cmd, 120), workdir = %spec.workdir.display(), "native: exec");
         let mut cmd = shell_cmd(&spec.cmd);
         cmd.current_dir(&spec.workdir)
             .stdin(Stdio::null())
@@ -53,13 +53,21 @@ impl Sandbox for NativeSandbox {
 fn shell_cmd(cmd: &str) -> Command {
     #[cfg(windows)]
     {
-        // Plain `cmd.exe /C` — we used to try `/U` to force UTF-16LE on the
-        // built-ins, but that interpretation breaks **every external** program
-        // (git, cargo, node, …) whose pipe output is already UTF-8 or CP-encoded
-        // bytes. We now decode bytes after the fact in `decode_stdio` with a
-        // UTF-8 → CP850 priority chain, which handles both worlds.
+        // `chcp 65001 >nul && {cmd}` sets the cmd console codepage to UTF-8
+        // for the duration of this invocation. This makes:
+        //   - cmd built-ins (`type`, `more`, `dir` unicode filenames) emit
+        //     UTF-8 bytes that our strict UTF-8 decoder accepts cleanly.
+        //   - Child processes that follow `Console.OutputEncoding`
+        //     (PowerShell, Python, Node REPL) emit UTF-8 on stdout.
+        //
+        // It does NOT fix PowerShell 5.1's `Get-Content` *read* encoding
+        // (still CP1252 unless `-Encoding utf8` is passed) — the system
+        // prompt forbids that path and points the agent at `fs_read`.
+        //
+        // `>nul` swallows the `Active code page: 65001` line chcp prints.
+        let wrapped = format!("chcp 65001 >nul && {cmd}");
         let mut c = Command::new("cmd.exe");
-        c.arg("/C").arg(cmd);
+        c.arg("/C").arg(wrapped);
         c
     }
     #[cfg(not(windows))]
@@ -131,14 +139,6 @@ fn decode_cp850(bytes: &[u8]) -> String {
         }
     }
     out
-}
-
-fn clip(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", &s[..max])
-    }
 }
 
 #[cfg(test)]
