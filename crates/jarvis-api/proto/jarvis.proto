@@ -29,6 +29,18 @@ service Jarvis {
   // M7: aggregated cost breakdown for a task and its descendant subtasks,
   // grouped by model.
   rpc GetTaskCostBreakdown(TaskHandle) returns (CostReport);
+
+  // M8: diff-by-intent — file changes for a task, grouped by the parent
+  // `decision` event that authored them. Drives the phase-gated diff UI.
+  rpc GroupDiffByIntent(TaskHandle) returns (DiffGroupList);
+
+  // M8: atomic git commit for one diff group. The agent's decision text
+  // becomes the commit message body; the user can edit the subject.
+  rpc CommitPhase(CommitPhaseRequest) returns (CommitInfo);
+
+  // M8: revert one diff group's file edits (best-effort; works only if
+  // the files have not been touched outside the agent since).
+  rpc RejectPhase(CommitPhaseRequest) returns (Empty);
 }
 
 // ---------- M1 ----------
@@ -261,4 +273,57 @@ message ModelSpend {
   uint64 tokens_out = 3;
   double cost_usd = 4;            // 0 for local models
   uint32 call_count = 5;
+}
+
+// ---------- M8: Diff-by-intent + phase-gating ----------
+
+message DiffGroupList {
+  string task_id = 1;
+  repeated DiffGroup groups = 2;
+  // Files that exist on disk but couldn't be linked to a decision event.
+  // Rare; surface as an "uncategorized" group in the UI.
+  repeated string orphan_paths = 3;
+}
+
+message DiffGroup {
+  // Event id of the decision that authored this group's edits.
+  int64 decision_evt_id = 1;
+  // Decision text — used as the default commit-message body.
+  string decision_text = 2;
+  // Step number (from the decision's payload) — drives the UI's
+  // ordinal heading: "Phase 3 — …".
+  uint32 step = 3;
+  int64 ts_micros = 4;
+  // Files touched in this group. Server populates `hunks` lazily — for
+  // large diffs the SPA may receive empty hunks and request them on
+  // expand. (M8.1 will add a separate GetFileDiff RPC.)
+  repeated FileDiff files = 5;
+}
+
+message FileDiff {
+  string path = 1;
+  // "added" | "modified" | "deleted"
+  string change_kind = 2;
+  // Full before / after contents for client-side diff rendering by
+  // @codemirror/merge. Empty `before` for added files, empty `after`
+  // for deleted files.
+  string before = 3;
+  string after = 4;
+  uint32 lines_added = 5;
+  uint32 lines_removed = 6;
+}
+
+message CommitPhaseRequest {
+  string task_id = 1;
+  int64 decision_evt_id = 2;
+  // Optional user-edited commit subject; if empty the daemon synthesizes
+  // one from the first line of `decision_text`.
+  string subject = 3;
+}
+
+message CommitInfo {
+  string commit_sha = 1;
+  string branch = 2;
+  string subject = 3;
+  int64 ts_micros = 4;
 }

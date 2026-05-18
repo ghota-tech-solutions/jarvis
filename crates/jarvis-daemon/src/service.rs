@@ -6,11 +6,11 @@ use futures::StreamExt;
 use jarvis_agent::{run_agent, AgentRun, HookSpec};
 use jarvis_api::{
     jarvis_server::{Jarvis, JarvisServer},
-    AskChunk, AskRequest, CostReport, DaemonStatus, Empty, Event as ApiEvent, FleetEdge,
-    FleetNode, FleetUpdate, ListTasksRequest, ModelSpend, ModelStatus as ApiModelStatus,
-    PingRequest, PingResponse, StatusRequest, StreamEventsRequest, Task as ApiTask, TaskHandle,
-    TaskList, TaskSpec, TimelineEvent as ApiTimelineEvent, TimelineSnapshot, TimelineSpan,
-    UsageStats,
+    AskChunk, AskRequest, CommitInfo, CommitPhaseRequest, CostReport, DaemonStatus, DiffGroup,
+    DiffGroupList, Empty, Event as ApiEvent, FileDiff, FleetEdge, FleetNode, FleetUpdate,
+    ListTasksRequest, ModelSpend, ModelStatus as ApiModelStatus, PingRequest, PingResponse,
+    StatusRequest, StreamEventsRequest, Task as ApiTask, TaskHandle, TaskList, TaskSpec,
+    TimelineEvent as ApiTimelineEvent, TimelineSnapshot, TimelineSpan, UsageStats,
 };
 use jarvis_config::Config;
 use jarvis_core::{
@@ -895,6 +895,190 @@ impl Jarvis for JarvisService {
         }))
     }
 
+    async fn group_diff_by_intent(
+        &self,
+        request: Request<TaskHandle>,
+    ) -> std::result::Result<Response<DiffGroupList>, Status> {
+        let task_id_str = request.into_inner().id;
+        let task_id = parse_task_id(&task_id_str)?;
+        let task = self
+            .ledger
+            .get_task(task_id)
+            .await
+            .map_err(|e| Status::not_found(format!("task: {e}")))?;
+        let events = self
+            .ledger
+            .timeline_events(task_id)
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+
+        // Index decisions by their event id so we can group by parent_evt.
+        let mut decisions: HashMap<i64, &EventRecord> = HashMap::new();
+        for e in &events {
+            if e.kind == jarvis_ledger::EventKind::Decision {
+                decisions.insert(e.id.0, e);
+            }
+        }
+
+        // For every tool_call that's a fs_write or apply_patch, find its
+        // parent decision and bucket its file edits.
+        #[allow(clippy::type_complexity)]
+        let mut buckets: HashMap<i64, (Vec<(String, String)>, i64)> = HashMap::new();
+        let mut orphans: Vec<String> = Vec::new();
+        for e in &events {
+            if e.kind != jarvis_ledger::EventKind::ToolCall {
+                continue;
+            }
+            let (tool, _) = parse_tool_call_payload(&e.payload);
+            if tool != "fs_write" && tool != "apply_patch" {
+                continue;
+            }
+            let path = e
+                .payload
+                .get("args")
+                .and_then(|a| a.get("path"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if path.is_empty() {
+                continue;
+            }
+            match e.parent_evt {
+                Some(p) if decisions.contains_key(&p.0) => {
+                    let entry = buckets.entry(p.0).or_insert((Vec::new(), e.ts_micros));
+                    entry.0.push((path, tool));
+                    entry.1 = entry.1.max(e.ts_micros);
+                }
+                _ => orphans.push(path),
+            }
+        }
+
+        // Materialise FileDiff with before/after content.
+        let workdir = if !task.worktree_path.is_empty() {
+            std::path::PathBuf::from(&task.worktree_path)
+        } else {
+            std::path::PathBuf::from(&task.workdir)
+        };
+
+        let mut groups: Vec<DiffGroup> = Vec::new();
+        let mut sorted_keys: Vec<i64> = buckets.keys().copied().collect();
+        sorted_keys.sort();
+        for decision_id in sorted_keys {
+            let (paths, ts) = buckets.remove(&decision_id).unwrap();
+            let decision = decisions.get(&decision_id).unwrap();
+            let decision_text = decision
+                .payload
+                .get("thought")
+                .or_else(|| decision.payload.get("text"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let step = decision
+                .payload
+                .get("step")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+            // Dedupe paths within a group, last-write wins.
+            let mut seen = std::collections::BTreeSet::<String>::new();
+            let mut files: Vec<FileDiff> = Vec::new();
+            for (path, _tool) in paths.into_iter().rev() {
+                if !seen.insert(path.clone()) {
+                    continue;
+                }
+                let file = build_file_diff(&workdir, &path);
+                files.push(file);
+            }
+            files.reverse();
+            groups.push(DiffGroup {
+                decision_evt_id: decision_id,
+                decision_text,
+                step,
+                ts_micros: ts,
+                files,
+            });
+        }
+
+        Ok(Response::new(DiffGroupList {
+            task_id: task_id_str,
+            groups,
+            orphan_paths: orphans,
+        }))
+    }
+
+    async fn commit_phase(
+        &self,
+        request: Request<CommitPhaseRequest>,
+    ) -> std::result::Result<Response<CommitInfo>, Status> {
+        let req = request.into_inner();
+        let task_id = parse_task_id(&req.task_id)?;
+        let task = self
+            .ledger
+            .get_task(task_id)
+            .await
+            .map_err(|e| Status::not_found(format!("task: {e}")))?;
+        // Re-fetch the group so we know what paths to stage.
+        let groups = self
+            .group_diff_by_intent(Request::new(TaskHandle {
+                id: task_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        let group = groups
+            .groups
+            .into_iter()
+            .find(|g| g.decision_evt_id == req.decision_evt_id)
+            .ok_or_else(|| Status::not_found("decision group not found"))?;
+
+        let workdir = if !task.worktree_path.is_empty() {
+            std::path::PathBuf::from(&task.worktree_path)
+        } else {
+            std::path::PathBuf::from(&task.workdir)
+        };
+        let subject = if req.subject.trim().is_empty() {
+            synthesize_subject(&group.decision_text)
+        } else {
+            req.subject.trim().to_string()
+        };
+        let body = group.decision_text.trim().to_string();
+        let paths: Vec<String> = group.files.iter().map(|f| f.path.clone()).collect();
+        let info = commit_paths(&workdir, &paths, &subject, &body)
+            .map_err(|e| Status::internal(format!("git: {e}")))?;
+        Ok(Response::new(info))
+    }
+
+    async fn reject_phase(
+        &self,
+        request: Request<CommitPhaseRequest>,
+    ) -> std::result::Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let task_id = parse_task_id(&req.task_id)?;
+        let task = self
+            .ledger
+            .get_task(task_id)
+            .await
+            .map_err(|e| Status::not_found(format!("task: {e}")))?;
+        let groups = self
+            .group_diff_by_intent(Request::new(TaskHandle {
+                id: task_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        let group = groups
+            .groups
+            .into_iter()
+            .find(|g| g.decision_evt_id == req.decision_evt_id)
+            .ok_or_else(|| Status::not_found("decision group not found"))?;
+        let workdir = if !task.worktree_path.is_empty() {
+            std::path::PathBuf::from(&task.worktree_path)
+        } else {
+            std::path::PathBuf::from(&task.workdir)
+        };
+        let paths: Vec<String> = group.files.iter().map(|f| f.path.clone()).collect();
+        revert_paths(&workdir, &paths)
+            .map_err(|e| Status::internal(format!("git: {e}")))?;
+        Ok(Response::new(Empty {}))
+    }
+
     async fn get_timeline(
         &self,
         request: Request<TaskHandle>,
@@ -1166,6 +1350,126 @@ fn extract_usage(payload: &serde_json::Value) -> (Option<String>, u64, u64) {
         None => (0, 0),
     };
     (model, in_t, out_t)
+}
+
+/// Materialise one FileDiff for the given path. Reads the current file from
+/// disk (the "after" state) and reads the same path from HEAD (the "before"
+/// state). Counts added/removed lines via `similar`.
+fn build_file_diff(workdir: &std::path::Path, path: &str) -> FileDiff {
+    let abs = workdir.join(path);
+    let after = std::fs::read_to_string(&abs).unwrap_or_default();
+    let exists_after = abs.exists();
+    let before = read_path_from_head(workdir, path).unwrap_or_default();
+    let exists_before = !before.is_empty();
+    let change_kind = match (exists_before, exists_after) {
+        (false, true) => "added",
+        (true, false) => "deleted",
+        _ => "modified",
+    };
+    let (added, removed) = count_added_removed(&before, &after);
+    FileDiff {
+        path: path.to_string(),
+        change_kind: change_kind.to_string(),
+        before,
+        after,
+        lines_added: added,
+        lines_removed: removed,
+    }
+}
+
+fn read_path_from_head(workdir: &std::path::Path, path: &str) -> Option<String> {
+    let repo = git2::Repository::discover(workdir).ok()?;
+    let head = repo.head().ok()?;
+    let commit = head.peel_to_commit().ok()?;
+    let tree = commit.tree().ok()?;
+    let entry = tree.get_path(std::path::Path::new(path)).ok()?;
+    let blob = repo.find_blob(entry.id()).ok()?;
+    Some(String::from_utf8_lossy(blob.content()).into_owned())
+}
+
+fn count_added_removed(before: &str, after: &str) -> (u32, u32) {
+    let diff = similar::TextDiff::from_lines(before, after);
+    let mut added: u32 = 0;
+    let mut removed: u32 = 0;
+    for change in diff.iter_all_changes() {
+        match change.tag() {
+            similar::ChangeTag::Insert => added = added.saturating_add(1),
+            similar::ChangeTag::Delete => removed = removed.saturating_add(1),
+            similar::ChangeTag::Equal => {}
+        }
+    }
+    (added, removed)
+}
+
+fn synthesize_subject(decision_text: &str) -> String {
+    let first_line = decision_text
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or(decision_text)
+        .trim();
+    let truncated: String = first_line.chars().take(72).collect();
+    if truncated.is_empty() {
+        "jarvis: phase commit".to_string()
+    } else {
+        truncated
+    }
+}
+
+fn commit_paths(
+    workdir: &std::path::Path,
+    paths: &[String],
+    subject: &str,
+    body: &str,
+) -> anyhow::Result<CommitInfo> {
+    use anyhow::Context as _;
+    let repo = git2::Repository::discover(workdir)
+        .with_context(|| format!("discover git repo in {}", workdir.display()))?;
+    let mut index = repo.index()?;
+    for p in paths {
+        let rel = std::path::Path::new(p);
+        if workdir.join(rel).exists() {
+            index.add_path(rel)?;
+        } else {
+            // Deleted file → remove from index
+            index.remove_path(rel)?;
+        }
+    }
+    index.write()?;
+    let tree_oid = index.write_tree()?;
+    let tree = repo.find_tree(tree_oid)?;
+    let sig = repo.signature().or_else(|_| {
+        git2::Signature::now("jarvis", "jarvis@localhost")
+    })?;
+    let message = if body.trim().is_empty() || body.trim() == subject.trim() {
+        subject.to_string()
+    } else {
+        format!("{subject}\n\n{body}")
+    };
+    let parent_commit = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
+    let parents: Vec<&git2::Commit> = parent_commit.as_ref().into_iter().collect();
+    let oid = repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &parents)?;
+    let branch = repo
+        .head()
+        .ok()
+        .and_then(|h| h.shorthand().map(str::to_string))
+        .unwrap_or_default();
+    Ok(CommitInfo {
+        commit_sha: oid.to_string(),
+        branch,
+        subject: subject.to_string(),
+        ts_micros: chrono::Utc::now().timestamp_micros(),
+    })
+}
+
+fn revert_paths(workdir: &std::path::Path, paths: &[String]) -> anyhow::Result<()> {
+    let repo = git2::Repository::discover(workdir)?;
+    let mut checkout = git2::build::CheckoutBuilder::new();
+    checkout.force();
+    for p in paths {
+        checkout.path(p);
+    }
+    repo.checkout_head(Some(&mut checkout))?;
+    Ok(())
 }
 
 fn tool_result_has_error(payload: &serde_json::Value) -> bool {
