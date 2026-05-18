@@ -1,6 +1,6 @@
-import { Show, type ParentComponent } from 'solid-js';
+import { Show, createSignal, type ParentComponent } from 'solid-js';
 import { useLocation } from '@solidjs/router';
-import { TOKEN } from '~/lib/env';
+import { getToken } from '~/lib/env';
 import SidebarLeft from '~/components/SidebarLeft';
 import SidebarRight from '~/components/SidebarRight';
 import HelpOverlay from '~/components/HelpOverlay';
@@ -16,13 +16,19 @@ const App: ParentComponent = (props) => {
   useGlobalShortcuts();
   useTaskNotifications();
 
+  // Read token lazily from sessionStorage so we survive Vite HMR
+  // (the env.ts module's bootstrap may have run on a previous instance
+  // and TOKEN-as-const would be stale).
+  const [hasToken, setHasToken] = createSignal(!!getToken());
+  setInterval(() => setHasToken(!!getToken()), 1000);
+
   return (
     <div class="app">
       <header class="app-header">
         <a href="/" class="brand">jarvis</a>
         <span class="fade">·</span>
         <span class="dim">web</span>
-        <Show when={!TOKEN}>
+        <Show when={!hasToken()}>
           <span class="warn" style="margin-left: 1rem">
             no token — append <code>#token=&lt;web.token&gt;</code>
           </span>

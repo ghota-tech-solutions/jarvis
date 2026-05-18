@@ -8,15 +8,24 @@ const HASH_RE = /[#&]token=([0-9a-f]{32,128})/i;
 const STORAGE_KEY = 'jarvis-token';
 
 function bootstrapToken(): string | null {
-  const m = window.location.hash.match(HASH_RE);
-  if (m) {
-    sessionStorage.setItem(STORAGE_KEY, m[1]);
-    const cleaned = window.location.hash.replace(HASH_RE, '').replace(/^#&?/, '');
-    history.replaceState(
-      null,
-      '',
-      window.location.pathname + window.location.search + (cleaned ? '#' + cleaned : '')
-    );
+  try {
+    const m = window.location.hash.match(HASH_RE);
+    if (m && m[1]) {
+      sessionStorage.setItem(STORAGE_KEY, m[1]);
+      const cleaned = window.location.hash
+        .replace(HASH_RE, '')
+        .replace(/^#&?/, '');
+      history.replaceState(
+        null,
+        '',
+        window.location.pathname +
+          window.location.search +
+          (cleaned ? '#' + cleaned : '')
+      );
+    }
+  } catch {
+    // If anything blows up (HMR weirdness, sandboxed iframe, etc.) we still
+    // fall through to returning whatever sessionStorage holds.
   }
   return sessionStorage.getItem(STORAGE_KEY);
 }
