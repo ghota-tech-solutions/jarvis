@@ -1632,6 +1632,7 @@ dependencies = [
  "jarvis-core",
  "jarvis-ledger",
  "jarvis-llm",
+ "jarvis-mcp",
  "jarvis-sandbox",
  "jarvis-tools",
  "prost",
@@ -1681,6 +1682,21 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "jarvis-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "jarvis-core",
+ "jarvis-tools",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
  "tracing",
 ]
 

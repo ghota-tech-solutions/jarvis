@@ -8,6 +8,7 @@ members = [
     "crates/jarvis-ledger",
     "crates/jarvis-tools",
     "crates/jarvis-sandbox",
+    "crates/jarvis-mcp",
     "crates/jarvis-agent",
     "crates/jarvis-daemon",
     "crates/jarvis-cli",
@@ -31,6 +32,7 @@ jarvis-llm = { path = "crates/jarvis-llm" }
 jarvis-ledger = { path = "crates/jarvis-ledger" }
 jarvis-tools = { path = "crates/jarvis-tools" }
 jarvis-sandbox = { path = "crates/jarvis-sandbox" }
+jarvis-mcp = { path = "crates/jarvis-mcp" }
 jarvis-agent = { path = "crates/jarvis-agent" }
 
 # Async / runtime

@@ -20,6 +20,7 @@ use jarvis_llm::{
     make_openai_compat_entry, LlmPool, ModelKind, ModelRegistry, OpenAiCompatConfig,
     OpenAiCompatProvider, QuarantineConfig,
 };
+use jarvis_mcp::{McpClient, McpServerSpec, McpToolAdapter};
 use jarvis_sandbox::{
     DockerSandbox, NativeSandbox, NetPolicy, Sandbox, SandboxKind, Worktree, WorktreeManager,
 };
@@ -60,7 +61,7 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
     let ledger_path = cfg.daemon.data_dir.join("ledger.sqlite");
     let ledger = Ledger::open(&ledger_path).await.context("open ledger")?;
 
-    let tools = build_tool_registry();
+    let (tools, mcp_status) = build_tool_registry(&cfg).await;
 
     let native: Arc<dyn Sandbox> = Arc::new(NativeSandbox);
     let docker = build_docker_sandbox(&cfg.sandbox).await;
@@ -84,6 +85,7 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         cfg: cfg.clone(),
         started,
         running: running.clone(),
+        mcp_status: mcp_status.clone(),
     };
 
     let addr: std::net::SocketAddr = bind.parse().context("parse daemon.addr")?;
@@ -101,6 +103,7 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
             cfg: Arc::new(cfg.clone()),
             started,
             running: running.clone(),
+            mcp_status: mcp_status.clone(),
         };
         let web_addr = cfg.web.addr.clone();
         Some(tokio::spawn(async move {
@@ -204,12 +207,72 @@ async fn pick_ask_provider(pool: &Arc<LlmPool>) -> Arc<dyn LlmProvider> {
     }
 }
 
-fn build_tool_registry() -> ToolRegistry {
+/// Public snapshot of MCP server health, surfaced through the API/sidebar.
+#[derive(Debug, Clone)]
+pub struct McpServerStatus {
+    pub name: String,
+    pub connected: bool,
+    pub tools: Vec<String>,
+    pub error: Option<String>,
+}
+
+async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerStatus>>) {
     let mut r = ToolRegistry::new();
     r.register(FsReadTool);
     r.register(FsWriteTool);
     r.register(ShellTool);
-    r
+
+    let mut statuses: Vec<McpServerStatus> = Vec::new();
+    for (name, spec) in &cfg.mcp.servers {
+        if !spec.enable {
+            continue;
+        }
+        let mcp_spec = McpServerSpec {
+            name: name.clone(),
+            command: spec.command.clone(),
+            args: spec.args.clone(),
+            env: spec.env.clone(),
+            workdir: spec.workdir.clone(),
+        };
+        match McpClient::connect(mcp_spec).await {
+            Ok(client) => match client.list_tools().await {
+                Ok(tools) => {
+                    let tool_names: Vec<String> = tools.iter().map(|t| t.name.clone()).collect();
+                    info!(server = %name, count = tools.len(), "mcp tools discovered");
+                    for tool in tools {
+                        let adapter = McpToolAdapter::new(name, tool, client.clone());
+                        r.register(adapter);
+                    }
+                    statuses.push(McpServerStatus {
+                        name: name.clone(),
+                        connected: true,
+                        tools: tool_names,
+                        error: None,
+                    });
+                }
+                Err(e) => {
+                    warn!(server = %name, error = %e, "mcp tools/list failed");
+                    statuses.push(McpServerStatus {
+                        name: name.clone(),
+                        connected: false,
+                        tools: Vec::new(),
+                        error: Some(format!("tools/list: {e}")),
+                    });
+                }
+            },
+            Err(e) => {
+                warn!(server = %name, error = %e, "mcp connect failed");
+                statuses.push(McpServerStatus {
+                    name: name.clone(),
+                    connected: false,
+                    tools: Vec::new(),
+                    error: Some(format!("connect: {e}")),
+                });
+            }
+        }
+    }
+    statuses.sort_by(|a, b| a.name.cmp(&b.name));
+    (r, Arc::new(statuses))
 }
 
 async fn build_docker_sandbox(cfg: &jarvis_config::SandboxConfig) -> Option<Arc<dyn Sandbox>> {
@@ -245,6 +308,8 @@ pub(crate) struct JarvisService {
     pub cfg: Config,
     pub started: Instant,
     pub running: Arc<Mutex<HashMap<TaskId, RuntimeHandle>>>,
+    #[allow(dead_code)]
+    pub mcp_status: Arc<Vec<McpServerStatus>>,
 }
 
 pub struct RuntimeHandle {

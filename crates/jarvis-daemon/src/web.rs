@@ -43,6 +43,7 @@ pub struct WebState {
     pub cfg: Arc<jarvis_config::Config>,
     pub started: Instant,
     pub running: Arc<Mutex<HashMap<TaskId, super::service::RuntimeHandle>>>,
+    pub mcp_status: Arc<Vec<super::service::McpServerStatus>>,
 }
 
 pub async fn serve(state: WebState, addr: String) -> anyhow::Result<()> {
@@ -56,6 +57,7 @@ pub async fn serve(state: WebState, addr: String) -> anyhow::Result<()> {
         .route("/api/events/stream", get(api_events_sse))
         .route("/api/projects", get(api_projects))
         .route("/api/git", get(api_git))
+        .route("/api/mcp", get(api_mcp))
         .route("/api/status", get(api_status))
         .with_state(state)
         .layer(CompressionLayer::new());
@@ -220,6 +222,48 @@ async fn api_events(
             .collect();
         Ok(Json(json).into_response())
     }
+}
+
+async fn api_mcp(State(s): State<WebState>) -> Response {
+    let want_html = false; // for now always JSON; sidebar HTMX uses /api/mcp?format=html below
+    let _ = want_html;
+    // Render compact HTML card.
+    let html = render_mcp_card(&s.mcp_status);
+    Html(html).into_response()
+}
+
+fn render_mcp_card(statuses: &[super::service::McpServerStatus]) -> String {
+    if statuses.is_empty() {
+        return r#"<div class="git-empty"><div class="glyph">∅</div><div class="git-empty-title">No MCP servers</div><div class="muted small">Add a <code>[mcp.servers.&lt;name&gt;]</code> block to <code>jarvis.toml</code> to import external tools.</div></div>"#.to_string();
+    }
+    let mut out = String::new();
+    for s in statuses {
+        let (sym, cls, label) = if s.connected {
+            ("●", "ok", format!("{} tool{}", s.tools.len(), if s.tools.len() > 1 { "s" } else { "" }))
+        } else {
+            ("✗", "err", "offline".to_string())
+        };
+        out.push_str(&format!(
+            r#"<details class="mcp-server"><summary><span class="dot {cls}">{sym}</span> <b>{name}</b> <span class="muted small">{label}</span></summary>"#,
+            cls = cls,
+            name = html_escape(&s.name),
+            label = html_escape(&label),
+        ));
+        if let Some(err) = &s.error {
+            out.push_str(&format!(
+                r#"<div class="muted small" style="padding:0.2em 0.4em; color: var(--err);">{}</div>"#,
+                html_escape(err)
+            ));
+        }
+        for tool in &s.tools {
+            out.push_str(&format!(
+                r#"<div class="git-row mcp-tool"><span class="git-icon">⚙</span><span class="git-row-label monoline">{}</span></div>"#,
+                html_escape(tool)
+            ));
+        }
+        out.push_str("</details>");
+    }
+    out
 }
 
 async fn api_status(State(s): State<WebState>) -> Response {
@@ -1273,6 +1317,14 @@ fn render_task_page(
     <div id="git-card" class="git-card"
          hx-get="/api/git?workdir={workdir_q}"
          hx-trigger="load, every 8s"
+         hx-target="this"
+         hx-swap="innerHTML">
+      <div class="muted small">loading…</div>
+    </div>
+    <div class="section-label">MCP</div>
+    <div id="mcp-card" class="git-card"
+         hx-get="/api/mcp"
+         hx-trigger="load, every 30s"
          hx-target="this"
          hx-swap="innerHTML">
       <div class="muted small">loading…</div>
@@ -2376,6 +2428,15 @@ form.continue textarea { min-height: 2.2em; max-height: 300px; overflow-y: auto;
 .git-empty { text-align: center; padding: 1.4em 0.5em; color: var(--dim); }
 .git-empty .glyph { font-size: 22px; color: var(--fade); margin-bottom: 0.4em; line-height: 1; }
 .git-empty-title { color: var(--fg); font-weight: 600; margin-bottom: 0.3em; font-size: 12px; }
+
+/* MCP servers section */
+details.mcp-server { padding: 0.2em 0; }
+details.mcp-server > summary { cursor: pointer; padding: 0.3em 0.4em; border-radius: 3px; list-style: none; display: flex; align-items: center; gap: 0.4em; font-size: 12px; }
+details.mcp-server > summary::-webkit-details-marker { display: none; }
+details.mcp-server > summary:hover { background: rgba(255,255,255,0.03); }
+details.mcp-server[open] > summary { color: var(--heading); }
+details.mcp-server .mcp-tool { padding: 0.15em 0.4em 0.15em 1.2em; }
+details.mcp-server .mcp-tool .git-row-label { color: var(--dim); font-size: 11px; }
 
 @media (max-width: 1200px) {
   .shell { grid-template-columns: 220px 1fr; }

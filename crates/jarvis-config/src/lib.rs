@@ -26,6 +26,31 @@ pub struct Config {
     pub sandbox: SandboxConfig,
     #[serde(default)]
     pub web: WebConfig,
+    #[serde(default)]
+    pub mcp: McpConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct McpConfig {
+    /// Multi-entry, keyed by server name. Each entry spawns one MCP subprocess.
+    #[serde(default)]
+    pub servers: HashMap<String, McpServer>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct McpServer {
+    /// Disable without removing the section.
+    #[serde(default = "default_true")]
+    pub enable: bool,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    #[serde(default)]
+    pub workdir: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
