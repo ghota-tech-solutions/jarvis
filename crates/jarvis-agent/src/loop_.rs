@@ -111,7 +111,25 @@ pub async fn run_agent(
         //    query so 80 here means 80 agent moves (decisions/tool results),
         //    not 80 raw rows that would be flooded by streaming chunks.
         let history = ledger.recent_relevant_events(run.task_id, 80).await?;
-        let messages = prompt::build_messages(&task.goal, &task.workdir, &tool_schemas, &history);
+        // M9: pull active memories for this workdir + globals. Surface as a
+        // dedicated system message inside build_messages. Best-effort — if
+        // the ledger errors we still proceed with an empty list.
+        let memories = ledger
+            .active_memories_for_workdir(&task.workdir)
+            .await
+            .unwrap_or_default();
+        // Bump usage counters so the user can see which memories the agent
+        // is actually relying on. Fire-and-forget.
+        for m in &memories {
+            let _ = ledger.increment_memory_usage(m.id).await;
+        }
+        let messages = prompt::build_messages(
+            &task.goal,
+            &task.workdir,
+            &tool_schemas,
+            &history,
+            &memories,
+        );
 
         log_event(
             &ledger,
@@ -326,6 +344,36 @@ pub async fn run_agent(
                     .set_task_status(run.task_id, TaskStatus::Completed, None)
                     .await?;
                 info!(step, "agent: done");
+                // M9: propose long-term memory candidates from this task.
+                // Best-effort — failures are logged inside the extractor and
+                // never propagate. Spawned because the extractor makes an
+                // LLM call that the user shouldn't wait on.
+                let ledger_clone = ledger.clone();
+                let pool_clone = pool.clone();
+                let task_id = run.task_id;
+                let workdir = task.workdir.clone();
+                let goal = task.goal.clone();
+                tokio::spawn(async move {
+                    let pick_req = jarvis_llm::PickRequest::for_planning();
+                    let provider = match pool_clone.pick(&pick_req).await {
+                        Ok(p) => p.provider,
+                        Err(e) => {
+                            warn!(error = %e, "memory extractor: no model available");
+                            return;
+                        }
+                    };
+                    let ids = crate::memory_extractor::extract_for_task(
+                        &ledger_clone,
+                        provider,
+                        task_id,
+                        &workdir,
+                        &goal,
+                    )
+                    .await;
+                    if !ids.is_empty() {
+                        info!(count = ids.len(), task = %task_id, "memory candidates proposed");
+                    }
+                });
                 return Ok(Outcome::Done);
             }
             ActionKind::Fail => {

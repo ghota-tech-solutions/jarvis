@@ -41,6 +41,9 @@ const SidebarLeft: Component = () => {
         <A href="/fleet" class="nav-link" activeClass="nav-active">
           ⌹ Fleet DAG
         </A>
+        <A href="/memory" class="nav-link" activeClass="nav-active">
+          ⌥ Memory
+        </A>
       </div>
 
       <h3 class="section-title">Projects</h3>

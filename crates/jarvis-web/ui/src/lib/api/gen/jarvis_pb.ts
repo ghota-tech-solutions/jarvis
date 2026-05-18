@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file jarvis.proto.
  */
 export const file_jarvis: GenFile = /*@__PURE__*/
-  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLPAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCSIPCg1TdGF0dXNSZXF1ZXN0InYKDERhZW1vblN0YXR1cxIPCgd2ZXJzaW9uGAEgASgJEhYKDnVwdGltZV9zZWNvbmRzGAIgASgDEiYKBm1vZGVscxgDIAMoCzIWLmphcnZpcy52MS5Nb2RlbFN0YXR1cxIVCg1ydW5uaW5nX3Rhc2tzGAQgASgNIvoBCgtNb2RlbFN0YXR1cxIMCgRuYW1lGAEgASgJEgwKBGtpbmQYAiABKAkSEAoIbW9kZWxfaWQYAyABKAkSEAoIcHJpb3JpdHkYBCABKAUSDgoGb25saW5lGAUgASgIEhMKC3F1YXJhbnRpbmVkGAYgASgIEiAKGHF1YXJhbnRpbmVkX3VudGlsX21pY3JvcxgHIAEoAxIaChJmYWlsdXJlc19pbl93aW5kb3cYCCABKA0SDwoHY3R4X2xlbhgJIAEoDRISCgp0b29sX2NhbGxzGAogASgIEhMKC2pzb25fc2NoZW1hGAsgASgIEg4KBnZpc2lvbhgMIAEoCCKMAgoEVGFzaxIKCgJpZBgBIAEoCRIMCgRnb2FsGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIPCgd3b3JrZGlyGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAMSGQoMY29tcGxldGVkX2F0GAYgASgDSACIAQESEgoFZXJyb3IYByABKAlIAYgBARIPCgdzYW5kYm94GAggASgJEhIKCm5ldF9wb2xpY3kYCSABKAkSFQoNd29ya3RyZWVfcGF0aBgKIAEoCRIXCg93b3JrdHJlZV9icmFuY2gYCyABKAkSFgoOcGFyZW50X3Rhc2tfaWQYDCABKAlCDwoNX2NvbXBsZXRlZF9hdEIICgZfZXJyb3IiOwoQTGlzdFRhc2tzUmVxdWVzdBIYChBpbmNsdWRlX2ZpbmlzaGVkGAEgASgIEg0KBWxpbWl0GAIgASgNIioKCFRhc2tMaXN0Eh4KBXRhc2tzGAEgAygLMg8uamFydmlzLnYxLlRhc2siYwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEg4KBmZvbGxvdxgCIAEoCBIQCghzaW5jZV9pZBgDIAEoAxIZChFpbmNsdWRlX2FuY2VzdG9ycxgEIAEoCCKSAQoFRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIqMBChBUaW1lbGluZVNuYXBzaG90Eg8KB3Rhc2tfaWQYASABKAkSKAoGZXZlbnRzGAIgAygLMhguamFydmlzLnYxLlRpbWVsaW5lRXZlbnQSJgoFc3BhbnMYAyADKAsyFy5qYXJ2aXMudjEuVGltZWxpbmVTcGFuEhUKDW1pbl90c19taWNyb3MYBCABKAMSFQoNbWF4X3RzX21pY3JvcxgFIAEoAyKaAQoNVGltZWxpbmVFdmVudBIKCgJpZBgBIAEoAxIRCgl0c19taWNyb3MYAiABKAMSDwoHdGFza19pZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIMCgRraW5kGAUgASgJEg8KB3N1YmplY3QYBiABKAkSFAoMcGF5bG9hZF9qc29uGAcgASgJEhIKCnBhcmVudF9ldnQYCCABKAMilgEKDFRpbWVsaW5lU3BhbhIUCgxzdGFydF9ldnRfaWQYASABKAMSEgoKZW5kX2V2dF9pZBgCIAEoAxIXCg9zdGFydF90c19taWNyb3MYAyABKAMSFQoNZW5kX3RzX21pY3JvcxgEIAEoAxINCgVsYWJlbBgFIAEoCRIMCgRsYW5lGAYgASgJEg8KB291dGNvbWUYByABKAkiagoLRmxlZXRVcGRhdGUSIwoFbm9kZXMYASADKAsyFC5qYXJ2aXMudjEuRmxlZXROb2RlEiMKBWVkZ2VzGAIgAygLMhQuamFydmlzLnYxLkZsZWV0RWRnZRIRCgl0c19taWNyb3MYAyABKAMigAIKCUZsZWV0Tm9kZRIPCgd0YXNrX2lkGAEgASgJEhAKCHNob3J0X2lkGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIMCgRnb2FsGAQgASgJEg8KB3dvcmtkaXIYBSABKAkSDwoHc2FuZGJveBgGIAEoCRIRCgl0b2tlbnNfaW4YByABKAQSEgoKdG9rZW5zX291dBgIIAEoBBIaChJlc3RpbWF0ZWRfY29zdF91c2QYCSABKAESGQoRY3JlYXRlZF9hdF9taWNyb3MYCiABKAMSGQoRdXBkYXRlZF9hdF9taWNyb3MYCyABKAMSFwoPbmVlZHNfYXR0ZW50aW9uGAwgASgIIjoKCUZsZWV0RWRnZRIWCg5wYXJlbnRfdGFza19pZBgBIAEoCRIVCg1jaGlsZF90YXNrX2lkGAIgASgJIpEBCgpDb3N0UmVwb3J0Eg8KB3Rhc2tfaWQYASABKAkSFwoPdG90YWxfdG9rZW5zX2luGAIgASgEEhgKEHRvdGFsX3Rva2Vuc19vdXQYAyABKAQSFgoOdG90YWxfY29zdF91c2QYBCABKAESJwoIYnlfbW9kZWwYBSADKAsyFS5qYXJ2aXMudjEuTW9kZWxTcGVuZCJtCgpNb2RlbFNwZW5kEhIKCm1vZGVsX25hbWUYASABKAkSEQoJdG9rZW5zX2luGAIgASgEEhIKCnRva2Vuc19vdXQYAyABKAQSEAoIY29zdF91c2QYBCABKAESEgoKY2FsbF9jb3VudBgFIAEoDSJcCg1EaWZmR3JvdXBMaXN0Eg8KB3Rhc2tfaWQYASABKAkSJAoGZ3JvdXBzGAIgAygLMhQuamFydmlzLnYxLkRpZmZHcm91cBIUCgxvcnBoYW5fcGF0aHMYAyADKAkigAEKCURpZmZHcm91cBIXCg9kZWNpc2lvbl9ldnRfaWQYASABKAMSFQoNZGVjaXNpb25fdGV4dBgCIAEoCRIMCgRzdGVwGAMgASgNEhEKCXRzX21pY3JvcxgEIAEoAxIiCgVmaWxlcxgFIAMoCzITLmphcnZpcy52MS5GaWxlRGlmZiJ4CghGaWxlRGlmZhIMCgRwYXRoGAEgASgJEhMKC2NoYW5nZV9raW5kGAIgASgJEg4KBmJlZm9yZRgDIAEoCRINCgVhZnRlchgEIAEoCRITCgtsaW5lc19hZGRlZBgFIAEoDRIVCg1saW5lc19yZW1vdmVkGAYgASgNIk8KEkNvbW1pdFBoYXNlUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEhcKD2RlY2lzaW9uX2V2dF9pZBgCIAEoAxIPCgdzdWJqZWN0GAMgASgJIlQKCkNvbW1pdEluZm8SEgoKY29tbWl0X3NoYRgBIAEoCRIOCgZicmFuY2gYAiABKAkSDwoHc3ViamVjdBgDIAEoCRIRCgl0c19taWNyb3MYBCABKAMy7AYKBkphcnZpcxI3CgRQaW5nEhYuamFydmlzLnYxLlBpbmdSZXF1ZXN0GhcuamFydmlzLnYxLlBpbmdSZXNwb25zZRIzCgNBc2sSFS5qYXJ2aXMudjEuQXNrUmVxdWVzdBoTLmphcnZpcy52MS5Bc2tDaHVuazABEjgKClN1Ym1pdFRhc2sSEy5qYXJ2aXMudjEuVGFza1NwZWMaFS5qYXJ2aXMudjEuVGFza0hhbmRsZRIxCgdHZXRUYXNrEhUuamFydmlzLnYxLlRhc2tIYW5kbGUaDy5qYXJ2aXMudjEuVGFzaxI9CglMaXN0VGFza3MSGy5qYXJ2aXMudjEuTGlzdFRhc2tzUmVxdWVzdBoTLmphcnZpcy52MS5UYXNrTGlzdBI1CgpDYW5jZWxUYXNrEhUuamFydmlzLnYxLlRhc2tIYW5kbGUaEC5qYXJ2aXMudjEuRW1wdHkSQgoMU3RyZWFtRXZlbnRzEh4uamFydmlzLnYxLlN0cmVhbUV2ZW50c1JlcXVlc3QaEC5qYXJ2aXMudjEuRXZlbnQwARI+CglHZXRTdGF0dXMSGC5qYXJ2aXMudjEuU3RhdHVzUmVxdWVzdBoXLmphcnZpcy52MS5EYWVtb25TdGF0dXMSQQoLR2V0VGltZWxpbmUSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRobLmphcnZpcy52MS5UaW1lbGluZVNuYXBzaG90EjkKC1N0cmVhbUZsZWV0EhAuamFydmlzLnYxLkVtcHR5GhYuamFydmlzLnYxLkZsZWV0VXBkYXRlMAESRAoUR2V0VGFza0Nvc3RCcmVha2Rvd24SFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoVLmphcnZpcy52MS5Db3N0UmVwb3J0EkQKEUdyb3VwRGlmZkJ5SW50ZW50EhUuamFydmlzLnYxLlRhc2tIYW5kbGUaGC5qYXJ2aXMudjEuRGlmZkdyb3VwTGlzdBJDCgtDb21taXRQaGFzZRIdLmphcnZpcy52MS5Db21taXRQaGFzZVJlcXVlc3QaFS5qYXJ2aXMudjEuQ29tbWl0SW5mbxI+CgtSZWplY3RQaGFzZRIdLmphcnZpcy52MS5Db21taXRQaGFzZVJlcXVlc3QaEC5qYXJ2aXMudjEuRW1wdHliBnByb3RvMw");
+  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLPAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCSIPCg1TdGF0dXNSZXF1ZXN0InYKDERhZW1vblN0YXR1cxIPCgd2ZXJzaW9uGAEgASgJEhYKDnVwdGltZV9zZWNvbmRzGAIgASgDEiYKBm1vZGVscxgDIAMoCzIWLmphcnZpcy52MS5Nb2RlbFN0YXR1cxIVCg1ydW5uaW5nX3Rhc2tzGAQgASgNIvoBCgtNb2RlbFN0YXR1cxIMCgRuYW1lGAEgASgJEgwKBGtpbmQYAiABKAkSEAoIbW9kZWxfaWQYAyABKAkSEAoIcHJpb3JpdHkYBCABKAUSDgoGb25saW5lGAUgASgIEhMKC3F1YXJhbnRpbmVkGAYgASgIEiAKGHF1YXJhbnRpbmVkX3VudGlsX21pY3JvcxgHIAEoAxIaChJmYWlsdXJlc19pbl93aW5kb3cYCCABKA0SDwoHY3R4X2xlbhgJIAEoDRISCgp0b29sX2NhbGxzGAogASgIEhMKC2pzb25fc2NoZW1hGAsgASgIEg4KBnZpc2lvbhgMIAEoCCKMAgoEVGFzaxIKCgJpZBgBIAEoCRIMCgRnb2FsGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIPCgd3b3JrZGlyGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAMSGQoMY29tcGxldGVkX2F0GAYgASgDSACIAQESEgoFZXJyb3IYByABKAlIAYgBARIPCgdzYW5kYm94GAggASgJEhIKCm5ldF9wb2xpY3kYCSABKAkSFQoNd29ya3RyZWVfcGF0aBgKIAEoCRIXCg93b3JrdHJlZV9icmFuY2gYCyABKAkSFgoOcGFyZW50X3Rhc2tfaWQYDCABKAlCDwoNX2NvbXBsZXRlZF9hdEIICgZfZXJyb3IiOwoQTGlzdFRhc2tzUmVxdWVzdBIYChBpbmNsdWRlX2ZpbmlzaGVkGAEgASgIEg0KBWxpbWl0GAIgASgNIioKCFRhc2tMaXN0Eh4KBXRhc2tzGAEgAygLMg8uamFydmlzLnYxLlRhc2siYwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEg4KBmZvbGxvdxgCIAEoCBIQCghzaW5jZV9pZBgDIAEoAxIZChFpbmNsdWRlX2FuY2VzdG9ycxgEIAEoCCKSAQoFRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIqMBChBUaW1lbGluZVNuYXBzaG90Eg8KB3Rhc2tfaWQYASABKAkSKAoGZXZlbnRzGAIgAygLMhguamFydmlzLnYxLlRpbWVsaW5lRXZlbnQSJgoFc3BhbnMYAyADKAsyFy5qYXJ2aXMudjEuVGltZWxpbmVTcGFuEhUKDW1pbl90c19taWNyb3MYBCABKAMSFQoNbWF4X3RzX21pY3JvcxgFIAEoAyKaAQoNVGltZWxpbmVFdmVudBIKCgJpZBgBIAEoAxIRCgl0c19taWNyb3MYAiABKAMSDwoHdGFza19pZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIMCgRraW5kGAUgASgJEg8KB3N1YmplY3QYBiABKAkSFAoMcGF5bG9hZF9qc29uGAcgASgJEhIKCnBhcmVudF9ldnQYCCABKAMilgEKDFRpbWVsaW5lU3BhbhIUCgxzdGFydF9ldnRfaWQYASABKAMSEgoKZW5kX2V2dF9pZBgCIAEoAxIXCg9zdGFydF90c19taWNyb3MYAyABKAMSFQoNZW5kX3RzX21pY3JvcxgEIAEoAxINCgVsYWJlbBgFIAEoCRIMCgRsYW5lGAYgASgJEg8KB291dGNvbWUYByABKAkiagoLRmxlZXRVcGRhdGUSIwoFbm9kZXMYASADKAsyFC5qYXJ2aXMudjEuRmxlZXROb2RlEiMKBWVkZ2VzGAIgAygLMhQuamFydmlzLnYxLkZsZWV0RWRnZRIRCgl0c19taWNyb3MYAyABKAMigAIKCUZsZWV0Tm9kZRIPCgd0YXNrX2lkGAEgASgJEhAKCHNob3J0X2lkGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIMCgRnb2FsGAQgASgJEg8KB3dvcmtkaXIYBSABKAkSDwoHc2FuZGJveBgGIAEoCRIRCgl0b2tlbnNfaW4YByABKAQSEgoKdG9rZW5zX291dBgIIAEoBBIaChJlc3RpbWF0ZWRfY29zdF91c2QYCSABKAESGQoRY3JlYXRlZF9hdF9taWNyb3MYCiABKAMSGQoRdXBkYXRlZF9hdF9taWNyb3MYCyABKAMSFwoPbmVlZHNfYXR0ZW50aW9uGAwgASgIIjoKCUZsZWV0RWRnZRIWCg5wYXJlbnRfdGFza19pZBgBIAEoCRIVCg1jaGlsZF90YXNrX2lkGAIgASgJIpEBCgpDb3N0UmVwb3J0Eg8KB3Rhc2tfaWQYASABKAkSFwoPdG90YWxfdG9rZW5zX2luGAIgASgEEhgKEHRvdGFsX3Rva2Vuc19vdXQYAyABKAQSFgoOdG90YWxfY29zdF91c2QYBCABKAESJwoIYnlfbW9kZWwYBSADKAsyFS5qYXJ2aXMudjEuTW9kZWxTcGVuZCJtCgpNb2RlbFNwZW5kEhIKCm1vZGVsX25hbWUYASABKAkSEQoJdG9rZW5zX2luGAIgASgEEhIKCnRva2Vuc19vdXQYAyABKAQSEAoIY29zdF91c2QYBCABKAESEgoKY2FsbF9jb3VudBgFIAEoDSJcCg1EaWZmR3JvdXBMaXN0Eg8KB3Rhc2tfaWQYASABKAkSJAoGZ3JvdXBzGAIgAygLMhQuamFydmlzLnYxLkRpZmZHcm91cBIUCgxvcnBoYW5fcGF0aHMYAyADKAkigAEKCURpZmZHcm91cBIXCg9kZWNpc2lvbl9ldnRfaWQYASABKAMSFQoNZGVjaXNpb25fdGV4dBgCIAEoCRIMCgRzdGVwGAMgASgNEhEKCXRzX21pY3JvcxgEIAEoAxIiCgVmaWxlcxgFIAMoCzITLmphcnZpcy52MS5GaWxlRGlmZiJ4CghGaWxlRGlmZhIMCgRwYXRoGAEgASgJEhMKC2NoYW5nZV9raW5kGAIgASgJEg4KBmJlZm9yZRgDIAEoCRINCgVhZnRlchgEIAEoCRITCgtsaW5lc19hZGRlZBgFIAEoDRIVCg1saW5lc19yZW1vdmVkGAYgASgNIk8KEkNvbW1pdFBoYXNlUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEhcKD2RlY2lzaW9uX2V2dF9pZBgCIAEoAxIPCgdzdWJqZWN0GAMgASgJIlQKCkNvbW1pdEluZm8SEgoKY29tbWl0X3NoYRgBIAEoCRIOCgZicmFuY2gYAiABKAkSDwoHc3ViamVjdBgDIAEoCRIRCgl0c19taWNyb3MYBCABKAMixwEKBk1lbW9yeRIKCgJpZBgBIAEoAxINCgVzY29wZRgCIAEoCRITCgtzY29wZV92YWx1ZRgDIAEoCRIMCgRraW5kGAQgASgJEgwKBHRleHQYBSABKAkSDgoGc3RhdHVzGAYgASgJEhYKDnNvdXJjZV90YXNrX2lkGAcgASgJEhkKEWNyZWF0ZWRfYXRfbWljcm9zGAggASgDEhkKEXVwZGF0ZWRfYXRfbWljcm9zGAkgASgDEhMKC3VzYWdlX2NvdW50GAogASgNIlgKE0xpc3RNZW1vcmllc1JlcXVlc3QSDQoFc2NvcGUYASABKAkSEwoLc2NvcGVfdmFsdWUYAiABKAkSDgoGc3RhdHVzGAMgASgJEg0KBWxpbWl0GAQgASgNIjEKCk1lbW9yeUxpc3QSIwoIbWVtb3JpZXMYASADKAsyES5qYXJ2aXMudjEuTWVtb3J5IhoKDE1lbW9yeUhhbmRsZRIKCgJpZBgBIAEoAyIwChRQcm9tb3RlTWVtb3J5UmVxdWVzdBIKCgJpZBgBIAEoAxIMCgR0ZXh0GAIgASgJIl8KEUVkaXRNZW1vcnlSZXF1ZXN0EgoKAmlkGAEgASgDEgwKBHRleHQYAiABKAkSDQoFc2NvcGUYAyABKAkSEwoLc2NvcGVfdmFsdWUYBCABKAkSDAoEa2luZBgFIAEoCTLyCAoGSmFydmlzEjcKBFBpbmcSFi5qYXJ2aXMudjEuUGluZ1JlcXVlc3QaFy5qYXJ2aXMudjEuUGluZ1Jlc3BvbnNlEjMKA0FzaxIVLmphcnZpcy52MS5Bc2tSZXF1ZXN0GhMuamFydmlzLnYxLkFza0NodW5rMAESOAoKU3VibWl0VGFzaxITLmphcnZpcy52MS5UYXNrU3BlYxoVLmphcnZpcy52MS5UYXNrSGFuZGxlEjEKB0dldFRhc2sSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoPLmphcnZpcy52MS5UYXNrEj0KCUxpc3RUYXNrcxIbLmphcnZpcy52MS5MaXN0VGFza3NSZXF1ZXN0GhMuamFydmlzLnYxLlRhc2tMaXN0EjUKCkNhbmNlbFRhc2sSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoQLmphcnZpcy52MS5FbXB0eRJCCgxTdHJlYW1FdmVudHMSHi5qYXJ2aXMudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBoQLmphcnZpcy52MS5FdmVudDABEj4KCUdldFN0YXR1cxIYLmphcnZpcy52MS5TdGF0dXNSZXF1ZXN0GhcuamFydmlzLnYxLkRhZW1vblN0YXR1cxJBCgtHZXRUaW1lbGluZRIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhsuamFydmlzLnYxLlRpbWVsaW5lU25hcHNob3QSOQoLU3RyZWFtRmxlZXQSEC5qYXJ2aXMudjEuRW1wdHkaFi5qYXJ2aXMudjEuRmxlZXRVcGRhdGUwARJEChRHZXRUYXNrQ29zdEJyZWFrZG93bhIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhUuamFydmlzLnYxLkNvc3RSZXBvcnQSRAoRR3JvdXBEaWZmQnlJbnRlbnQSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoYLmphcnZpcy52MS5EaWZmR3JvdXBMaXN0EkMKC0NvbW1pdFBoYXNlEh0uamFydmlzLnYxLkNvbW1pdFBoYXNlUmVxdWVzdBoVLmphcnZpcy52MS5Db21taXRJbmZvEj4KC1JlamVjdFBoYXNlEh0uamFydmlzLnYxLkNvbW1pdFBoYXNlUmVxdWVzdBoQLmphcnZpcy52MS5FbXB0eRJFCgxMaXN0TWVtb3JpZXMSHi5qYXJ2aXMudjEuTGlzdE1lbW9yaWVzUmVxdWVzdBoVLmphcnZpcy52MS5NZW1vcnlMaXN0EkMKDVByb21vdGVNZW1vcnkSHy5qYXJ2aXMudjEuUHJvbW90ZU1lbW9yeVJlcXVlc3QaES5qYXJ2aXMudjEuTWVtb3J5EjkKDEZvcmdldE1lbW9yeRIXLmphcnZpcy52MS5NZW1vcnlIYW5kbGUaEC5qYXJ2aXMudjEuRW1wdHkSPQoKRWRpdE1lbW9yeRIcLmphcnZpcy52MS5FZGl0TWVtb3J5UmVxdWVzdBoRLmphcnZpcy52MS5NZW1vcnliBnByb3RvMw");
 
 /**
  * @generated from message jarvis.v1.PingRequest
@@ -1159,6 +1159,212 @@ export const CommitInfoSchema: GenMessage<CommitInfo> = /*@__PURE__*/
   messageDesc(file_jarvis, 28);
 
 /**
+ * @generated from message jarvis.v1.Memory
+ */
+export type Memory = Message<"jarvis.v1.Memory"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * "workdir" → applies only when a task's workdir matches `scope_value`.
+   * "global"  → applies everywhere.
+   *
+   * @generated from field: string scope = 2;
+   */
+  scope: string;
+
+  /**
+   * workdir path; empty for "global"
+   *
+   * @generated from field: string scope_value = 3;
+   */
+  scopeValue: string;
+
+  /**
+   * "pattern" | "preference" | "fact"
+   *
+   * @generated from field: string kind = 4;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string text = 5;
+   */
+  text: string;
+
+  /**
+   * "candidate" | "active" | "forgotten"
+   *
+   * @generated from field: string status = 6;
+   */
+  status: string;
+
+  /**
+   * Task that generated this candidate (empty if hand-authored).
+   *
+   * @generated from field: string source_task_id = 7;
+   */
+  sourceTaskId: string;
+
+  /**
+   * @generated from field: int64 created_at_micros = 8;
+   */
+  createdAtMicros: bigint;
+
+  /**
+   * @generated from field: int64 updated_at_micros = 9;
+   */
+  updatedAtMicros: bigint;
+
+  /**
+   * Times this memory was actually injected into a task's system prompt.
+   *
+   * @generated from field: uint32 usage_count = 10;
+   */
+  usageCount: number;
+};
+
+/**
+ * Describes the message jarvis.v1.Memory.
+ * Use `create(MemorySchema)` to create a new message.
+ */
+export const MemorySchema: GenMessage<Memory> = /*@__PURE__*/
+  messageDesc(file_jarvis, 29);
+
+/**
+ * @generated from message jarvis.v1.ListMemoriesRequest
+ */
+export type ListMemoriesRequest = Message<"jarvis.v1.ListMemoriesRequest"> & {
+  /**
+   * Filter by scope (empty = all). "workdir" requires `scope_value`.
+   *
+   * @generated from field: string scope = 1;
+   */
+  scope: string;
+
+  /**
+   * @generated from field: string scope_value = 2;
+   */
+  scopeValue: string;
+
+  /**
+   * Filter by status. Empty = active + candidate (everything not forgotten).
+   *
+   * @generated from field: string status = 3;
+   */
+  status: string;
+
+  /**
+   * @generated from field: uint32 limit = 4;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message jarvis.v1.ListMemoriesRequest.
+ * Use `create(ListMemoriesRequestSchema)` to create a new message.
+ */
+export const ListMemoriesRequestSchema: GenMessage<ListMemoriesRequest> = /*@__PURE__*/
+  messageDesc(file_jarvis, 30);
+
+/**
+ * @generated from message jarvis.v1.MemoryList
+ */
+export type MemoryList = Message<"jarvis.v1.MemoryList"> & {
+  /**
+   * @generated from field: repeated jarvis.v1.Memory memories = 1;
+   */
+  memories: Memory[];
+};
+
+/**
+ * Describes the message jarvis.v1.MemoryList.
+ * Use `create(MemoryListSchema)` to create a new message.
+ */
+export const MemoryListSchema: GenMessage<MemoryList> = /*@__PURE__*/
+  messageDesc(file_jarvis, 31);
+
+/**
+ * @generated from message jarvis.v1.MemoryHandle
+ */
+export type MemoryHandle = Message<"jarvis.v1.MemoryHandle"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+};
+
+/**
+ * Describes the message jarvis.v1.MemoryHandle.
+ * Use `create(MemoryHandleSchema)` to create a new message.
+ */
+export const MemoryHandleSchema: GenMessage<MemoryHandle> = /*@__PURE__*/
+  messageDesc(file_jarvis, 32);
+
+/**
+ * @generated from message jarvis.v1.PromoteMemoryRequest
+ */
+export type PromoteMemoryRequest = Message<"jarvis.v1.PromoteMemoryRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * Optional override of the proposed text; empty keeps the original.
+   *
+   * @generated from field: string text = 2;
+   */
+  text: string;
+};
+
+/**
+ * Describes the message jarvis.v1.PromoteMemoryRequest.
+ * Use `create(PromoteMemoryRequestSchema)` to create a new message.
+ */
+export const PromoteMemoryRequestSchema: GenMessage<PromoteMemoryRequest> = /*@__PURE__*/
+  messageDesc(file_jarvis, 33);
+
+/**
+ * @generated from message jarvis.v1.EditMemoryRequest
+ */
+export type EditMemoryRequest = Message<"jarvis.v1.EditMemoryRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text: string;
+
+  /**
+   * @generated from field: string scope = 3;
+   */
+  scope: string;
+
+  /**
+   * @generated from field: string scope_value = 4;
+   */
+  scopeValue: string;
+
+  /**
+   * @generated from field: string kind = 5;
+   */
+  kind: string;
+};
+
+/**
+ * Describes the message jarvis.v1.EditMemoryRequest.
+ * Use `create(EditMemoryRequestSchema)` to create a new message.
+ */
+export const EditMemoryRequestSchema: GenMessage<EditMemoryRequest> = /*@__PURE__*/
+  messageDesc(file_jarvis, 34);
+
+/**
  * Jarvis daemon gRPC API.
  * M1: Ping, Ask.
  * M2: SubmitTask, GetTask, ListTasks, StreamEvents, CancelTask.
@@ -1297,6 +1503,41 @@ export const Jarvis: GenService<{
     methodKind: "unary";
     input: typeof CommitPhaseRequestSchema;
     output: typeof EmptySchema;
+  },
+  /**
+   * M9: long-term learned facts about the user / project. The agent
+   * proposes candidates on verdict; the user promotes / edits / forgets.
+   *
+   * @generated from rpc jarvis.v1.Jarvis.ListMemories
+   */
+  listMemories: {
+    methodKind: "unary";
+    input: typeof ListMemoriesRequestSchema;
+    output: typeof MemoryListSchema;
+  },
+  /**
+   * @generated from rpc jarvis.v1.Jarvis.PromoteMemory
+   */
+  promoteMemory: {
+    methodKind: "unary";
+    input: typeof PromoteMemoryRequestSchema;
+    output: typeof MemorySchema;
+  },
+  /**
+   * @generated from rpc jarvis.v1.Jarvis.ForgetMemory
+   */
+  forgetMemory: {
+    methodKind: "unary";
+    input: typeof MemoryHandleSchema;
+    output: typeof EmptySchema;
+  },
+  /**
+   * @generated from rpc jarvis.v1.Jarvis.EditMemory
+   */
+  editMemory: {
+    methodKind: "unary";
+    input: typeof EditMemoryRequestSchema;
+    output: typeof MemorySchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_jarvis, 0);

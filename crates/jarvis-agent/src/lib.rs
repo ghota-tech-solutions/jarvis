@@ -10,8 +10,10 @@
 //! - an unrecoverable error.
 
 mod loop_;
+pub mod memory_extractor;
 mod prompt;
 mod protocol;
 
 pub use loop_::{run_agent, AgentRun, HookSpec};
+pub use memory_extractor::extract_for_task;
 pub use protocol::{AgentError, Outcome};

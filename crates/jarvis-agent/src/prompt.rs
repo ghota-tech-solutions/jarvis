@@ -117,8 +117,9 @@ pub fn build_messages(
     workdir: &str,
     tools: &[ToolSchema],
     history: &[EventRecord],
+    memories: &[jarvis_ledger::MemoryRecord],
 ) -> Vec<ChatMessage> {
-    let mut msgs = Vec::with_capacity(history.len() + 6);
+    let mut msgs = Vec::with_capacity(history.len() + 7);
     msgs.push(ChatMessage {
         role: ChatRole::System,
         content: SYSTEM_PROMPT.to_string(),
@@ -135,6 +136,16 @@ pub fn build_messages(
         msgs.push(ChatMessage {
             role: ChatRole::System,
             content: agents_md,
+        });
+    }
+
+    // M9: promoted long-term memories for this workdir + every global one.
+    // The user curates this list via the SPA's memory sidebar; the agent
+    // treats each entry as a hard constraint or strong preference.
+    if let Some(mem_msg) = render_memories(memories) {
+        msgs.push(ChatMessage {
+            role: ChatRole::System,
+            content: mem_msg,
         });
     }
 
@@ -259,6 +270,26 @@ fn render_observation(ev: &EventRecord) -> String {
     s.push_str(&serde_json::to_string_pretty(&ev.payload).unwrap_or_default());
     s.push_str("\n```");
     s
+}
+
+/// Render the user-promoted memory list as a single system message. Returns
+/// None when there are no active memories.
+fn render_memories(memories: &[jarvis_ledger::MemoryRecord]) -> Option<String> {
+    if memories.is_empty() {
+        return None;
+    }
+    let mut out = String::from(
+        "Learned constraints for this workdir (curated by the user — treat as authoritative):\n",
+    );
+    for m in memories.iter().take(32) {
+        let scope = if matches!(m.scope, jarvis_ledger::MemoryScope::Global) {
+            "global"
+        } else {
+            "workdir"
+        };
+        out.push_str(&format!("- [{}/{}] {}\n", scope, m.kind.as_str(), m.text));
+    }
+    Some(out)
 }
 
 /// Cap on the AGENTS.md-style guidance file we inject as a system message.

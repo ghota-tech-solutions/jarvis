@@ -620,3 +620,42 @@ kbd {
   margin: 0.3rem 0 0 1rem;
   padding: 0;
 }
+
+/* --- Memory ----------------------------------------------------- */
+
+.memory-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 720px;
+}
+
+.memory-row {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-elev);
+}
+
+.memory-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 11px;
+  margin-bottom: 0.4rem;
+}
+
+.memory-text {
+  margin: 0 0 0.5rem 0;
+  color: var(--body);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.memory-actions {
+  display: flex;
+  gap: 0.4rem;
+}
