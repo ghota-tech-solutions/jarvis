@@ -139,12 +139,35 @@ pub async fn run_agent(
             };
 
             let mut text = String::new();
+            let mut chunk_buffer = String::new();
+            let mut chunk_seq: u32 = 0;
+            const CHUNK_FLUSH_BYTES: usize = 80;
             let mut stream_failed = false;
             while let Some(item) = stream.next().await {
                 match item {
                     Ok(c) => {
                         if !c.delta.is_empty() {
                             text.push_str(&c.delta);
+                            chunk_buffer.push_str(&c.delta);
+                            // Flush as a llm_chunk event so clients can render
+                            // tokens live. We batch to keep ledger volume sane.
+                            if chunk_buffer.len() >= CHUNK_FLUSH_BYTES
+                                || chunk_buffer.contains('\n')
+                            {
+                                chunk_seq += 1;
+                                let payload = json!({
+                                    "step": step,
+                                    "seq": chunk_seq,
+                                    "delta": chunk_buffer,
+                                });
+                                chunk_buffer.clear();
+                                ledger
+                                    .append(
+                                        NewEvent::new(run.task_id, EventKind::LlmChunk, payload)
+                                            .with_agent(run.agent_id),
+                                    )
+                                    .await?;
+                            }
                         }
                     }
                     Err(e) => {
@@ -165,6 +188,20 @@ pub async fn run_agent(
                         break;
                     }
                 }
+            }
+            // Flush any trailing buffer.
+            if !chunk_buffer.is_empty() {
+                chunk_seq += 1;
+                ledger
+                    .append(
+                        NewEvent::new(
+                            run.task_id,
+                            EventKind::LlmChunk,
+                            json!({"step": step, "seq": chunk_seq, "delta": chunk_buffer}),
+                        )
+                        .with_agent(run.agent_id),
+                    )
+                    .await?;
             }
             if stream_failed {
                 continue;

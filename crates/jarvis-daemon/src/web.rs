@@ -474,25 +474,17 @@ async fn api_events_sse(
 
     let stream = async_stream::stream! {
         for ev in backfill {
-            let html = render_event_blocks(std::slice::from_ref(&ev));
-            yield Ok::<_, Infallible>(
-                SseEvent::default()
-                    .event("event")
-                    .id(ev.id.0.to_string())
-                    .data(html)
-            );
+            if let Some(sse) = render_event_for_sse(&ev) {
+                yield Ok::<_, Infallible>(sse);
+            }
         }
         loop {
             match live.recv().await {
                 Ok(ev) => {
-                    if descends_from(&ledger, &mut root_cache, ev.task_id, subscribed_root).await {
-                        let html = render_event_blocks(std::slice::from_ref(&ev));
-                        yield Ok(
-                            SseEvent::default()
-                                .event("event")
-                                .id(ev.id.0.to_string())
-                                .data(html)
-                        );
+                    if descends_from(&ledger, &mut root_cache, ev.task_id, subscribed_root).await
+                        && let Some(sse) = render_event_for_sse(&ev)
+                    {
+                        yield Ok(sse);
                     }
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
@@ -502,6 +494,50 @@ async fn api_events_sse(
     };
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+/// Decide how to surface a ledger event on the SSE stream. Returns None when
+/// the event should be silenced (heartbeat, attempt, llm_chunk that we'd rather
+/// emit as a chunk-type event handled in JS).
+fn render_event_for_sse(ev: &EventRecord) -> Option<SseEvent> {
+    let kind = ev.kind.to_string();
+    match kind.as_str() {
+        // Live token deltas — sent as a dedicated event type the page listens to.
+        "llm_chunk" => {
+            let delta = ev.payload.get("delta").and_then(|v| v.as_str())?;
+            // The front-end handles plain text; encode minimally for SSE (no HTML escape
+            // here because we'll insert as textContent on the JS side).
+            Some(
+                SseEvent::default()
+                    .event("chunk")
+                    .id(ev.id.0.to_string())
+                    .data(delta),
+            )
+        }
+        // Decision arriving means the streamed text is now complete — signal
+        // the front-end to clear the live composing buffer, then send the full
+        // rendered block.
+        "decision" => {
+            let html = render_event_blocks(std::slice::from_ref(ev));
+            Some(
+                SseEvent::default()
+                    .event("decision")
+                    .id(ev.id.0.to_string())
+                    .data(html),
+            )
+        }
+        // Noise we don't want on the page at all.
+        "heartbeat" | "attempt" => None,
+        _ => {
+            let html = render_event_blocks(std::slice::from_ref(ev));
+            Some(
+                SseEvent::default()
+                    .event("event")
+                    .id(ev.id.0.to_string())
+                    .data(html),
+            )
+        }
+    }
 }
 
 /// Returns true if `task_id` is `root` or any ancestor of `task_id` is `root`.
@@ -1041,12 +1077,11 @@ fn render_task_page(
     events: &[EventRecord],
     all_tasks: &[TaskRecord],
 ) -> String {
-    let blocks = render_event_blocks(events);
-    let chain_label = if chain.len() > 1 {
-        format!(r#"<p class="muted small">conversation · {} turns</p>"#, chain.len())
-    } else {
-        String::new()
-    };
+    // Group events by task_id, then render each task as a (user message + assistant
+    // events) turn. The first task in the chain doesn't get a "user" block because
+    // its goal is already the page header.
+    let blocks = render_conversation(chain, events);
+    let files_rollup = render_files_rollup(events);
     let last_id = events.last().map(|e| e.id.0).unwrap_or(0);
     // Project nav (left) — re-rendered with the current workdir highlighted.
     let projects = group_by_workdir(all_tasks);
@@ -1074,7 +1109,6 @@ fn render_task_page(
       <h1>{goal}</h1>
       <p class="muted small">{status} · {backend} · {short_id} {chain_label_inline}</p>
     </header>
-    {chain_label}
     <div class="events"
          id="events"
          hx-ext="sse"
@@ -1082,7 +1116,9 @@ fn render_task_page(
          sse-swap="event"
          hx-swap="beforeend">
       {blocks}
+      <div id="composing" class="turn assistant composing" hidden></div>
     </div>
+    {files_rollup}
     <form id="continue" class="continue"
           hx-post="/api/tasks"
           hx-headers='{{"HX-Request": "true"}}'
@@ -1116,6 +1152,41 @@ fn render_task_page(
   </aside>
 </div>
 <script>
+// Live LLM streaming: the SSE emits `chunk` events while the model is
+// typing, and a `decision` event when the full reply is parsed. We type
+// chunks into #composing, then clear it the moment the decision arrives
+// (its full markdown-rendered block lands in #events right after).
+(function setupStreamingComposer() {{
+  const composing = document.getElementById('composing');
+  if (!composing) return;
+  const events = document.getElementById('events');
+  if (!events) return;
+  // HTMX SSE extension exposes the EventSource via the element's `htmx`
+  // internal data. We attach raw listeners after the connection is open.
+  function tryAttach() {{
+    const es = events.__sse?.source || htmx.find(events).__sse?.source;
+    if (!es || es._jarvis_attached) {{
+      setTimeout(tryAttach, 100);
+      return;
+    }}
+    es._jarvis_attached = true;
+    es.addEventListener('chunk', (ev) => {{
+      if (composing.hidden) {{ composing.hidden = false; composing.textContent = ''; }}
+      composing.textContent += ev.data;
+      events.scrollTop = events.scrollHeight;
+    }});
+    es.addEventListener('decision', (ev) => {{
+      // Clear the live buffer; the full rendered decision will land in #events.
+      composing.hidden = true;
+      composing.textContent = '';
+      // HTMX SSE swap with name="decision" was not registered, so do it ourselves.
+      events.insertAdjacentHTML('beforeend', ev.data);
+      events.scrollTop = events.scrollHeight;
+    }});
+    es.addEventListener('open', () => {{}});
+  }}
+  tryAttach();
+}})();
 // Auto-scroll the events container on every swap.
 document.body.addEventListener('htmx:afterSwap', (e) => {{
   const ev = document.getElementById('events');
@@ -1168,7 +1239,6 @@ window.addEventListener('load', () => {{
         root_id = root.id,
         leaf_id = leaf.id,
         last_id = last_id,
-        chain_label = chain_label,
         chain_label_inline = if chain.len() > 1 {
             format!("· {} turns", chain.len())
         } else {
@@ -1214,107 +1284,301 @@ fn urlencode(s: &str) -> String {
     out
 }
 
+/// Render a slice of events as Codex-style blocks. Hides infrastructure noise
+/// (heartbeat, attempt). Pairs tool_call+tool_result into single action cards.
+/// Decision/verdict become prose blocks. When `pending_tool_call` carries state
+/// across SSE yields, callers can pass it in; here we fold per-call.
 fn render_event_blocks(events: &[EventRecord]) -> String {
-    let mut s = String::new();
+    let mut out = String::new();
+    let mut pending_tool: Option<&EventRecord> = None;
     for ev in events {
-        let ts = chrono::DateTime::<chrono::Utc>::from_timestamp_micros(ev.ts_micros)
-            .map(|d| d.format("%H:%M:%S").to_string())
-            .unwrap_or_default();
-        let kind = ev.kind.to_string();
-        let body = match kind.as_str() {
-            "decision" => ev
-                .payload
-                .get("thought")
-                .and_then(|v| v.as_str())
-                .map(render_markdown)
-                .unwrap_or_default(),
-            "tool_call" => {
-                let tool = ev.payload.get("tool").and_then(|v| v.as_str()).unwrap_or("?");
-                let args = ev.payload.get("args").map(|a| a.to_string()).unwrap_or_default();
-                format!(
-                    r#"<span class="tool">→ {}</span> <span class="args">{}</span>"#,
-                    html_escape(tool),
-                    html_escape(&clip(&args, 200))
-                )
-            }
-            "tool_result" => {
-                let summary = ev
-                    .payload
-                    .get("summary")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let is_error = ev
-                    .payload
-                    .get("is_error")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                let glyph = if is_error { r#"<span class="err">✗</span>"# } else { r#"<span class="ok">✓</span>"# };
-                // For fs_write, expose the diff as a collapsible card.
-                let diff_card = ev
-                    .payload
-                    .get("data")
-                    .and_then(render_diff_card);
-                if let Some(card) = diff_card {
-                    format!("{glyph} {}{}", html_escape(summary), card)
-                } else {
-                    format!("{glyph} {}", html_escape(summary))
+        match ev.kind.to_string().as_str() {
+            // Noise: skip entirely. Step boundaries are implied by tool runs.
+            "heartbeat" | "attempt" => {}
+            "decision" => {
+                pending_tool = None;
+                if let Some(t) = ev.payload.get("thought").and_then(|v| v.as_str())
+                    && !t.trim().is_empty()
+                {
+                    out.push_str(&format!(
+                        r#"<div class="turn assistant" data-id="{id}">{}</div>"#,
+                        render_markdown(t),
+                        id = ev.id.0,
+                    ));
                 }
             }
+            "tool_call" => {
+                pending_tool = Some(ev);
+            }
+            "tool_result" => {
+                let pair_id = pending_tool.map(|c| c.id.0).unwrap_or(ev.id.0);
+                out.push_str(&render_action_card(pending_tool, ev, pair_id));
+                pending_tool = None;
+            }
             "error" => {
+                pending_tool = None;
                 let msg = ev
                     .payload
                     .get("message")
                     .or_else(|| ev.payload.get("error"))
                     .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                format!(r#"<span class="err">✗ {}</span>"#, html_escape(msg))
+                    .unwrap_or("(no message)");
+                out.push_str(&format!(
+                    r#"<div class="turn error" data-id="{id}"><span class="err">✗ {}</span></div>"#,
+                    html_escape(msg),
+                    id = ev.id.0,
+                ));
             }
             "verdict" => {
+                pending_tool = None;
                 let v = ev.payload.get("verdict").and_then(|x| x.as_str()).unwrap_or("?");
                 let m = ev.payload.get("message").and_then(|x| x.as_str()).unwrap_or("");
                 let cls = match v {
-                    "pass" => "ok",
-                    "fail" => "err",
-                    _ => "warn",
+                    "pass" => "verdict-pass",
+                    "fail" => "verdict-fail",
+                    _ => "verdict-other",
                 };
-                format!(r#"<span class="{cls}">■ {v}</span> {}"#, render_markdown(m))
+                out.push_str(&format!(
+                    r#"<div class="turn verdict {cls}" data-id="{id}"><span class="badge {cls}">{v}</span>{}</div>"#,
+                    render_markdown(m),
+                    id = ev.id.0,
+                    cls = cls,
+                ));
             }
-            "heartbeat" => {
-                let step = ev.payload.get("step").and_then(|v| v.as_i64()).unwrap_or(0);
-                format!(r#"<span class="muted small">─ step {step} ─</span>"#)
-            }
-            _ => html_escape(&ev.payload.to_string()),
-        };
-        if body.is_empty() {
-            continue;
+            _ => {}
         }
-        s.push_str(&format!(
-            r#"<div class="evt evt-{kind}" data-id="{id}"><span class="ts muted">{ts}</span><span class="kind muted">{kind}</span><span class="body">{body}</span></div>"#,
-            id = ev.id.0,
-            kind = kind,
-        ));
     }
-    s
+    // If a tool_call had no matching tool_result yet (e.g. streaming), surface it alone.
+    if let Some(ev) = pending_tool {
+        out.push_str(&render_action_card(Some(ev), ev, ev.id.0));
+    }
+    out
 }
 
-/// If `data` looks like an fs_write payload, return a `<details>` diff card.
-fn render_diff_card(data: &serde_json::Value) -> Option<String> {
-    let path = data.get("path")?.as_str()?;
-    let added = data.get("lines_added")?.as_u64()?;
-    let removed = data.get("lines_removed")?.as_u64()?;
-    let is_new = data.get("is_new").and_then(|v| v.as_bool()).unwrap_or(false);
-    let diff = data
-        .get("diff_unified")
+/// Compact action card combining a tool_call with its tool_result.
+/// Group events by task_id and render each task as its own "turn" block:
+/// optional `[user] goal` header (skipped for the root), then the rendered
+/// events of that task. The root's goal already lives in the page header.
+fn render_conversation(chain: &[TaskRecord], events: &[EventRecord]) -> String {
+    use std::collections::HashMap;
+    let mut by_task: HashMap<TaskId, Vec<&EventRecord>> = HashMap::new();
+    for ev in events {
+        by_task.entry(ev.task_id).or_default().push(ev);
+    }
+    let mut out = String::new();
+    // Chain is root → leaf, so render in chain order to keep chronology.
+    for (idx, task) in chain.iter().enumerate() {
+        // The root's goal is the page H1; only children get a user-message bubble.
+        if idx > 0 {
+            out.push_str(&format!(
+                r#"<div class="turn user"><div class="user-bubble">{}</div></div>"#,
+                render_markdown(&task.goal)
+            ));
+        }
+        if let Some(evs) = by_task.get(&task.id) {
+            out.push_str(&render_event_blocks_owned(evs));
+        }
+    }
+    out
+}
+
+fn render_event_blocks_owned(events: &[&EventRecord]) -> String {
+    // Reuse render_event_blocks by reborrowing.
+    let owned: Vec<EventRecord> = events.iter().map(|e| (*e).clone()).collect();
+    render_event_blocks(&owned)
+}
+
+/// Walk the events, aggregate fs_write into a "Edited N files" rollup card.
+fn render_files_rollup(events: &[EventRecord]) -> String {
+    use std::collections::BTreeMap;
+    #[derive(Default)]
+    struct Agg {
+        added: u64,
+        removed: u64,
+        is_new: bool,
+        turns: u32,
+    }
+    let mut by_path: BTreeMap<String, Agg> = BTreeMap::new();
+    for ev in events {
+        if ev.kind.to_string() != "tool_result" {
+            continue;
+        }
+        let Some(data) = ev.payload.get("data") else { continue };
+        let Some(path) = data.get("path").and_then(|v| v.as_str()) else { continue };
+        let Some(added) = data.get("lines_added").and_then(|v| v.as_u64()) else { continue };
+        let removed = data.get("lines_removed").and_then(|v| v.as_u64()).unwrap_or(0);
+        let is_new = data.get("is_new").and_then(|v| v.as_bool()).unwrap_or(false);
+        let entry = by_path.entry(path.to_string()).or_default();
+        entry.added += added;
+        entry.removed += removed;
+        entry.is_new = entry.is_new || is_new;
+        entry.turns += 1;
+    }
+    if by_path.is_empty() {
+        return String::new();
+    }
+    let total_added: u64 = by_path.values().map(|a| a.added).sum();
+    let total_removed: u64 = by_path.values().map(|a| a.removed).sum();
+    let file_count = by_path.len();
+    let label = if file_count == 1 { "file" } else { "files" };
+    let mut rows = String::new();
+    for (path, a) in &by_path {
+        let short_path = std::path::Path::new(path)
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.clone());
+        let badge = if a.is_new && a.turns == 1 {
+            r#"<span class="badge new">new</span>"#
+        } else {
+            r#"<span class="badge edit">edit</span>"#
+        };
+        rows.push_str(&format!(
+            r#"<div class="file-row">{badge}<span class="file-name" title="{full}">{short}</span><span class="add">+{add}</span><span class="rem">-{rem}</span></div>"#,
+            full = html_escape(path),
+            short = html_escape(&short_path),
+            add = a.added,
+            rem = a.removed,
+        ));
+    }
+    format!(
+        r#"<div class="rollup card"><div class="rollup-head"><span class="rollup-title">Edited {file_count} {label}</span><span class="add">+{total_added}</span><span class="rem">-{total_removed}</span></div><div class="rollup-body">{rows}</div></div>"#,
+    )
+}
+
+fn render_action_card(call: Option<&EventRecord>, result: &EventRecord, anchor: i64) -> String {
+    let tool = call
+        .and_then(|c| c.payload.get("tool"))
+        .or_else(|| result.payload.get("tool"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("?")
+        .to_string();
+    let args = call.and_then(|c| c.payload.get("args")).cloned().unwrap_or(serde_json::Value::Null);
+    let summary = result
+        .payload
+        .get("summary")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let badge = if is_new { "new" } else { "edit" };
-    let body = colorize_unified(diff);
-    Some(format!(
-        r#"<details class="diff"><summary><span class="badge {badge_cls}">{badge}</span> <code>{path}</code> <span class="add">+{added}</span> <span class="rem">-{removed}</span></summary><pre class="diff-body">{body}</pre></details>"#,
-        badge_cls = badge,
-        path = html_escape(path),
-        body = body,
-    ))
+    let is_error = result
+        .payload
+        .get("is_error")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let data = result.payload.get("data");
+
+    let inner = match tool.as_str() {
+        "shell" => {
+            let cmd = args.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
+            let exit = data
+                .and_then(|d| d.get("exit_code"))
+                .map(|x| x.to_string())
+                .unwrap_or_default();
+            let stdout = data
+                .and_then(|d| d.get("stdout"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let stderr = data
+                .and_then(|d| d.get("stderr"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let backend = data
+                .and_then(|d| d.get("backend"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let exit_chip = if !exit.is_empty() {
+                format!(r#"<span class="action-chip">exit {exit}</span>"#)
+            } else {
+                String::new()
+            };
+            let backend_chip = if !backend.is_empty() {
+                format!(r#"<span class="action-chip muted-chip">{backend}</span>"#)
+            } else {
+                String::new()
+            };
+            let output_section = if stdout.is_empty() && stderr.is_empty() {
+                String::new()
+            } else {
+                let preview_out = clip(stdout, 600);
+                let preview_err = clip(stderr, 600);
+                let blocks = if !preview_err.is_empty() {
+                    format!(
+                        r#"<pre class="action-out">{}</pre><pre class="action-out action-err">{}</pre>"#,
+                        html_escape(&preview_out),
+                        html_escape(&preview_err)
+                    )
+                } else {
+                    format!(r#"<pre class="action-out">{}</pre>"#, html_escape(&preview_out))
+                };
+                format!(
+                    r#"<details class="action-detail"><summary class="muted small">output</summary>{blocks}</details>"#,
+                )
+            };
+            format!(
+                r#"<div class="action-head"><span class="action-tool">$</span> <code class="action-cmd">{cmd}</code> {exit_chip}{backend_chip}</div>{output_section}"#,
+                cmd = html_escape(cmd),
+            )
+        }
+        "fs_read" => {
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?")
+                .to_string();
+            let bytes = data
+                .and_then(|d| d.get("bytes"))
+                .map(|x| x.to_string())
+                .unwrap_or_default();
+            let bytes_chip = if !bytes.is_empty() {
+                format!(r#"<span class="action-chip">{bytes} B</span>"#)
+            } else {
+                String::new()
+            };
+            format!(
+                r#"<div class="action-head"><span class="action-tool">📖</span> <span class="action-verb">Read</span> <code class="action-path">{path}</code> {bytes_chip}</div>"#,
+                path = html_escape(&path),
+            )
+        }
+        "fs_write" => {
+            let path = data
+                .and_then(|d| d.get("path"))
+                .and_then(|v| v.as_str())
+                .or_else(|| args.get("path").and_then(|v| v.as_str()))
+                .unwrap_or("?")
+                .to_string();
+            let added = data
+                .and_then(|d| d.get("lines_added"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let removed = data
+                .and_then(|d| d.get("lines_removed"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let is_new = data
+                .and_then(|d| d.get("is_new"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let verb = if is_new { "Created" } else { "Edited" };
+            let unified = data
+                .and_then(|d| d.get("diff_unified"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let body = colorize_unified(unified);
+            format!(
+                r#"<div class="action-head"><span class="action-tool">✎</span> <span class="action-verb">{verb}</span> <code class="action-path">{path}</code> <span class="add">+{added}</span> <span class="rem">-{removed}</span></div><details class="action-detail"><summary class="muted small">diff</summary><pre class="diff-body">{body}</pre></details>"#,
+                path = html_escape(&path),
+            )
+        }
+        _ => {
+            let summary_html = html_escape(summary);
+            format!(r#"<div class="action-head"><span class="action-tool">⚙</span> <span class="action-verb">{tool}</span> {summary_html}</div>"#,
+                tool = html_escape(&tool),
+            )
+        }
+    };
+
+    let state_cls = if is_error { " action-error" } else { "" };
+    format!(
+        r#"<div class="turn action{state_cls}" data-id="{anchor}">{inner}</div>"#,
+    )
 }
 
 fn colorize_unified(diff: &str) -> String {
@@ -1474,13 +1738,48 @@ form button.ghost:hover { background: var(--panel-2); color: var(--err); }
 form.continue { position: sticky; bottom: 0; background: var(--bg); padding: 0.6em 0; border-top: 1px solid var(--line); margin-top: 1em; }
 .continue-actions { display: flex; justify-content: flex-end; margin-top: 0.4em; }
 
-/* Events stream */
-.events { display: flex; flex-direction: column; gap: 0.15em; max-height: calc(100vh - 250px); overflow-y: auto; padding-right: 0.5em; }
-.evt { display: grid; grid-template-columns: 70px 110px 1fr; gap: 0.5em; padding: 0.2em 0.3em; align-items: baseline; border-radius: 4px; }
-.evt:hover { background: var(--panel-2); }
-.evt .ts { font-size: 11px; }
-.evt .kind { font-size: 11px; }
-.evt.evt-decision .body { color: var(--assistant); font-style: italic; }
+/* Events stream — Codex-style conversation flow */
+.events { display: flex; flex-direction: column; gap: 0.9em; max-height: calc(100vh - 260px); overflow-y: auto; padding-right: 0.5em; padding-top: 0.5em; }
+.turn { line-height: 1.55; }
+.turn.assistant { color: var(--fg); padding: 0.2em 0; }
+.turn.user { display: flex; justify-content: flex-end; }
+.turn.user .user-bubble { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 0.55em 0.9em; max-width: 80%; color: var(--fg); }
+.turn.error { color: var(--err); padding: 0.2em 0; }
+.turn.verdict { padding: 0.4em 0; border-top: 1px dashed var(--line); margin-top: 0.4em; }
+.turn.verdict .badge { padding: 0.05em 0.5em; border-radius: 3px; font-size: 11px; font-weight: 700; margin-right: 0.5em; text-transform: uppercase; }
+.turn.verdict .badge.verdict-pass { background: var(--add-bg); color: var(--add-fg); }
+.turn.verdict .badge.verdict-fail { background: var(--rem-bg); color: var(--rem-fg); }
+.turn.verdict .badge.verdict-other { background: rgba(220,175,90,0.15); color: var(--warn); }
+
+/* Live LLM streaming */
+.turn.assistant.composing { white-space: pre-wrap; color: var(--assistant); font-style: italic; min-height: 1em; position: relative; }
+.turn.assistant.composing::after { content: '▊'; color: var(--accent); animation: blink 1s step-end infinite; margin-left: 1px; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Action card */
+.turn.action { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 0.45em 0.7em; }
+.turn.action.action-error { border-color: var(--err); }
+.action-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5em; font-size: 12px; }
+.action-tool { color: var(--accent); font-weight: 700; }
+.action-verb { color: var(--heading); font-weight: 600; }
+.action-cmd, .action-path { color: var(--fg); background: rgba(255,255,255,0.04); padding: 0.05em 0.4em; border-radius: 3px; }
+.action-chip { font-size: 10px; padding: 0.05em 0.45em; border-radius: 10px; background: rgba(212,180,120,0.15); color: var(--accent); font-weight: 600; }
+.action-chip.muted-chip { background: rgba(255,255,255,0.04); color: var(--dim); font-weight: 400; }
+.action-detail { margin-top: 0.35em; }
+.action-detail > summary { cursor: pointer; padding: 0.1em 0; list-style: none; color: var(--dim); }
+.action-detail > summary::-webkit-details-marker { display: none; }
+.action-out { background: rgba(0,0,0,0.3); border: 1px solid var(--line); padding: 0.5em 0.7em; font-size: 12px; line-height: 1.45; max-height: 280px; overflow-y: auto; border-radius: 4px; margin: 0.3em 0 0 0; }
+.action-out.action-err { color: var(--err); background: rgba(220,110,90,0.06); }
+
+/* Rollup card */
+.rollup.card { margin: 1.2em 0 0; padding: 0; }
+.rollup-head { display: flex; align-items: center; gap: 0.6em; padding: 0.6em 0.8em; border-bottom: 1px solid var(--line); }
+.rollup-title { color: var(--heading); font-weight: 600; flex: 1; }
+.rollup-body { padding: 0.3em 0; }
+.file-row { display: grid; grid-template-columns: 60px 1fr 50px 50px; gap: 0.6em; align-items: center; padding: 0.25em 0.8em; font-size: 12px; }
+.file-row:hover { background: var(--panel-2); }
+.file-name { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-row .add, .file-row .rem { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Inline markdown rendering inside decision/verdict bodies */
 .md p { display: inline; margin: 0; }
@@ -1509,16 +1808,10 @@ form.continue { position: sticky; bottom: 0; background: var(--bg); padding: 0.6
 .evt.evt-tool_result .body { color: var(--dim); }
 .evt.evt-verdict .body { font-weight: 600; }
 
-/* Diff card */
-details.diff { display: inline-block; margin-left: 0.6em; vertical-align: baseline; }
-details.diff > summary { cursor: pointer; padding: 0.1em 0.5em; background: var(--panel-2); border-radius: 4px; border: 1px solid var(--line); list-style: none; font-size: 12px; }
-details.diff > summary::-webkit-details-marker { display: none; }
-details.diff > summary:hover { border-color: var(--accent); }
-details.diff .badge { padding: 0.05em 0.4em; font-size: 10px; font-weight: 600; border-radius: 3px; margin-right: 0.3em; text-transform: uppercase; }
-details.diff .badge.new { background: var(--add-bg); color: var(--add-fg); }
-details.diff .badge.edit { background: rgba(212,180,120,0.15); color: var(--accent); }
-details.diff[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; }
-pre.diff-body { background: var(--panel-2); border: 1px solid var(--line); border-top: none; padding: 0.6em 0.8em; font-size: 12px; line-height: 1.45; overflow-x: auto; margin: 0; border-radius: 0 0 4px 4px; max-width: 100%; }
+/* Diff body (used in action-detail) */
+pre.diff-body { background: rgba(0,0,0,0.3); border: 1px solid var(--line); padding: 0.5em 0.7em; font-size: 12px; line-height: 1.45; overflow-x: auto; margin: 0.3em 0 0 0; border-radius: 4px; max-height: 320px; overflow-y: auto; }
+.badge.new { background: var(--add-bg); color: var(--add-fg); padding: 0.05em 0.4em; font-size: 10px; font-weight: 600; border-radius: 3px; text-transform: uppercase; }
+.badge.edit { background: rgba(212,180,120,0.15); color: var(--accent); padding: 0.05em 0.4em; font-size: 10px; font-weight: 600; border-radius: 3px; text-transform: uppercase; }
 .d-add { background: var(--add-bg); color: var(--add-fg); display: block; }
 .d-rem { background: var(--rem-bg); color: var(--rem-fg); display: block; }
 .d-ctx { color: var(--dim); display: block; }
