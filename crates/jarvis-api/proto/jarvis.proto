@@ -122,6 +122,8 @@ message Task {
   string net_policy = 9;
   string worktree_path = 10;     // empty if no worktree was created
   string worktree_branch = 11;
+  // M6.5: parent task id (UUID) when this task is a follow-up; empty for roots.
+  string parent_task_id = 12;
 }
 
 message ListTasksRequest {

@@ -307,6 +307,7 @@ fn record_to_api_task(r: &TaskRecord) -> ApiTask {
         net_policy: r.net_policy.clone(),
         worktree_path: r.worktree_path.clone(),
         worktree_branch: r.worktree_branch.clone(),
+        parent_task_id: r.parent.map(|p| p.to_string()).unwrap_or_default(),
     }
 }
 

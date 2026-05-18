@@ -316,8 +316,103 @@ fn render_sidebar(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
         )]));
     }
 
+    // Section: Tasks — one entry per conversation root (matches the web
+    // dashboard). Children appear inline in the conversation view, not here.
+    section(&mut lines, "Tasks", t);
+    let conversations = group_tasks_by_root(&state.tasks);
+    if conversations.is_empty() {
+        lines.push(Line::from(vec![Span::styled(
+            if state.show_all { "no tasks yet" } else { "no active tasks" },
+            Style::default().fg(t.dim).add_modifier(Modifier::ITALIC),
+        )]));
+    } else {
+        let selected_root = state
+            .selected_task()
+            .map(|task| conversation_root_of(&state.tasks, &task.id))
+            .unwrap_or_default();
+        for c in conversations.iter().take(20) {
+            let is_current = c.root_id == selected_root;
+            let cursor = if is_current { "▸ " } else { "  " };
+            let cursor_style = if is_current {
+                Style::default().fg(t.focus).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.fade)
+            };
+            let turn_badge = if c.turn_count > 1 {
+                format!(" ×{}", c.turn_count)
+            } else {
+                String::new()
+            };
+            lines.push(Line::from(vec![
+                Span::styled(cursor.to_string(), cursor_style),
+                Span::styled(
+                    clip(&c.root_goal, 32),
+                    Style::default().fg(status_color(&c.leaf_status, t)),
+                ),
+                Span::styled(turn_badge, Style::default().fg(t.accent)),
+            ]));
+        }
+    }
+
     let p = Paragraph::new(lines).wrap(Wrap { trim: false });
     f.render_widget(p, inner);
+}
+
+/// Walk parent ids (from in-memory task list) to find the root of a chain.
+fn conversation_root_of(tasks: &[jarvis_api::Task], leaf_id: &str) -> String {
+    let by_id: std::collections::HashMap<&str, &jarvis_api::Task> =
+        tasks.iter().map(|t| (t.id.as_str(), t)).collect();
+    let mut current = leaf_id.to_string();
+    for _ in 0..64 {
+        match by_id.get(current.as_str()) {
+            Some(t) if !t.parent_task_id.is_empty() => current = t.parent_task_id.clone(),
+            _ => break,
+        }
+    }
+    current
+}
+
+#[derive(Debug)]
+struct TuiConversation {
+    root_id: String,
+    root_goal: String,
+    leaf_status: String,
+    turn_count: usize,
+    updated_at: i64,
+}
+
+fn group_tasks_by_root(tasks: &[jarvis_api::Task]) -> Vec<TuiConversation> {
+    use std::collections::HashMap;
+    if tasks.is_empty() {
+        return Vec::new();
+    }
+    let by_id: HashMap<&str, &jarvis_api::Task> =
+        tasks.iter().map(|t| (t.id.as_str(), t)).collect();
+    let mut by_root: HashMap<String, Vec<&jarvis_api::Task>> = HashMap::new();
+    for t in tasks {
+        let root = conversation_root_of(tasks, &t.id);
+        by_root.entry(root).or_default().push(t);
+    }
+    let mut rows: Vec<TuiConversation> = by_root
+        .into_iter()
+        .filter_map(|(root_id, members)| {
+            let root = by_id.get(root_id.as_str())?;
+            let leaf = members
+                .iter()
+                .max_by_key(|t| t.created_at)
+                .copied()
+                .unwrap_or(root);
+            Some(TuiConversation {
+                root_id,
+                root_goal: root.goal.clone(),
+                leaf_status: leaf.status.clone(),
+                turn_count: members.len(),
+                updated_at: leaf.created_at,
+            })
+        })
+        .collect();
+    rows.sort_by_key(|c| std::cmp::Reverse(c.updated_at));
+    rows
 }
 
 fn section(out: &mut Vec<Line<'static>>, title: &str, t: &Theme) {
