@@ -15,32 +15,61 @@ use tui_input::Input;
 pub fn render(f: &mut Frame, state: &AppState, input: &Input) {
     let t = &state.theme;
 
-    // Vertical: main area / status line / input line.
+    // Vertical: main area / agent line / status line / input line.
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(6),
-            Constraint::Length(1),
-            Constraint::Length(1),
+            Constraint::Length(1), // agent badge
+            Constraint::Length(1), // status
+            Constraint::Length(1), // input
         ])
         .split(f.area());
 
-    // Horizontal split inside main: 80% main column, 20% sidebar.
+    // Horizontal split inside main: 75% main column, 25% sidebar.
     let main = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(76), Constraint::Percentage(24)])
+        .constraints([Constraint::Percentage(75), Constraint::Percentage(25)])
         .split(root[0]);
 
     render_events(f, main[0], state, t);
     render_sidebar(f, main[1], state, t);
-    render_status(f, root[1], state, t);
-    render_input(f, root[2], state, input, t);
+    render_agent_badge(f, root[1], state, t);
+    render_status(f, root[2], state, t);
+    render_input(f, root[3], state, input, t);
 
     match state.focus {
         Focus::ConfirmCancel => render_confirm_modal(f, state, t),
         Focus::Help => render_help_modal(f, t),
         Focus::Normal => {}
     }
+}
+
+fn render_agent_badge(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
+    let active_model = state
+        .models
+        .iter()
+        .find(|m| m.online && !m.quarantined)
+        .map(|m| (m.name.clone(), m.kind.clone()))
+        .unwrap_or_else(|| ("local:?".to_string(), String::new()));
+    let task_label = state
+        .selected_task()
+        .map(|t| t.status.as_str())
+        .unwrap_or("idle");
+    let line = Line::from(vec![
+        Span::styled(" ■ ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Build",
+            Style::default().fg(t.heading).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(format!(" · {}", short_model(&active_model.0)), Style::default().fg(t.body)),
+        Span::styled(format!(" · {}", task_label), Style::default().fg(t.dim)),
+    ]);
+    f.render_widget(Paragraph::new(line), area);
+}
+
+fn short_model(name: &str) -> String {
+    name.split_once(':').map(|(_, n)| n.to_string()).unwrap_or_else(|| name.to_string())
 }
 
 // ---------- Main column: conversation-style events ----------
@@ -90,7 +119,8 @@ fn render_events(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
     }
 
     for ev in state.events.iter() {
-        push_event_lines(&mut lines, ev, t, inner.width as usize);
+        let expanded = state.is_diff_expanded(ev.id);
+        push_event_lines(&mut lines, ev, t, inner.width as usize, expanded);
     }
 
     // Auto-scroll: show the tail that fits.
@@ -103,7 +133,13 @@ fn render_events(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
     f.render_widget(p, inner);
 }
 
-fn push_event_lines(out: &mut Vec<Line<'static>>, ev: &Event, t: &Theme, width: usize) {
+fn push_event_lines(
+    out: &mut Vec<Line<'static>>,
+    ev: &Event,
+    t: &Theme,
+    width: usize,
+    diff_expanded: bool,
+) {
     let _ = width;
     match ev.kind.as_str() {
         "decision" => {
@@ -117,9 +153,15 @@ fn push_event_lines(out: &mut Vec<Line<'static>>, ev: &Event, t: &Theme, width: 
         }
         "tool_call" => {
             let (tool, args_one) = tool_call_summary(&ev.payload_json);
+            let display_tool = match tool.as_str() {
+                "fs_read" => "Read".to_string(),
+                "fs_write" => "Write".to_string(),
+                "shell" => "$".to_string(),
+                other => other.to_string(),
+            };
             out.push(Line::from(vec![
                 Span::styled("→ ", Style::default().fg(t.fade)),
-                Span::styled(tool, Style::default().fg(t.accent)),
+                Span::styled(display_tool, Style::default().fg(t.accent)),
                 Span::raw(" "),
                 Span::styled(args_one, Style::default().fg(t.dim)),
             ]));
@@ -137,6 +179,10 @@ fn push_event_lines(out: &mut Vec<Line<'static>>, ev: &Event, t: &Theme, width: 
                 Span::styled(summary, Style::default().fg(t.dim)),
                 Span::raw(if exit.is_empty() { String::new() } else { format!(" ({exit})") }),
             ]));
+            // If fs_write, append diff lines (collapsed or expanded).
+            if let Some(diff) = diff_payload(&ev.payload_json) {
+                push_diff_lines(out, &diff, t, diff_expanded);
+            }
         }
         "error" => {
             let msg = error_message(&ev.payload_json);
@@ -507,6 +553,99 @@ fn verdict_summary(json: &str) -> (String, String) {
         .unwrap_or("")
         .to_string();
     (verdict, msg)
+}
+
+struct DiffPayload {
+    path: String,
+    is_new: bool,
+    lines_added: u64,
+    lines_removed: u64,
+    unified: String,
+    truncated: bool,
+}
+
+fn diff_payload(json: &str) -> Option<DiffPayload> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    let data = v.get("data")?;
+    let path = data.get("path")?.as_str()?.to_string();
+    let lines_added = data.get("lines_added")?.as_u64()?;
+    let lines_removed = data.get("lines_removed")?.as_u64()?;
+    let is_new = data.get("is_new").and_then(|v| v.as_bool()).unwrap_or(false);
+    let unified = data
+        .get("diff_unified")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let truncated = data
+        .get("diff_truncated")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    Some(DiffPayload {
+        path,
+        is_new,
+        lines_added,
+        lines_removed,
+        unified,
+        truncated,
+    })
+}
+
+fn push_diff_lines(
+    out: &mut Vec<Line<'static>>,
+    diff: &DiffPayload,
+    t: &Theme,
+    expanded: bool,
+) {
+    // Header chip: edit/new badge + path + +N/-M counts.
+    let badge = if diff.is_new { "new" } else { "edit" };
+    let badge_style = if diff.is_new {
+        Style::default().fg(t.good).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(t.accent).add_modifier(Modifier::BOLD)
+    };
+    let path = std::path::Path::new(&diff.path)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| diff.path.clone());
+    let hint = if expanded { "" } else { "  (:diff toggles)" };
+    out.push(Line::from(vec![
+        Span::raw("    "),
+        Span::styled(format!("⌗ {badge} "), badge_style),
+        Span::styled(path, Style::default().fg(t.body)),
+        Span::raw("  "),
+        Span::styled(format!("+{}", diff.lines_added), Style::default().fg(t.good)),
+        Span::raw(" "),
+        Span::styled(format!("-{}", diff.lines_removed), Style::default().fg(t.error)),
+        Span::styled(hint.to_string(), Style::default().fg(t.fade)),
+    ]));
+    if !expanded {
+        return;
+    }
+    for line in diff.unified.lines().take(40) {
+        let (color, glyph) = if let Some(rest) = line.strip_prefix('+') {
+            (t.good, format!("    + {rest}"))
+        } else if let Some(rest) = line.strip_prefix('-') {
+            (t.error, format!("    - {rest}"))
+        } else {
+            let rest = line.strip_prefix(' ').unwrap_or(line);
+            (t.fade, format!("      {rest}"))
+        };
+        out.push(Line::from(vec![Span::styled(
+            glyph,
+            Style::default().fg(color),
+        )]));
+    }
+    if diff.unified.lines().count() > 40 {
+        out.push(Line::from(vec![Span::styled(
+            "      … (truncated for terminal)",
+            Style::default().fg(t.fade).add_modifier(Modifier::ITALIC),
+        )]));
+    } else if diff.truncated {
+        out.push(Line::from(vec![Span::styled(
+            "      … (capped at write time)",
+            Style::default().fg(t.fade).add_modifier(Modifier::ITALIC),
+        )]));
+    }
 }
 
 fn step_of(json: &str) -> Option<i64> {

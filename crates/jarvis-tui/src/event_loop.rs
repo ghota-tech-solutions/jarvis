@@ -233,6 +233,13 @@ async fn run_slash_command(
             let msg = if s.show_all { "showing all tasks" } else { "showing active only" };
             s.set_status(msg);
         }
+        "diffs" | "diff" => {
+            let mut s = app.state.lock().await;
+            s.diffs_open = !s.diffs_open;
+            s.expanded_diffs.clear();
+            let msg = if s.diffs_open { "diffs expanded by default" } else { "diffs collapsed by default" };
+            s.set_status(msg);
+        }
         "help" | "?" => app.state.lock().await.focus = Focus::Help,
         "theme" => {
             if let Some(th) = Theme::by_name(rest) {

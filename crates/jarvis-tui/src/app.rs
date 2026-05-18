@@ -5,7 +5,7 @@
 
 use crate::theme::{Theme, DARK_DEFAULT};
 use jarvis_api::{jarvis_client::JarvisClient, Event, ModelStatus, Task};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
@@ -47,6 +47,10 @@ pub struct AppState {
     pub models: Vec<ModelStatus>,
     /// Total running tasks at daemon level.
     pub running_tasks: u32,
+    /// Event ids whose diff body is expanded inline.
+    pub expanded_diffs: HashSet<i64>,
+    /// When true, render all fs_write diffs expanded by default.
+    pub diffs_open: bool,
 }
 
 impl AppState {
@@ -65,7 +69,20 @@ impl AppState {
             daemon_url: String::new(),
             models: Vec::new(),
             running_tasks: 0,
+            expanded_diffs: HashSet::new(),
+            diffs_open: true,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn toggle_diff(&mut self, id: i64) {
+        if !self.expanded_diffs.remove(&id) {
+            self.expanded_diffs.insert(id);
+        }
+    }
+
+    pub fn is_diff_expanded(&self, id: i64) -> bool {
+        self.diffs_open || self.expanded_diffs.contains(&id)
     }
 
     pub fn selected_task(&self) -> Option<&Task> {

@@ -8,8 +8,11 @@ use anyhow::Context as _;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::routing::{get, post};
 use axum::{Form, Json, Router};
+use futures::stream::Stream;
+use std::convert::Infallible;
 use jarvis_agent::{run_agent, AgentRun};
 use jarvis_core::{AgentId, RequiredCapabilities, RoutingPolicy, TaskId, TaskKind};
 use jarvis_ledger::{EventRecord, Ledger, TaskRecord, TaskRuntimeInfo};
@@ -50,6 +53,9 @@ pub async fn serve(state: WebState, addr: String) -> anyhow::Result<()> {
         .route("/api/tasks", post(api_submit_task))
         .route("/api/tasks/{id}/cancel", post(api_cancel))
         .route("/api/events", get(api_events))
+        .route("/api/events/stream", get(api_events_sse))
+        .route("/api/projects", get(api_projects))
+        .route("/api/git", get(api_git))
         .route("/api/status", get(api_status))
         .with_state(state)
         .layer(CompressionLayer::new());
@@ -87,13 +93,23 @@ async fn task_page(
         .await
         .map_err(|_| AppError::NotFound)?;
     let chain = s.ledger.walk_ancestors(task.id).await.unwrap_or_default();
+    // For conversation continuity, the URL pins to the ROOT of the chain. If the
+    // user landed on a child id, redirect to the root once so the path stays
+    // stable across follow-ups.
+    if let Some(root) = chain.first()
+        && root.id != task.id
+    {
+        return Err(AppError::Redirect(format!("/task/{}", root.id)));
+    }
     let ids: Vec<_> = chain.iter().map(|t| t.id).collect();
     let events = s
         .ledger
         .query_events_multi(&ids, 0, 0)
         .await
         .unwrap_or_default();
-    Ok(Html(render_task_page(&task, &chain, &events, &s)))
+    let leaf = chain.last().unwrap_or(&task).clone();
+    let all_tasks = s.ledger.list_tasks(true, 500).await.unwrap_or_default();
+    Ok(Html(render_task_page(&task, &leaf, &chain, &events, &all_tasks)))
 }
 
 // ----------------- JSON / HTMX endpoints -----------------
@@ -248,8 +264,14 @@ struct SubmitForm {
     parent_task_id: String,
 }
 
+/// HTMX-friendly submit: returns 204 (no content) when called from HTMX so the
+/// page does not redirect. The caller (form on /task/{id}) updates its UI by
+/// either clearing the textarea + relying on SSE/polling to surface the new
+/// events. The legacy non-HTMX branch (e.g. plain HTML form on /) still
+/// returns a 303 redirect to /task/{root_id}.
 async fn api_submit_task(
     State(s): State<WebState>,
+    headers: axum::http::HeaderMap,
     Form(form): Form<SubmitForm>,
 ) -> Result<Response, AppError> {
     if form.goal.trim().is_empty() {
@@ -379,12 +401,265 @@ async fn api_submit_task(
         }
     });
 
-    // HTMX redirect — the dashboard refreshes after submission.
-    Ok((
-        StatusCode::SEE_OTHER,
-        [("HX-Redirect", format!("/task/{}", task.id)), ("Location", format!("/task/{}", task.id))],
+    // Resolve the ROOT of the chain — that's the stable URL for the conversation.
+    let root_id = match parent_record {
+        Some(p) => {
+            let chain = s
+                .ledger
+                .walk_ancestors(p.id)
+                .await
+                .unwrap_or_default();
+            chain.first().map(|r| r.id).unwrap_or(p.id)
+        }
+        None => task.id,
+    };
+
+    let is_htmx = headers
+        .get("HX-Request")
+        .map(|v| v.to_str().unwrap_or("").eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if is_htmx {
+        // Stay on the current page; SSE / polling will deliver the new events.
+        // We trigger a custom event so the form can react (e.g. clear textarea).
+        Ok((
+            StatusCode::NO_CONTENT,
+            [("HX-Trigger", "jarvis-task-submitted")],
+        )
+            .into_response())
+    } else {
+        Ok((
+            StatusCode::SEE_OTHER,
+            [
+                ("HX-Redirect", format!("/task/{root_id}")),
+                ("Location", format!("/task/{root_id}")),
+            ],
+        )
+            .into_response())
+    }
+}
+
+// ----------------- SSE event stream -----------------
+
+#[derive(Deserialize)]
+struct SseQuery {
+    task: String,
+    #[serde(default)]
+    since: i64,
+}
+
+async fn api_events_sse(
+    State(s): State<WebState>,
+    Query(q): Query<SseQuery>,
+) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, AppError> {
+    let task_id =
+        TaskId::from_str(&q.task).map_err(|_| AppError::BadRequest("invalid task id".into()))?;
+    let chain = s.ledger.walk_ancestors(task_id).await.unwrap_or_default();
+    let chain_ids: std::collections::HashSet<TaskId> = chain.iter().map(|t| t.id).collect();
+    let backfill = s
+        .ledger
+        .query_events_multi(&chain.iter().map(|t| t.id).collect::<Vec<_>>(), q.since, 0)
+        .await
+        .unwrap_or_default();
+    let mut live = s.ledger.subscribe();
+
+    let stream = async_stream::stream! {
+        for ev in backfill {
+            let html = render_event_blocks(std::slice::from_ref(&ev));
+            yield Ok::<_, Infallible>(
+                SseEvent::default()
+                    .event("event")
+                    .id(ev.id.0.to_string())
+                    .data(html)
+            );
+        }
+        loop {
+            match live.recv().await {
+                Ok(ev) if chain_ids.contains(&ev.task_id) => {
+                    let html = render_event_blocks(std::slice::from_ref(&ev));
+                    yield Ok(
+                        SseEvent::default()
+                            .event("event")
+                            .id(ev.id.0.to_string())
+                            .data(html)
+                    );
+                }
+                Ok(_) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => return,
+            }
+        }
+    };
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+// ----------------- Projects + Git -----------------
+
+#[derive(Serialize)]
+struct ProjectGroup {
+    workdir: String,
+    short: String,
+    task_count: usize,
+    last_active_micros: i64,
+    tasks: Vec<TaskJson>,
+}
+
+async fn api_projects(State(s): State<WebState>) -> Response {
+    let tasks = s.ledger.list_tasks(true, 500).await.unwrap_or_default();
+    let mut by_dir: std::collections::HashMap<String, Vec<TaskRecord>> = Default::default();
+    for t in tasks {
+        by_dir.entry(t.workdir.clone()).or_default().push(t);
+    }
+    let mut groups: Vec<ProjectGroup> = by_dir
+        .into_iter()
+        .map(|(workdir, tasks)| {
+            let last = tasks.iter().map(|t| t.created_at).max().unwrap_or(0);
+            let short = workdir
+                .rsplit_once(['/', '\\'])
+                .map(|(_, n)| n.to_string())
+                .unwrap_or_else(|| workdir.clone());
+            let task_count = tasks.len();
+            let tasks_json: Vec<_> = tasks.iter().map(task_to_json).collect();
+            ProjectGroup {
+                workdir,
+                short,
+                task_count,
+                last_active_micros: last,
+                tasks: tasks_json,
+            }
+        })
+        .collect();
+    groups.sort_by_key(|g| std::cmp::Reverse(g.last_active_micros));
+    Json(groups).into_response()
+}
+
+#[derive(Deserialize)]
+struct GitQuery {
+    workdir: String,
+}
+
+async fn api_git(Query(q): Query<GitQuery>) -> Response {
+    let workdir = q.workdir.clone();
+    let info = tokio::task::spawn_blocking(move || git_status(&workdir)).await;
+    match info {
+        Ok(Some(info)) => Html(render_git_card(&info)).into_response(),
+        _ => Html(
+            r#"<div class="muted small">not a git repo</div>"#.to_string(),
+        )
+        .into_response(),
+    }
+}
+
+fn render_git_card(info: &GitInfo) -> String {
+    let mut files_html = String::new();
+    for f in info.files.iter().take(16) {
+        let cls = match f.status.as_str() {
+            "new" => "add",
+            "deleted" => "rem",
+            _ => "mod",
+        };
+        files_html.push_str(&format!(
+            r#"<div class="git-file"><span class="git-tag {cls}">{tag}</span> <code>{path}</code></div>"#,
+            tag = match f.status.as_str() {
+                "new" => "A",
+                "deleted" => "D",
+                "modified" => "M",
+                "renamed" => "R",
+                _ => "?",
+            },
+            path = html_escape(&f.path),
+        ));
+    }
+    let more = if info.files.len() > 16 {
+        format!(
+            r#"<div class="muted small">… and {} more</div>"#,
+            info.files.len() - 16
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        r#"<div class="kv"><span>branch</span><b>{branch}</b></div><div class="kv"><span>changes</span><b><span class="add">+{add}</span> <span class="rem">-{rem}</span></b></div>{files_html}{more}"#,
+        branch = html_escape(&info.branch),
+        add = info.changes_added,
+        rem = info.changes_removed,
     )
-        .into_response())
+}
+
+#[derive(Serialize)]
+struct GitInfo {
+    available: bool,
+    branch: String,
+    changes_added: usize,
+    changes_removed: usize,
+    files: Vec<GitFileChange>,
+}
+
+#[derive(Serialize)]
+struct GitFileChange {
+    path: String,
+    status: String,    // "modified" | "new" | "deleted" | "renamed"
+}
+
+fn git_status(workdir: &str) -> Option<GitInfo> {
+    use git2::{Repository, Status, StatusOptions};
+    let repo = Repository::discover(workdir).ok()?;
+    let branch = repo
+        .head()
+        .ok()
+        .and_then(|h| h.shorthand().map(|s| s.to_string()))
+        .unwrap_or_else(|| "(detached)".to_string());
+
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(true).recurse_untracked_dirs(false);
+    let statuses = repo.statuses(Some(&mut opts)).ok()?;
+
+    let mut files: Vec<GitFileChange> = Vec::new();
+    for entry in statuses.iter() {
+        let path = entry.path().unwrap_or("").to_string();
+        let s = entry.status();
+        let status = if s.intersects(Status::WT_NEW | Status::INDEX_NEW) {
+            "new"
+        } else if s.intersects(Status::WT_DELETED | Status::INDEX_DELETED) {
+            "deleted"
+        } else if s.intersects(Status::WT_RENAMED | Status::INDEX_RENAMED) {
+            "renamed"
+        } else if s.intersects(
+            Status::WT_MODIFIED | Status::INDEX_MODIFIED | Status::WT_TYPECHANGE | Status::INDEX_TYPECHANGE,
+        ) {
+            "modified"
+        } else {
+            continue;
+        };
+        files.push(GitFileChange {
+            path,
+            status: status.to_string(),
+        });
+    }
+
+    // Per-file diff stats via `git diff --numstat` semantics; we use libgit2.
+    let mut added_total = 0usize;
+    let mut removed_total = 0usize;
+    if let Ok(head) = repo.head().and_then(|h| h.peel_to_tree()) {
+        let mut diff_opts = git2::DiffOptions::new();
+        diff_opts.include_untracked(true).recurse_untracked_dirs(false);
+        if let Ok(diff) = repo.diff_tree_to_workdir_with_index(Some(&head), Some(&mut diff_opts)) {
+            let stats = diff.stats().ok();
+            if let Some(stats) = stats {
+                added_total = stats.insertions();
+                removed_total = stats.deletions();
+            }
+        }
+    }
+
+    Some(GitInfo {
+        available: true,
+        branch,
+        changes_added: added_total,
+        changes_removed: removed_total,
+        files,
+    })
 }
 
 async fn api_cancel(
@@ -426,16 +701,22 @@ enum AppError {
     BadRequest(String),
     NotFound,
     Internal(String),
+    /// 303 to the given path.
+    Redirect(String),
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, msg) = match self {
-            AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
-            AppError::NotFound => (StatusCode::NOT_FOUND, "not found".to_string()),
-            AppError::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, m),
-        };
-        (status, msg).into_response()
+        match self {
+            AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m).into_response(),
+            AppError::NotFound => (StatusCode::NOT_FOUND, "not found".to_string()).into_response(),
+            AppError::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, m).into_response(),
+            AppError::Redirect(path) => (
+                StatusCode::SEE_OTHER,
+                [("Location", path.as_str()), ("HX-Redirect", path.as_str())],
+            )
+                .into_response(),
+        }
     }
 }
 
@@ -446,8 +727,10 @@ fn render_index(
     models: &[jarvis_llm::ModelStatus],
     s: &WebState,
 ) -> String {
-    let task_rows = render_task_rows(tasks);
+    let project_groups = group_by_workdir(tasks);
+    let projects_html = render_projects_nav(&project_groups, None);
     let model_rows = render_model_rows(models);
+    let task_rows = render_task_rows(tasks);
     let uptime = s.started.elapsed().as_secs();
     format!(
         r##"<!doctype html>
@@ -458,32 +741,41 @@ fn render_index(
 <script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq" crossorigin="anonymous"></script>
 </head>
 <body>
-<div class="layout">
+<div class="shell">
+  <nav class="left">
+    <div class="brand">jarvis</div>
+    <a href="/" class="navitem active">⌂ Dashboard</a>
+    <a href="#new-task" class="navitem">＋ New task</a>
+    <div class="section-label">Projects</div>
+    {projects_html}
+    <div class="navfoot muted small">daemon v{ver} · {uptime}s</div>
+  </nav>
   <main class="main">
-    <h1>jarvis</h1>
-    <p class="muted">daemon v{ver} · up {uptime}s · {n_tasks} tasks visible</p>
-
-    <h2>New task</h2>
-    <form hx-post="/api/tasks" hx-encoding="application/x-www-form-urlencoded" class="newtask">
-      <textarea name="goal" rows="2" placeholder="Describe the goal — Enter to submit" required></textarea>
-      <div class="row">
-        <input name="workdir" placeholder="workdir (leave empty for cwd)">
-        <select name="sandbox"><option value="">sandbox: default</option><option>native</option><option>docker</option></select>
-        <select name="net_policy"><option value="">net: default</option><option>none</option><option>egress_only</option><option>full</option></select>
-        <select name="routing_policy"><option value="">routing: default</option><option>auto</option><option>local_only</option><option>remote_only</option></select>
-        <label class="checkbox"><input type="checkbox" name="use_worktree"> worktree</label>
-        <button type="submit">submit</button>
-      </div>
-    </form>
-
-    <h2>Tasks</h2>
+    <header class="task-header">
+      <h1>Tasks</h1>
+      <p class="muted">{n_tasks} task(s) · daemon up {uptime}s</p>
+    </header>
+    <section id="new-task" class="card">
+      <h2>New task</h2>
+      <form hx-post="/api/tasks" hx-encoding="application/x-www-form-urlencoded" class="newtask" hx-on::after-request="if (event.detail.successful) this.reset()">
+        <textarea name="goal" rows="2" placeholder="Describe the goal — Enter to submit" required></textarea>
+        <div class="row">
+          <input name="workdir" placeholder="workdir (leave empty for cwd)">
+          <select name="sandbox"><option value="">sandbox: default</option><option>native</option><option>docker</option></select>
+          <select name="net_policy"><option value="">net: default</option><option>none</option><option>egress_only</option><option>full</option></select>
+          <select name="routing_policy"><option value="">routing: default</option><option>auto</option><option>local_only</option><option>remote_only</option></select>
+          <label class="checkbox"><input type="checkbox" name="use_worktree"> worktree</label>
+          <button type="submit">submit</button>
+        </div>
+      </form>
+    </section>
     <table class="tasks" hx-get="/api/tasks?all=true&format=html" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML">
       <thead><tr><th>id</th><th>status</th><th>sandbox</th><th>goal</th><th>created</th></tr></thead>
       <tbody>{task_rows}</tbody>
     </table>
   </main>
-  <aside class="sidebar">
-    <h3>▼ Models</h3>
+  <aside class="right">
+    <div class="section-label">Models</div>
     <div class="models">{model_rows}</div>
   </aside>
 </div>
@@ -491,9 +783,79 @@ fn render_index(
         ver = env!("CARGO_PKG_VERSION"),
         uptime = uptime,
         n_tasks = tasks.len(),
+        projects_html = projects_html,
         task_rows = task_rows,
         model_rows = model_rows,
     )
+}
+
+fn group_by_workdir(tasks: &[TaskRecord]) -> Vec<(String, Vec<&TaskRecord>)> {
+    let mut by_dir: std::collections::HashMap<String, Vec<&TaskRecord>> = Default::default();
+    for t in tasks {
+        by_dir.entry(t.workdir.clone()).or_default().push(t);
+    }
+    let mut groups: Vec<(String, Vec<&TaskRecord>)> = by_dir.into_iter().collect();
+    for (_, v) in groups.iter_mut() {
+        v.sort_by_key(|t| std::cmp::Reverse(t.created_at));
+    }
+    groups.sort_by_key(|(_, v)| std::cmp::Reverse(v.first().map(|t| t.created_at).unwrap_or(0)));
+    groups
+}
+
+fn render_projects_nav(
+    groups: &[(String, Vec<&TaskRecord>)],
+    current_workdir: Option<&str>,
+) -> String {
+    let mut out = String::new();
+    if groups.is_empty() {
+        out.push_str(r#"<div class="muted small">no projects yet</div>"#);
+        return out;
+    }
+    for (workdir, tasks) in groups {
+        let short = workdir
+            .rsplit_once(['/', '\\'])
+            .map(|(_, n)| n.to_string())
+            .unwrap_or_else(|| workdir.clone());
+        let active = current_workdir
+            .map(|w| w == workdir.as_str())
+            .unwrap_or(false);
+        let open = if active { " open" } else { "" };
+        out.push_str(&format!(
+            r#"<details class="project{open}"><summary>📁 {short} <span class="muted small">{n}</span></summary>"#,
+            open = open,
+            short = html_escape(&short),
+            n = tasks.len(),
+        ));
+        // Roots only — display only top-level tasks (parent == null). Children are
+        // reachable via continuation. Cap at 12 entries per project.
+        for t in tasks.iter().filter(|t| t.parent.is_none()).take(12) {
+            let ago = relative_time(t.created_at);
+            out.push_str(&format!(
+                r#"<a href="/task/{id}" class="project-task t-{status}"><span class="goal">{goal}</span><span class="ago muted small">{ago}</span></a>"#,
+                id = t.id,
+                status = html_escape(&t.status.to_string()),
+                goal = html_escape(&clip(&t.goal, 64)),
+                ago = ago,
+            ));
+        }
+        out.push_str("</details>");
+    }
+    out
+}
+
+fn relative_time(micros: i64) -> String {
+    let now = chrono::Utc::now().timestamp_micros();
+    let dt = (now - micros).max(0);
+    let secs = dt / 1_000_000;
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else if secs < 86400 {
+        format!("{}h", secs / 3600)
+    } else {
+        format!("{}d", secs / 86400)
+    }
 }
 
 fn render_task_rows(tasks: &[TaskRecord]) -> String {
@@ -545,19 +907,23 @@ fn render_model_rows(models: &[jarvis_llm::ModelStatus]) -> String {
     s
 }
 
-fn render_task_page(task: &TaskRecord, chain: &[TaskRecord], events: &[EventRecord], _s: &WebState) -> String {
+fn render_task_page(
+    root: &TaskRecord,
+    leaf: &TaskRecord,
+    chain: &[TaskRecord],
+    events: &[EventRecord],
+    all_tasks: &[TaskRecord],
+) -> String {
     let blocks = render_event_blocks(events);
     let chain_label = if chain.len() > 1 {
-        format!(r#"<p class="muted">conversation chain · {} task(s)</p>"#, chain.len())
+        format!(r#"<p class="muted small">conversation · {} turns</p>"#, chain.len())
     } else {
         String::new()
     };
-    let parent_marker = if task.parent.is_some() {
-        r#"<span class="badge">continuation</span>"#
-    } else {
-        ""
-    };
     let last_id = events.last().map(|e| e.id.0).unwrap_or(0);
+    // Project nav (left) — re-rendered with the current workdir highlighted.
+    let projects = group_by_workdir(all_tasks);
+    let projects_html = render_projects_nav(&projects, Some(&root.workdir));
     format!(
         r##"<!doctype html>
 <html lang="en"><head>
@@ -565,71 +931,138 @@ fn render_task_page(task: &TaskRecord, chain: &[TaskRecord], events: &[EventReco
 <title>jarvis · {short}</title>
 <style>{CSS}</style>
 <script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/htmx-ext-sse@2.2.2" crossorigin="anonymous"></script>
 </head>
 <body>
-<div class="layout">
+<div class="shell">
+  <nav class="left">
+    <div class="brand">jarvis</div>
+    <a href="/" class="navitem">⌂ Dashboard</a>
+    <a href="#continue" class="navitem">＋ Continue</a>
+    <div class="section-label">Projects</div>
+    {projects_html}
+  </nav>
   <main class="main">
-    <p><a href="/">← all tasks</a></p>
-    <h1>{goal} {parent_marker}</h1>
-    <p class="muted">{status} · {backend} · {id}</p>
+    <header class="task-header">
+      <h1>{goal}</h1>
+      <p class="muted small">{status} · {backend} · {short_id} {chain_label_inline}</p>
+    </header>
     {chain_label}
-    <div class="events" id="events" hx-get="/api/events?task={id}&since={last_id}&format=html" hx-trigger="every 1.5s" hx-swap="beforeend">
+    <div class="events"
+         id="events"
+         hx-ext="sse"
+         sse-connect="/api/events/stream?task={root_id}&since={last_id}"
+         sse-swap="event"
+         hx-swap="beforeend">
       {blocks}
     </div>
-    <form hx-post="/api/tasks" class="continue">
-      <input type="hidden" name="parent_task_id" value="{id}">
-      <textarea name="goal" rows="2" placeholder="Continue the conversation… (Enter)"></textarea>
-      <button type="submit">send</button>
+    <form id="continue" class="continue"
+          hx-post="/api/tasks"
+          hx-headers='{{"HX-Request": "true"}}'
+          hx-swap="none"
+          hx-on::after-request="if (event.detail.successful) this.reset()">
+      <input type="hidden" name="parent_task_id" value="{leaf_id}">
+      <textarea name="goal" rows="2" placeholder="Ask for follow-up changes… (Enter to send)" required></textarea>
+      <div class="continue-actions">
+        <button type="submit" title="Send">↑ send</button>
+      </div>
     </form>
   </main>
-  <aside class="sidebar">
-    <h3>▼ Task</h3>
-    <div class="kv"><span>id</span><b>{short}</b></div>
+  <aside class="right">
+    <div class="section-label">Git</div>
+    <div id="git-card" class="git-card"
+         hx-get="/api/git?workdir={workdir_q}"
+         hx-trigger="load, every 8s"
+         hx-target="this"
+         hx-swap="innerHTML">
+      <div class="muted small">loading…</div>
+    </div>
+    <div class="section-label">Task</div>
+    <div class="kv"><span>id</span><b>{short_id}</b></div>
     <div class="kv"><span>status</span><b class="s-{status}">{status}</b></div>
     {sandbox_kv}
-    <h3>▼ Workdir</h3>
-    <div class="muted small">{workdir}</div>
+    <div class="section-label">Workdir</div>
+    <div class="muted small monoline">{workdir}</div>
     {worktree_section}
-    <h3>▼ Actions</h3>
-    <button hx-post="/api/tasks/{id}/cancel" hx-confirm="Cancel this task?">cancel</button>
+    <div class="section-label">Actions</div>
+    <button class="ghost" hx-post="/api/tasks/{leaf_id}/cancel" hx-confirm="Cancel this task?">cancel current</button>
   </aside>
 </div>
+<script>
+// HTMX is configured to ignore SSE 'event' name unless explicitly subscribed.
+// Auto-scroll the events container to the bottom on every swap.
+document.body.addEventListener('htmx:afterSwap', (e) => {{
+  const ev = document.getElementById('events');
+  if (ev && e.target && (e.target === ev || ev.contains(e.target))) {{
+    ev.scrollTop = ev.scrollHeight;
+  }}
+}});
+// Clear the textarea once submitted, then refocus.
+document.body.addEventListener('htmx:afterRequest', (e) => {{
+  if (e.target.id === 'continue' && e.detail.successful) {{
+    e.target.querySelector('textarea').focus();
+  }}
+}});
+</script>
 </body></html>"##,
-        short = short(&task.id.to_string()),
-        goal = html_escape(&task.goal),
-        parent_marker = parent_marker,
-        status = html_escape(&task.status.to_string()),
+        short = short(&root.id.to_string()),
+        short_id = short(&root.id.to_string()),
+        goal = html_escape(&root.goal),
+        status = html_escape(&leaf.status.to_string()),
         backend = html_escape(&{
-            if task.sandbox.is_empty() {
+            if leaf.sandbox.is_empty() {
                 "-".to_string()
             } else {
-                format!("{}/{}", task.sandbox, task.net_policy)
+                format!("{}/{}", leaf.sandbox, leaf.net_policy)
             }
         }),
-        id = task.id,
+        root_id = root.id,
+        leaf_id = leaf.id,
         last_id = last_id,
         chain_label = chain_label,
+        chain_label_inline = if chain.len() > 1 {
+            format!("· {} turns", chain.len())
+        } else {
+            String::new()
+        },
         blocks = blocks,
-        sandbox_kv = if task.sandbox.is_empty() {
+        projects_html = projects_html,
+        sandbox_kv = if leaf.sandbox.is_empty() {
             String::new()
         } else {
             format!(
-                r#"<h3>▼ Sandbox</h3><div class="kv"><span>backend</span><b>{}</b></div><div class="kv"><span>network</span><b>{}</b></div>"#,
-                html_escape(&task.sandbox),
-                html_escape(&task.net_policy)
+                r#"<div class="section-label">Sandbox</div><div class="kv"><span>backend</span><b>{}</b></div><div class="kv"><span>network</span><b>{}</b></div>"#,
+                html_escape(&leaf.sandbox),
+                html_escape(&leaf.net_policy)
             )
         },
-        workdir = html_escape(&task.workdir),
-        worktree_section = if task.worktree_path.is_empty() || task.worktree_path == task.workdir {
+        workdir = html_escape(&root.workdir),
+        workdir_q = urlencode(&root.workdir),
+        worktree_section = if leaf.worktree_path.is_empty() || leaf.worktree_path == leaf.workdir {
             String::new()
         } else {
             format!(
-                r#"<h3>▼ Worktree</h3><div class="muted small">{}</div><div class="kv"><span>branch</span><b>{}</b></div>"#,
-                html_escape(&task.worktree_path),
-                html_escape(&task.worktree_branch),
+                r#"<div class="section-label">Worktree</div><div class="muted small monoline">{}</div><div class="kv"><span>branch</span><b>{}</b></div>"#,
+                html_escape(&leaf.worktree_path),
+                html_escape(&leaf.worktree_branch),
             )
         },
     )
+}
+
+fn urlencode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => out.push(c),
+            _ => {
+                for b in c.to_string().as_bytes() {
+                    out.push_str(&format!("%{b:02X}"));
+                }
+            }
+        }
+    }
+    out
 }
 
 fn render_event_blocks(events: &[EventRecord]) -> String {
@@ -667,7 +1100,16 @@ fn render_event_blocks(events: &[EventRecord]) -> String {
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
                 let glyph = if is_error { r#"<span class="err">✗</span>"# } else { r#"<span class="ok">✓</span>"# };
-                format!("{glyph} {}", html_escape(summary))
+                // For fs_write, expose the diff as a collapsible card.
+                let diff_card = ev
+                    .payload
+                    .get("data")
+                    .and_then(render_diff_card);
+                if let Some(card) = diff_card {
+                    format!("{glyph} {}{}", html_escape(summary), card)
+                } else {
+                    format!("{glyph} {}", html_escape(summary))
+                }
             }
             "error" => {
                 let msg = ev
@@ -706,6 +1148,45 @@ fn render_event_blocks(events: &[EventRecord]) -> String {
     s
 }
 
+/// If `data` looks like an fs_write payload, return a `<details>` diff card.
+fn render_diff_card(data: &serde_json::Value) -> Option<String> {
+    let path = data.get("path")?.as_str()?;
+    let added = data.get("lines_added")?.as_u64()?;
+    let removed = data.get("lines_removed")?.as_u64()?;
+    let is_new = data.get("is_new").and_then(|v| v.as_bool()).unwrap_or(false);
+    let diff = data
+        .get("diff_unified")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let badge = if is_new { "new" } else { "edit" };
+    let body = colorize_unified(diff);
+    Some(format!(
+        r#"<details class="diff"><summary><span class="badge {badge_cls}">{badge}</span> <code>{path}</code> <span class="add">+{added}</span> <span class="rem">-{removed}</span></summary><pre class="diff-body">{body}</pre></details>"#,
+        badge_cls = badge,
+        path = html_escape(path),
+        body = body,
+    ))
+}
+
+fn colorize_unified(diff: &str) -> String {
+    let mut out = String::with_capacity(diff.len());
+    for line in diff.lines() {
+        let (class, _) = if line.starts_with('+') {
+            ("add", "+")
+        } else if line.starts_with('-') {
+            ("rem", "-")
+        } else {
+            ("ctx", " ")
+        };
+        out.push_str(&format!(
+            r#"<span class="d-{class}">{}</span>{}"#,
+            html_escape(line),
+            "\n"
+        ));
+    }
+    out
+}
+
 fn short(id: &str) -> String {
     id.split('-').next().unwrap_or(id).to_string()
 }
@@ -738,8 +1219,11 @@ fn html_escape(s: &str) -> String {
 
 const CSS: &str = r#"
 :root {
-  --bg: #0e0e10;
-  --fg: #c4c4c4;
+  --bg: #0a0a0c;
+  --panel: #111114;
+  --panel-2: #15151a;
+  --line: #1f1f25;
+  --fg: #c8c8c8;
   --dim: #808080;
   --fade: #505050;
   --heading: #e6dcc8;
@@ -749,37 +1233,79 @@ const CSS: &str = r#"
   --warn: #dcaf5a;
   --assistant: #b4c8dc;
   --link: #d4b478;
+  --add-bg: rgba(140,180,110,0.10);
+  --rem-bg: rgba(220,110,90,0.10);
+  --add-fg: #b6dc94;
+  --rem-fg: #f0a292;
 }
 * { box-sizing: border-box; }
-html, body { background: var(--bg); color: var(--fg); margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.55; }
+html, body { background: var(--bg); color: var(--fg); margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.55; height: 100%; }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
-h1 { font-size: 18px; font-weight: 600; color: var(--heading); margin: 1em 0 0.4em; }
-h2 { font-size: 14px; color: var(--heading); margin: 1.6em 0 0.5em; font-weight: 600; }
-h3 { font-size: 12px; color: var(--heading); margin: 1.2em 0 0.5em; font-weight: 600; text-transform: none; }
+code { background: var(--panel-2); padding: 0.05em 0.3em; border-radius: 3px; font-size: 0.95em; color: var(--fg); }
+h1 { font-size: 17px; font-weight: 600; color: var(--heading); margin: 0 0 0.4em; }
+h2 { font-size: 13px; color: var(--heading); margin: 1.4em 0 0.5em; font-weight: 600; }
 p { margin: 0.3em 0; }
 .muted { color: var(--dim); }
 .small { font-size: 12px; }
-.layout { display: grid; grid-template-columns: 1fr 280px; min-height: 100vh; max-width: 1400px; margin: 0 auto; padding: 1em 1.5em; gap: 1.5em; }
-.main { min-width: 0; }
-.sidebar { border-left: 1px solid #1c1c1f; padding-left: 1.2em; }
-table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
-table.tasks th { text-align: left; color: var(--dim); font-weight: 400; padding: 0.3em 0.5em; border-bottom: 1px solid #1c1c1f; }
-table.tasks td { padding: 0.3em 0.5em; vertical-align: top; }
-table.tasks tr:hover td { background: #15151a; }
+.monoline { word-break: break-all; overflow-wrap: anywhere; }
+
+/* 3-column shell */
+.shell { display: grid; grid-template-columns: 260px minmax(0, 1fr) 320px; min-height: 100vh; }
+.left { background: var(--panel); border-right: 1px solid var(--line); padding: 1em 0.8em; overflow-y: auto; }
+.main { padding: 1.4em 2em; min-width: 0; }
+.right { background: var(--panel); border-left: 1px solid var(--line); padding: 1em 0.8em; overflow-y: auto; }
+
+/* Left nav */
+.brand { font-weight: 700; color: var(--heading); padding: 0.2em 0.4em 1em; font-size: 14px; }
+.navitem { display: block; padding: 0.35em 0.5em; color: var(--fg); border-radius: 4px; }
+.navitem:hover { background: var(--panel-2); text-decoration: none; }
+.navitem.active { background: var(--panel-2); color: var(--heading); }
+.section-label { color: var(--fade); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; margin: 1.2em 0.5em 0.4em; font-weight: 600; }
+details.project > summary { padding: 0.3em 0.5em; cursor: pointer; border-radius: 4px; list-style: none; color: var(--fg); }
+details.project > summary::-webkit-details-marker { display: none; }
+details.project > summary:hover { background: var(--panel-2); }
+details.project[open] > summary { color: var(--heading); }
+.project-task { display: flex; justify-content: space-between; align-items: baseline; padding: 0.2em 0.5em 0.2em 1.4em; color: var(--dim); border-radius: 4px; gap: 0.5em; }
+.project-task:hover { background: var(--panel-2); color: var(--fg); text-decoration: none; }
+.project-task .goal { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-task .ago { flex-shrink: 0; }
+.project-task.t-running .goal { color: var(--warn); }
+.project-task.t-completed .goal { color: var(--ok); }
+.project-task.t-failed .goal { color: var(--err); }
+.navfoot { padding: 1em 0.4em; border-top: 1px solid var(--line); margin-top: 1em; }
+
+/* Main */
+.task-header { margin-bottom: 1em; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1em; margin: 0.6em 0; }
+table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 1em; }
+table.tasks th { text-align: left; color: var(--fade); font-weight: 400; padding: 0.4em 0.5em; border-bottom: 1px solid var(--line); }
+table.tasks td { padding: 0.4em 0.5em; vertical-align: top; }
+table.tasks tr:hover td { background: var(--panel-2); }
 tr.t-completed td:nth-child(2) { color: var(--ok); }
 tr.t-running td:nth-child(2) { color: var(--warn); }
 tr.t-failed td:nth-child(2) { color: var(--err); }
 tr.t-cancelled td:nth-child(2) { color: var(--fade); }
-form.newtask textarea, form.continue textarea { width: 100%; background: #15151a; color: var(--fg); border: 1px solid #2a2a30; padding: 0.5em 0.6em; font-family: inherit; font-size: 13px; resize: vertical; }
+
+/* Forms */
+form.newtask textarea, form.continue textarea { width: 100%; background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); padding: 0.6em 0.7em; font-family: inherit; font-size: 13px; resize: vertical; border-radius: 4px; }
+form.newtask textarea:focus, form.continue textarea:focus { outline: none; border-color: var(--accent); }
 form .row { display: flex; gap: 0.5em; margin-top: 0.5em; flex-wrap: wrap; align-items: center; }
-form input[type=text], form input:not([type]), form select { background: #15151a; color: var(--fg); border: 1px solid #2a2a30; padding: 0.35em 0.5em; font-family: inherit; font-size: 12px; }
-form button { background: var(--accent); color: #1a1408; border: none; padding: 0.45em 1em; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+form input[type=text], form input:not([type]), form select { background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); padding: 0.35em 0.5em; font-family: inherit; font-size: 12px; border-radius: 3px; }
+form button { background: var(--accent); color: #1a1408; border: none; padding: 0.45em 1em; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 4px; }
 form button:hover { background: #e0c890; }
+form button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+form button.ghost:hover { background: var(--panel-2); color: var(--err); }
 .checkbox { display: flex; gap: 0.3em; align-items: center; color: var(--dim); font-size: 12px; }
-.events { margin: 0.6em 0; }
-.evt { display: grid; grid-template-columns: 70px 110px 1fr; gap: 0.5em; padding: 0.15em 0.2em; align-items: baseline; }
-.evt:hover { background: #15151a; }
+
+/* Continue (follow-up) */
+form.continue { position: sticky; bottom: 0; background: var(--bg); padding: 0.6em 0; border-top: 1px solid var(--line); margin-top: 1em; }
+.continue-actions { display: flex; justify-content: flex-end; margin-top: 0.4em; }
+
+/* Events stream */
+.events { display: flex; flex-direction: column; gap: 0.15em; max-height: calc(100vh - 250px); overflow-y: auto; padding-right: 0.5em; }
+.evt { display: grid; grid-template-columns: 70px 110px 1fr; gap: 0.5em; padding: 0.2em 0.3em; align-items: baseline; border-radius: 4px; }
+.evt:hover { background: var(--panel-2); }
 .evt .ts { font-size: 11px; }
 .evt .kind { font-size: 11px; }
 .evt.evt-decision .body { color: var(--assistant); font-style: italic; }
@@ -787,19 +1313,52 @@ form button:hover { background: #e0c890; }
 .evt.evt-tool_call .args { color: var(--dim); }
 .evt.evt-tool_result .body { color: var(--dim); }
 .evt.evt-verdict .body { font-weight: 600; }
+
+/* Diff card */
+details.diff { display: inline-block; margin-left: 0.6em; vertical-align: baseline; }
+details.diff > summary { cursor: pointer; padding: 0.1em 0.5em; background: var(--panel-2); border-radius: 4px; border: 1px solid var(--line); list-style: none; font-size: 12px; }
+details.diff > summary::-webkit-details-marker { display: none; }
+details.diff > summary:hover { border-color: var(--accent); }
+details.diff .badge { padding: 0.05em 0.4em; font-size: 10px; font-weight: 600; border-radius: 3px; margin-right: 0.3em; text-transform: uppercase; }
+details.diff .badge.new { background: var(--add-bg); color: var(--add-fg); }
+details.diff .badge.edit { background: rgba(212,180,120,0.15); color: var(--accent); }
+details.diff[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; }
+pre.diff-body { background: var(--panel-2); border: 1px solid var(--line); border-top: none; padding: 0.6em 0.8em; font-size: 12px; line-height: 1.45; overflow-x: auto; margin: 0; border-radius: 0 0 4px 4px; max-width: 100%; }
+.d-add { background: var(--add-bg); color: var(--add-fg); display: block; }
+.d-rem { background: var(--rem-bg); color: var(--rem-fg); display: block; }
+.d-ctx { color: var(--dim); display: block; }
+.add { color: var(--add-fg); }
+.rem { color: var(--rem-fg); }
 .ok { color: var(--ok); }
 .err { color: var(--err); }
 .warn { color: var(--warn); }
-.kv { display: flex; justify-content: space-between; padding: 0.15em 0; font-size: 12px; }
+
+/* Sidebar (right) */
+.kv { display: flex; justify-content: space-between; padding: 0.2em 0.4em; font-size: 12px; }
 .kv span { color: var(--fade); }
 .kv b { color: var(--fg); font-weight: 400; }
 .s-running { color: var(--warn); }
 .s-completed { color: var(--ok); }
 .s-failed { color: var(--err); }
 .s-cancelled { color: var(--fade); }
-.models .model { padding: 0.15em 0; font-size: 12px; }
+.models .model { padding: 0.2em 0.4em; font-size: 12px; }
 .dot.ok { color: var(--ok); }
 .dot.err { color: var(--err); }
 .dot.off { color: var(--fade); }
-.badge { background: var(--accent); color: #1a1408; padding: 0.05em 0.5em; font-size: 11px; font-weight: 600; vertical-align: middle; }
+
+.git-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0.6em; margin-bottom: 0.4em; }
+.git-file { padding: 0.15em 0.2em; font-size: 12px; display: flex; gap: 0.4em; align-items: baseline; }
+.git-tag { display: inline-block; width: 16px; text-align: center; font-size: 10px; font-weight: 600; padding: 0.05em 0.2em; border-radius: 2px; }
+.git-tag.add { background: var(--add-bg); color: var(--add-fg); }
+.git-tag.rem { background: var(--rem-bg); color: var(--rem-fg); }
+.git-tag.mod { background: rgba(220,175,90,0.15); color: var(--warn); }
+
+@media (max-width: 1200px) {
+  .shell { grid-template-columns: 220px 1fr; }
+  .right { display: none; }
+}
+@media (max-width: 800px) {
+  .shell { grid-template-columns: 1fr; }
+  .left { display: none; }
+}
 "#;
