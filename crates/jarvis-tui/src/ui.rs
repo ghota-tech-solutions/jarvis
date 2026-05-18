@@ -145,10 +145,12 @@ fn push_event_lines(
         "decision" => {
             let txt = thought_of(&ev.payload_json).unwrap_or_default();
             if !txt.is_empty() {
-                out.push(Line::from(vec![Span::styled(
-                    txt,
+                push_markdown_lines(
+                    out,
+                    &txt,
+                    t,
                     Style::default().fg(t.assistant).add_modifier(Modifier::ITALIC),
-                )]));
+                );
             }
         }
         "tool_call" => {
@@ -199,10 +201,13 @@ fn push_event_lines(
                 _ => ("■", t.warn),
             };
             out.push(Line::from(""));
-            out.push(Line::from(vec![
-                Span::styled(format!("{glyph} {verdict} "), Style::default().fg(color).add_modifier(Modifier::BOLD)),
-                Span::styled(msg, Style::default().fg(t.body)),
-            ]));
+            out.push(Line::from(vec![Span::styled(
+                format!("{glyph} {verdict}"),
+                Style::default().fg(color).add_modifier(Modifier::BOLD),
+            )]));
+            if !msg.is_empty() {
+                push_markdown_lines(out, &msg, t, Style::default().fg(t.body));
+            }
         }
         "heartbeat" => {
             // Render only step boundaries to keep the log uncluttered.
@@ -648,6 +653,180 @@ fn verdict_summary(json: &str) -> (String, String) {
         .unwrap_or("")
         .to_string();
     (verdict, msg)
+}
+
+/// Render a markdown source into ratatui Lines using the given base style for
+/// plain text. Inline `**bold**` / `*italic*` / `` `code` `` are recognised plus
+/// `#` headings, list bullets, and triple-backtick fenced blocks.
+fn push_markdown_lines(out: &mut Vec<Line<'static>>, src: &str, t: &Theme, base: Style) {
+    let mut in_code = false;
+    for raw in src.lines() {
+        let line = raw.trim_end_matches('\r');
+        let trimmed = line.trim_start();
+
+        // Code fence toggle.
+        if let Some(rest) = trimmed.strip_prefix("```") {
+            in_code = !in_code;
+            let _ = rest;
+            continue;
+        }
+        if in_code {
+            out.push(Line::from(vec![Span::styled(
+                line.to_string(),
+                Style::default().fg(t.accent),
+            )]));
+            continue;
+        }
+
+        // Heading: # / ## / ### …
+        if let Some(rest) = trimmed.strip_prefix("# ") {
+            out.push(Line::from(parse_inline(rest, t, Style::default()
+                .fg(t.heading).add_modifier(Modifier::BOLD))));
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("## ") {
+            out.push(Line::from(parse_inline(rest, t, Style::default()
+                .fg(t.heading).add_modifier(Modifier::BOLD))));
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("### ") {
+            out.push(Line::from(parse_inline(rest, t, Style::default()
+                .fg(t.heading).add_modifier(Modifier::BOLD))));
+            continue;
+        }
+
+        // Bullet list.
+        if let Some(rest) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        {
+            let mut spans = vec![Span::styled("  • ".to_string(), Style::default().fg(t.accent))];
+            spans.extend(parse_inline(rest, t, base));
+            out.push(Line::from(spans));
+            continue;
+        }
+
+        // Numbered list (1. / 2. / …).
+        if let Some((num, after)) = parse_numbered_marker(trimmed) {
+            let mut spans = vec![Span::styled(
+                format!("  {num}. "),
+                Style::default().fg(t.accent),
+            )];
+            spans.extend(parse_inline(after, t, base));
+            out.push(Line::from(spans));
+            continue;
+        }
+
+        // Blank line → preserve as a visual gap.
+        if trimmed.is_empty() {
+            out.push(Line::from(""));
+            continue;
+        }
+
+        // Default paragraph line.
+        out.push(Line::from(parse_inline(line, t, base)));
+    }
+}
+
+fn parse_numbered_marker(s: &str) -> Option<(String, &str)> {
+    let mut idx = 0;
+    let bytes = s.as_bytes();
+    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    if idx == 0 {
+        return None;
+    }
+    if idx >= bytes.len() || bytes[idx] != b'.' {
+        return None;
+    }
+    if idx + 1 >= bytes.len() || bytes[idx + 1] != b' ' {
+        return None;
+    }
+    Some((s[..idx].to_string(), &s[idx + 2..]))
+}
+
+/// Inline parsing — handles **bold**, *italic*, `code`. Greedy on `**` first.
+fn parse_inline(s: &str, t: &Theme, base: Style) -> Vec<Span<'static>> {
+    let mut out: Vec<Span<'static>> = Vec::new();
+    let bytes = s.as_bytes();
+    let mut cursor = 0;
+    let mut buf = String::new();
+    let push_buf = |buf: &mut String, out: &mut Vec<Span<'static>>, style: Style| {
+        if !buf.is_empty() {
+            out.push(Span::styled(std::mem::take(buf), style));
+        }
+    };
+    while cursor < bytes.len() {
+        // **bold**
+        if bytes[cursor] == b'*'
+            && cursor + 1 < bytes.len()
+            && bytes[cursor + 1] == b'*'
+            && let Some(end) = find_marker(&bytes[cursor + 2..], b"**")
+        {
+            push_buf(&mut buf, &mut out, base);
+            let inner = &s[cursor + 2..cursor + 2 + end];
+            out.push(Span::styled(
+                inner.to_string(),
+                base.add_modifier(Modifier::BOLD).fg(t.heading),
+            ));
+            cursor += 2 + end + 2;
+            continue;
+        }
+        // `code`
+        if bytes[cursor] == b'`'
+            && let Some(end) = find_marker(&bytes[cursor + 1..], b"`")
+        {
+            push_buf(&mut buf, &mut out, base);
+            let inner = &s[cursor + 1..cursor + 1 + end];
+            out.push(Span::styled(
+                inner.to_string(),
+                Style::default().fg(t.accent),
+            ));
+            cursor += 1 + end + 1;
+            continue;
+        }
+        // *italic*
+        if bytes[cursor] == b'*'
+            && (cursor == 0 || bytes[cursor - 1] != b'*')
+            && cursor + 1 < bytes.len()
+            && bytes[cursor + 1] != b'*'
+            && let Some(end) = find_marker(&bytes[cursor + 1..], b"*")
+            && end > 0
+        {
+            push_buf(&mut buf, &mut out, base);
+            let inner = &s[cursor + 1..cursor + 1 + end];
+            out.push(Span::styled(
+                inner.to_string(),
+                base.add_modifier(Modifier::ITALIC),
+            ));
+            cursor += 1 + end + 1;
+            continue;
+        }
+        buf.push(bytes[cursor] as char);
+        cursor += 1;
+    }
+    if !buf.is_empty() {
+        out.push(Span::styled(buf, base));
+    }
+    if out.is_empty() {
+        out.push(Span::styled(String::new(), base));
+    }
+    out
+}
+
+fn find_marker(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return None;
+    }
+    let mut i = 0;
+    while i + needle.len() <= hay.len() {
+        if &hay[i..i + needle.len()] == needle {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
 }
 
 struct DiffPayload {

@@ -1226,7 +1226,7 @@ fn render_event_blocks(events: &[EventRecord]) -> String {
                 .payload
                 .get("thought")
                 .and_then(|v| v.as_str())
-                .map(html_escape)
+                .map(render_markdown)
                 .unwrap_or_default(),
             "tool_call" => {
                 let tool = ev.payload.get("tool").and_then(|v| v.as_str()).unwrap_or("?");
@@ -1277,7 +1277,7 @@ fn render_event_blocks(events: &[EventRecord]) -> String {
                     "fail" => "err",
                     _ => "warn",
                 };
-                format!(r#"<span class="{cls}">■ {v}</span> {}"#, html_escape(m))
+                format!(r#"<span class="{cls}">■ {v}</span> {}"#, render_markdown(m))
             }
             "heartbeat" => {
                 let step = ev.payload.get("step").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -1351,6 +1351,28 @@ fn clip(s: &str, max: usize) -> String {
         t
     }
 }
+/// Render markdown into safe HTML. We use pulldown-cmark with strict options:
+/// raw HTML in the source is escaped, only structural markdown is interpreted.
+fn render_markdown(src: &str) -> String {
+    use pulldown_cmark::{html, Options, Parser};
+    let mut opts = Options::empty();
+    opts.insert(Options::ENABLE_STRIKETHROUGH);
+    opts.insert(Options::ENABLE_TABLES);
+    opts.insert(Options::ENABLE_TASKLISTS);
+    let parser = Parser::new_ext(src, opts);
+    // Drop any raw HTML / inline HTML events so untrusted content can't break out.
+    let safe = parser.filter(|event| {
+        !matches!(
+            event,
+            pulldown_cmark::Event::Html(_) | pulldown_cmark::Event::InlineHtml(_)
+        )
+    });
+    let mut out = String::with_capacity(src.len() + 32);
+    html::push_html(&mut out, safe);
+    // Wrap in a span so the CSS can target `.md *` cleanly.
+    format!(r#"<span class="md">{out}</span>"#)
+}
+
 fn html_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -1459,6 +1481,29 @@ form.continue { position: sticky; bottom: 0; background: var(--bg); padding: 0.6
 .evt .ts { font-size: 11px; }
 .evt .kind { font-size: 11px; }
 .evt.evt-decision .body { color: var(--assistant); font-style: italic; }
+
+/* Inline markdown rendering inside decision/verdict bodies */
+.md p { display: inline; margin: 0; }
+.md p + p { display: block; margin-top: 0.4em; }
+.md strong { color: var(--heading); font-weight: 700; }
+.md em { font-style: italic; }
+.md code { background: rgba(212,180,120,0.10); color: var(--accent); padding: 0.05em 0.35em; border-radius: 3px; font-size: 0.95em; }
+.md pre { background: var(--panel-2); border: 1px solid var(--line); padding: 0.6em 0.8em; border-radius: 4px; overflow-x: auto; margin: 0.5em 0; }
+.md pre code { background: transparent; color: var(--fg); padding: 0; font-size: 12px; }
+.md h1, .md h2, .md h3, .md h4 { color: var(--heading); margin: 0.6em 0 0.3em; font-weight: 700; font-style: normal; display: block; }
+.md h1 { font-size: 16px; }
+.md h2 { font-size: 15px; }
+.md h3, .md h4 { font-size: 14px; }
+.md ul, .md ol { margin: 0.3em 0 0.3em 1.2em; padding: 0; display: block; font-style: normal; }
+.md ul li, .md ol li { margin: 0.1em 0; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md blockquote { border-left: 2px solid var(--line); margin: 0.4em 0; padding: 0.1em 0.8em; color: var(--dim); display: block; font-style: normal; }
+.md a { color: var(--link); text-decoration: underline; }
+.md hr { border: none; border-top: 1px solid var(--line); margin: 0.8em 0; }
+.md table { border-collapse: collapse; margin: 0.5em 0; display: block; }
+.md th, .md td { border: 1px solid var(--line); padding: 0.3em 0.6em; }
+.md th { background: var(--panel-2); color: var(--heading); }
 .evt.evt-tool_call .tool { color: var(--accent); }
 .evt.evt-tool_call .args { color: var(--dim); }
 .evt.evt-tool_result .body { color: var(--dim); }
