@@ -4,6 +4,7 @@ import { getToken } from '~/lib/env';
 import SidebarLeft from '~/components/SidebarLeft';
 import SidebarRight from '~/components/SidebarRight';
 import HelpOverlay from '~/components/HelpOverlay';
+import CostHud from '~/features/hud/CostHud';
 import { bindThemeToDom, toggleTheme, useTheme } from '~/lib/stores/theme';
 import { useGlobalShortcuts, setHelpOpenSig } from '~/lib/stores/shortcuts';
 import { useTaskNotifications } from '~/lib/stores/notifications';
@@ -61,6 +62,7 @@ const App: ParentComponent = (props) => {
       <aside class="sidebar-right">
         <SidebarRight expanded={isTaskRoute()} />
       </aside>
+      <CostHud />
       <HelpOverlay />
     </div>
   );
