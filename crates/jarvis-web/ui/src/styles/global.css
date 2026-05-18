@@ -534,3 +534,89 @@ kbd {
   border-left: 1px solid var(--border);
   padding-left: 1rem;
 }
+
+/* --- Diff-by-intent ----------------------------------------------- */
+
+.phase-group {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.phase-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.phase-decision {
+  margin: 0.5rem 0 0.7rem 0;
+  color: var(--assistant);
+  font-style: italic;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.phase-files {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.7rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.phase-file-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--body);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.phase-file-toggle:hover {
+  border-color: var(--accent);
+}
+
+.phase-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.phase-actions .input { flex: 1 1 240px; }
+
+.merge-host {
+  max-height: 480px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  margin: 0.4rem 0 0.2rem 0;
+  font-size: 12px;
+}
+
+.merge-host .cm-mergeView { background: var(--bg); }
+.merge-host .cm-editor { background: var(--bg); color: var(--body); }
+.merge-host .cm-gutters { background: var(--bg-elev); border-right-color: var(--border); }
+.merge-host .cm-deletedLine { background: rgba(220, 110, 90, 0.12); }
+.merge-host .cm-insertedLine { background: rgba(140, 180, 110, 0.12); }
+.merge-host .cm-changedLineGutter { background: rgba(212, 180, 120, 0.18); }
+
+.orphan-files {
+  margin-top: 1rem;
+  font-size: 12px;
+}
+
+.orphan-files ul {
+  margin: 0.3rem 0 0 1rem;
+  padding: 0;
+}

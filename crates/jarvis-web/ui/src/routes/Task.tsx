@@ -5,6 +5,7 @@ import { taskQuery, timelineQuery, qkTaskList } from '~/lib/api/queries';
 import { jarvis } from '~/lib/api/client';
 import Transcript from '~/components/Transcript';
 import Timeline from '~/features/timeline/Timeline';
+import DiffByIntent from '~/features/diff/DiffByIntent';
 
 const Task: Component = () => {
   const params = useParams<{ id: string }>();
@@ -15,7 +16,7 @@ const Task: Component = () => {
 
   const [followup, setFollowup] = createSignal('');
   const [submitting, setSubmitting] = createSignal(false);
-  const [view, setView] = createSignal<'timeline' | 'transcript' | 'both'>('both');
+  const [view, setView] = createSignal<'timeline' | 'transcript' | 'both' | 'diff'>('both');
   const [selectedEvtId, setSelectedEvtId] = createSignal(0);
 
   const scrollToEvent = (id: number) => {
@@ -116,8 +117,15 @@ const Task: Component = () => {
                 >
                   transcript
                 </button>
+                <button
+                  type="button"
+                  class={`btn ghost ${view() === 'diff' ? 'active' : ''}`}
+                  onClick={() => setView('diff')}
+                >
+                  diff
+                </button>
               </div>
-              <Show when={view() !== 'transcript'}>
+              <Show when={view() === 'both' || view() === 'timeline'}>
                 <Timeline
                   events={events()}
                   spans={spans()}
@@ -127,8 +135,11 @@ const Task: Component = () => {
                   onSelect={scrollToEvent}
                 />
               </Show>
-              <Show when={view() !== 'timeline'}>
+              <Show when={view() === 'both' || view() === 'transcript'}>
                 <Transcript events={events()} selectedEvtId={selectedEvtId()} />
+              </Show>
+              <Show when={view() === 'diff'}>
+                <DiffByIntent taskId={params.id} />
               </Show>
             </Show>
 

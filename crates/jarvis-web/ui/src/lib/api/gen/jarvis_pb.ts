@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file jarvis.proto.
  */
 export const file_jarvis: GenFile = /*@__PURE__*/
-  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLPAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCSIPCg1TdGF0dXNSZXF1ZXN0InYKDERhZW1vblN0YXR1cxIPCgd2ZXJzaW9uGAEgASgJEhYKDnVwdGltZV9zZWNvbmRzGAIgASgDEiYKBm1vZGVscxgDIAMoCzIWLmphcnZpcy52MS5Nb2RlbFN0YXR1cxIVCg1ydW5uaW5nX3Rhc2tzGAQgASgNIvoBCgtNb2RlbFN0YXR1cxIMCgRuYW1lGAEgASgJEgwKBGtpbmQYAiABKAkSEAoIbW9kZWxfaWQYAyABKAkSEAoIcHJpb3JpdHkYBCABKAUSDgoGb25saW5lGAUgASgIEhMKC3F1YXJhbnRpbmVkGAYgASgIEiAKGHF1YXJhbnRpbmVkX3VudGlsX21pY3JvcxgHIAEoAxIaChJmYWlsdXJlc19pbl93aW5kb3cYCCABKA0SDwoHY3R4X2xlbhgJIAEoDRISCgp0b29sX2NhbGxzGAogASgIEhMKC2pzb25fc2NoZW1hGAsgASgIEg4KBnZpc2lvbhgMIAEoCCKMAgoEVGFzaxIKCgJpZBgBIAEoCRIMCgRnb2FsGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIPCgd3b3JrZGlyGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAMSGQoMY29tcGxldGVkX2F0GAYgASgDSACIAQESEgoFZXJyb3IYByABKAlIAYgBARIPCgdzYW5kYm94GAggASgJEhIKCm5ldF9wb2xpY3kYCSABKAkSFQoNd29ya3RyZWVfcGF0aBgKIAEoCRIXCg93b3JrdHJlZV9icmFuY2gYCyABKAkSFgoOcGFyZW50X3Rhc2tfaWQYDCABKAlCDwoNX2NvbXBsZXRlZF9hdEIICgZfZXJyb3IiOwoQTGlzdFRhc2tzUmVxdWVzdBIYChBpbmNsdWRlX2ZpbmlzaGVkGAEgASgIEg0KBWxpbWl0GAIgASgNIioKCFRhc2tMaXN0Eh4KBXRhc2tzGAEgAygLMg8uamFydmlzLnYxLlRhc2siYwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEg4KBmZvbGxvdxgCIAEoCBIQCghzaW5jZV9pZBgDIAEoAxIZChFpbmNsdWRlX2FuY2VzdG9ycxgEIAEoCCKSAQoFRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIqMBChBUaW1lbGluZVNuYXBzaG90Eg8KB3Rhc2tfaWQYASABKAkSKAoGZXZlbnRzGAIgAygLMhguamFydmlzLnYxLlRpbWVsaW5lRXZlbnQSJgoFc3BhbnMYAyADKAsyFy5qYXJ2aXMudjEuVGltZWxpbmVTcGFuEhUKDW1pbl90c19taWNyb3MYBCABKAMSFQoNbWF4X3RzX21pY3JvcxgFIAEoAyKaAQoNVGltZWxpbmVFdmVudBIKCgJpZBgBIAEoAxIRCgl0c19taWNyb3MYAiABKAMSDwoHdGFza19pZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIMCgRraW5kGAUgASgJEg8KB3N1YmplY3QYBiABKAkSFAoMcGF5bG9hZF9qc29uGAcgASgJEhIKCnBhcmVudF9ldnQYCCABKAMilgEKDFRpbWVsaW5lU3BhbhIUCgxzdGFydF9ldnRfaWQYASABKAMSEgoKZW5kX2V2dF9pZBgCIAEoAxIXCg9zdGFydF90c19taWNyb3MYAyABKAMSFQoNZW5kX3RzX21pY3JvcxgEIAEoAxINCgVsYWJlbBgFIAEoCRIMCgRsYW5lGAYgASgJEg8KB291dGNvbWUYByABKAkiagoLRmxlZXRVcGRhdGUSIwoFbm9kZXMYASADKAsyFC5qYXJ2aXMudjEuRmxlZXROb2RlEiMKBWVkZ2VzGAIgAygLMhQuamFydmlzLnYxLkZsZWV0RWRnZRIRCgl0c19taWNyb3MYAyABKAMigAIKCUZsZWV0Tm9kZRIPCgd0YXNrX2lkGAEgASgJEhAKCHNob3J0X2lkGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIMCgRnb2FsGAQgASgJEg8KB3dvcmtkaXIYBSABKAkSDwoHc2FuZGJveBgGIAEoCRIRCgl0b2tlbnNfaW4YByABKAQSEgoKdG9rZW5zX291dBgIIAEoBBIaChJlc3RpbWF0ZWRfY29zdF91c2QYCSABKAESGQoRY3JlYXRlZF9hdF9taWNyb3MYCiABKAMSGQoRdXBkYXRlZF9hdF9taWNyb3MYCyABKAMSFwoPbmVlZHNfYXR0ZW50aW9uGAwgASgIIjoKCUZsZWV0RWRnZRIWCg5wYXJlbnRfdGFza19pZBgBIAEoCRIVCg1jaGlsZF90YXNrX2lkGAIgASgJIpEBCgpDb3N0UmVwb3J0Eg8KB3Rhc2tfaWQYASABKAkSFwoPdG90YWxfdG9rZW5zX2luGAIgASgEEhgKEHRvdGFsX3Rva2Vuc19vdXQYAyABKAQSFgoOdG90YWxfY29zdF91c2QYBCABKAESJwoIYnlfbW9kZWwYBSADKAsyFS5qYXJ2aXMudjEuTW9kZWxTcGVuZCJtCgpNb2RlbFNwZW5kEhIKCm1vZGVsX25hbWUYASABKAkSEQoJdG9rZW5zX2luGAIgASgEEhIKCnRva2Vuc19vdXQYAyABKAQSEAoIY29zdF91c2QYBCABKAESEgoKY2FsbF9jb3VudBgFIAEoDTKhBQoGSmFydmlzEjcKBFBpbmcSFi5qYXJ2aXMudjEuUGluZ1JlcXVlc3QaFy5qYXJ2aXMudjEuUGluZ1Jlc3BvbnNlEjMKA0FzaxIVLmphcnZpcy52MS5Bc2tSZXF1ZXN0GhMuamFydmlzLnYxLkFza0NodW5rMAESOAoKU3VibWl0VGFzaxITLmphcnZpcy52MS5UYXNrU3BlYxoVLmphcnZpcy52MS5UYXNrSGFuZGxlEjEKB0dldFRhc2sSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoPLmphcnZpcy52MS5UYXNrEj0KCUxpc3RUYXNrcxIbLmphcnZpcy52MS5MaXN0VGFza3NSZXF1ZXN0GhMuamFydmlzLnYxLlRhc2tMaXN0EjUKCkNhbmNlbFRhc2sSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoQLmphcnZpcy52MS5FbXB0eRJCCgxTdHJlYW1FdmVudHMSHi5qYXJ2aXMudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBoQLmphcnZpcy52MS5FdmVudDABEj4KCUdldFN0YXR1cxIYLmphcnZpcy52MS5TdGF0dXNSZXF1ZXN0GhcuamFydmlzLnYxLkRhZW1vblN0YXR1cxJBCgtHZXRUaW1lbGluZRIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhsuamFydmlzLnYxLlRpbWVsaW5lU25hcHNob3QSOQoLU3RyZWFtRmxlZXQSEC5qYXJ2aXMudjEuRW1wdHkaFi5qYXJ2aXMudjEuRmxlZXRVcGRhdGUwARJEChRHZXRUYXNrQ29zdEJyZWFrZG93bhIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhUuamFydmlzLnYxLkNvc3RSZXBvcnRiBnByb3RvMw");
+  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLPAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCSIPCg1TdGF0dXNSZXF1ZXN0InYKDERhZW1vblN0YXR1cxIPCgd2ZXJzaW9uGAEgASgJEhYKDnVwdGltZV9zZWNvbmRzGAIgASgDEiYKBm1vZGVscxgDIAMoCzIWLmphcnZpcy52MS5Nb2RlbFN0YXR1cxIVCg1ydW5uaW5nX3Rhc2tzGAQgASgNIvoBCgtNb2RlbFN0YXR1cxIMCgRuYW1lGAEgASgJEgwKBGtpbmQYAiABKAkSEAoIbW9kZWxfaWQYAyABKAkSEAoIcHJpb3JpdHkYBCABKAUSDgoGb25saW5lGAUgASgIEhMKC3F1YXJhbnRpbmVkGAYgASgIEiAKGHF1YXJhbnRpbmVkX3VudGlsX21pY3JvcxgHIAEoAxIaChJmYWlsdXJlc19pbl93aW5kb3cYCCABKA0SDwoHY3R4X2xlbhgJIAEoDRISCgp0b29sX2NhbGxzGAogASgIEhMKC2pzb25fc2NoZW1hGAsgASgIEg4KBnZpc2lvbhgMIAEoCCKMAgoEVGFzaxIKCgJpZBgBIAEoCRIMCgRnb2FsGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIPCgd3b3JrZGlyGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAMSGQoMY29tcGxldGVkX2F0GAYgASgDSACIAQESEgoFZXJyb3IYByABKAlIAYgBARIPCgdzYW5kYm94GAggASgJEhIKCm5ldF9wb2xpY3kYCSABKAkSFQoNd29ya3RyZWVfcGF0aBgKIAEoCRIXCg93b3JrdHJlZV9icmFuY2gYCyABKAkSFgoOcGFyZW50X3Rhc2tfaWQYDCABKAlCDwoNX2NvbXBsZXRlZF9hdEIICgZfZXJyb3IiOwoQTGlzdFRhc2tzUmVxdWVzdBIYChBpbmNsdWRlX2ZpbmlzaGVkGAEgASgIEg0KBWxpbWl0GAIgASgNIioKCFRhc2tMaXN0Eh4KBXRhc2tzGAEgAygLMg8uamFydmlzLnYxLlRhc2siYwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEg4KBmZvbGxvdxgCIAEoCBIQCghzaW5jZV9pZBgDIAEoAxIZChFpbmNsdWRlX2FuY2VzdG9ycxgEIAEoCCKSAQoFRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIqMBChBUaW1lbGluZVNuYXBzaG90Eg8KB3Rhc2tfaWQYASABKAkSKAoGZXZlbnRzGAIgAygLMhguamFydmlzLnYxLlRpbWVsaW5lRXZlbnQSJgoFc3BhbnMYAyADKAsyFy5qYXJ2aXMudjEuVGltZWxpbmVTcGFuEhUKDW1pbl90c19taWNyb3MYBCABKAMSFQoNbWF4X3RzX21pY3JvcxgFIAEoAyKaAQoNVGltZWxpbmVFdmVudBIKCgJpZBgBIAEoAxIRCgl0c19taWNyb3MYAiABKAMSDwoHdGFza19pZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIMCgRraW5kGAUgASgJEg8KB3N1YmplY3QYBiABKAkSFAoMcGF5bG9hZF9qc29uGAcgASgJEhIKCnBhcmVudF9ldnQYCCABKAMilgEKDFRpbWVsaW5lU3BhbhIUCgxzdGFydF9ldnRfaWQYASABKAMSEgoKZW5kX2V2dF9pZBgCIAEoAxIXCg9zdGFydF90c19taWNyb3MYAyABKAMSFQoNZW5kX3RzX21pY3JvcxgEIAEoAxINCgVsYWJlbBgFIAEoCRIMCgRsYW5lGAYgASgJEg8KB291dGNvbWUYByABKAkiagoLRmxlZXRVcGRhdGUSIwoFbm9kZXMYASADKAsyFC5qYXJ2aXMudjEuRmxlZXROb2RlEiMKBWVkZ2VzGAIgAygLMhQuamFydmlzLnYxLkZsZWV0RWRnZRIRCgl0c19taWNyb3MYAyABKAMigAIKCUZsZWV0Tm9kZRIPCgd0YXNrX2lkGAEgASgJEhAKCHNob3J0X2lkGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIMCgRnb2FsGAQgASgJEg8KB3dvcmtkaXIYBSABKAkSDwoHc2FuZGJveBgGIAEoCRIRCgl0b2tlbnNfaW4YByABKAQSEgoKdG9rZW5zX291dBgIIAEoBBIaChJlc3RpbWF0ZWRfY29zdF91c2QYCSABKAESGQoRY3JlYXRlZF9hdF9taWNyb3MYCiABKAMSGQoRdXBkYXRlZF9hdF9taWNyb3MYCyABKAMSFwoPbmVlZHNfYXR0ZW50aW9uGAwgASgIIjoKCUZsZWV0RWRnZRIWCg5wYXJlbnRfdGFza19pZBgBIAEoCRIVCg1jaGlsZF90YXNrX2lkGAIgASgJIpEBCgpDb3N0UmVwb3J0Eg8KB3Rhc2tfaWQYASABKAkSFwoPdG90YWxfdG9rZW5zX2luGAIgASgEEhgKEHRvdGFsX3Rva2Vuc19vdXQYAyABKAQSFgoOdG90YWxfY29zdF91c2QYBCABKAESJwoIYnlfbW9kZWwYBSADKAsyFS5qYXJ2aXMudjEuTW9kZWxTcGVuZCJtCgpNb2RlbFNwZW5kEhIKCm1vZGVsX25hbWUYASABKAkSEQoJdG9rZW5zX2luGAIgASgEEhIKCnRva2Vuc19vdXQYAyABKAQSEAoIY29zdF91c2QYBCABKAESEgoKY2FsbF9jb3VudBgFIAEoDSJcCg1EaWZmR3JvdXBMaXN0Eg8KB3Rhc2tfaWQYASABKAkSJAoGZ3JvdXBzGAIgAygLMhQuamFydmlzLnYxLkRpZmZHcm91cBIUCgxvcnBoYW5fcGF0aHMYAyADKAkigAEKCURpZmZHcm91cBIXCg9kZWNpc2lvbl9ldnRfaWQYASABKAMSFQoNZGVjaXNpb25fdGV4dBgCIAEoCRIMCgRzdGVwGAMgASgNEhEKCXRzX21pY3JvcxgEIAEoAxIiCgVmaWxlcxgFIAMoCzITLmphcnZpcy52MS5GaWxlRGlmZiJ4CghGaWxlRGlmZhIMCgRwYXRoGAEgASgJEhMKC2NoYW5nZV9raW5kGAIgASgJEg4KBmJlZm9yZRgDIAEoCRINCgVhZnRlchgEIAEoCRITCgtsaW5lc19hZGRlZBgFIAEoDRIVCg1saW5lc19yZW1vdmVkGAYgASgNIk8KEkNvbW1pdFBoYXNlUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEhcKD2RlY2lzaW9uX2V2dF9pZBgCIAEoAxIPCgdzdWJqZWN0GAMgASgJIlQKCkNvbW1pdEluZm8SEgoKY29tbWl0X3NoYRgBIAEoCRIOCgZicmFuY2gYAiABKAkSDwoHc3ViamVjdBgDIAEoCRIRCgl0c19taWNyb3MYBCABKAMy7AYKBkphcnZpcxI3CgRQaW5nEhYuamFydmlzLnYxLlBpbmdSZXF1ZXN0GhcuamFydmlzLnYxLlBpbmdSZXNwb25zZRIzCgNBc2sSFS5qYXJ2aXMudjEuQXNrUmVxdWVzdBoTLmphcnZpcy52MS5Bc2tDaHVuazABEjgKClN1Ym1pdFRhc2sSEy5qYXJ2aXMudjEuVGFza1NwZWMaFS5qYXJ2aXMudjEuVGFza0hhbmRsZRIxCgdHZXRUYXNrEhUuamFydmlzLnYxLlRhc2tIYW5kbGUaDy5qYXJ2aXMudjEuVGFzaxI9CglMaXN0VGFza3MSGy5qYXJ2aXMudjEuTGlzdFRhc2tzUmVxdWVzdBoTLmphcnZpcy52MS5UYXNrTGlzdBI1CgpDYW5jZWxUYXNrEhUuamFydmlzLnYxLlRhc2tIYW5kbGUaEC5qYXJ2aXMudjEuRW1wdHkSQgoMU3RyZWFtRXZlbnRzEh4uamFydmlzLnYxLlN0cmVhbUV2ZW50c1JlcXVlc3QaEC5qYXJ2aXMudjEuRXZlbnQwARI+CglHZXRTdGF0dXMSGC5qYXJ2aXMudjEuU3RhdHVzUmVxdWVzdBoXLmphcnZpcy52MS5EYWVtb25TdGF0dXMSQQoLR2V0VGltZWxpbmUSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRobLmphcnZpcy52MS5UaW1lbGluZVNuYXBzaG90EjkKC1N0cmVhbUZsZWV0EhAuamFydmlzLnYxLkVtcHR5GhYuamFydmlzLnYxLkZsZWV0VXBkYXRlMAESRAoUR2V0VGFza0Nvc3RCcmVha2Rvd24SFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoVLmphcnZpcy52MS5Db3N0UmVwb3J0EkQKEUdyb3VwRGlmZkJ5SW50ZW50EhUuamFydmlzLnYxLlRhc2tIYW5kbGUaGC5qYXJ2aXMudjEuRGlmZkdyb3VwTGlzdBJDCgtDb21taXRQaGFzZRIdLmphcnZpcy52MS5Db21taXRQaGFzZVJlcXVlc3QaFS5qYXJ2aXMudjEuQ29tbWl0SW5mbxI+CgtSZWplY3RQaGFzZRIdLmphcnZpcy52MS5Db21taXRQaGFzZVJlcXVlc3QaEC5qYXJ2aXMudjEuRW1wdHliBnByb3RvMw");
 
 /**
  * @generated from message jarvis.v1.PingRequest
@@ -971,6 +971,194 @@ export const ModelSpendSchema: GenMessage<ModelSpend> = /*@__PURE__*/
   messageDesc(file_jarvis, 23);
 
 /**
+ * @generated from message jarvis.v1.DiffGroupList
+ */
+export type DiffGroupList = Message<"jarvis.v1.DiffGroupList"> & {
+  /**
+   * @generated from field: string task_id = 1;
+   */
+  taskId: string;
+
+  /**
+   * @generated from field: repeated jarvis.v1.DiffGroup groups = 2;
+   */
+  groups: DiffGroup[];
+
+  /**
+   * Files that exist on disk but couldn't be linked to a decision event.
+   * Rare; surface as an "uncategorized" group in the UI.
+   *
+   * @generated from field: repeated string orphan_paths = 3;
+   */
+  orphanPaths: string[];
+};
+
+/**
+ * Describes the message jarvis.v1.DiffGroupList.
+ * Use `create(DiffGroupListSchema)` to create a new message.
+ */
+export const DiffGroupListSchema: GenMessage<DiffGroupList> = /*@__PURE__*/
+  messageDesc(file_jarvis, 24);
+
+/**
+ * @generated from message jarvis.v1.DiffGroup
+ */
+export type DiffGroup = Message<"jarvis.v1.DiffGroup"> & {
+  /**
+   * Event id of the decision that authored this group's edits.
+   *
+   * @generated from field: int64 decision_evt_id = 1;
+   */
+  decisionEvtId: bigint;
+
+  /**
+   * Decision text — used as the default commit-message body.
+   *
+   * @generated from field: string decision_text = 2;
+   */
+  decisionText: string;
+
+  /**
+   * Step number (from the decision's payload) — drives the UI's
+   * ordinal heading: "Phase 3 — …".
+   *
+   * @generated from field: uint32 step = 3;
+   */
+  step: number;
+
+  /**
+   * @generated from field: int64 ts_micros = 4;
+   */
+  tsMicros: bigint;
+
+  /**
+   * Files touched in this group. Server populates `hunks` lazily — for
+   * large diffs the SPA may receive empty hunks and request them on
+   * expand. (M8.1 will add a separate GetFileDiff RPC.)
+   *
+   * @generated from field: repeated jarvis.v1.FileDiff files = 5;
+   */
+  files: FileDiff[];
+};
+
+/**
+ * Describes the message jarvis.v1.DiffGroup.
+ * Use `create(DiffGroupSchema)` to create a new message.
+ */
+export const DiffGroupSchema: GenMessage<DiffGroup> = /*@__PURE__*/
+  messageDesc(file_jarvis, 25);
+
+/**
+ * @generated from message jarvis.v1.FileDiff
+ */
+export type FileDiff = Message<"jarvis.v1.FileDiff"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * "added" | "modified" | "deleted"
+   *
+   * @generated from field: string change_kind = 2;
+   */
+  changeKind: string;
+
+  /**
+   * Full before / after contents for client-side diff rendering by
+   * @codemirror/merge. Empty `before` for added files, empty `after`
+   * for deleted files.
+   *
+   * @generated from field: string before = 3;
+   */
+  before: string;
+
+  /**
+   * @generated from field: string after = 4;
+   */
+  after: string;
+
+  /**
+   * @generated from field: uint32 lines_added = 5;
+   */
+  linesAdded: number;
+
+  /**
+   * @generated from field: uint32 lines_removed = 6;
+   */
+  linesRemoved: number;
+};
+
+/**
+ * Describes the message jarvis.v1.FileDiff.
+ * Use `create(FileDiffSchema)` to create a new message.
+ */
+export const FileDiffSchema: GenMessage<FileDiff> = /*@__PURE__*/
+  messageDesc(file_jarvis, 26);
+
+/**
+ * @generated from message jarvis.v1.CommitPhaseRequest
+ */
+export type CommitPhaseRequest = Message<"jarvis.v1.CommitPhaseRequest"> & {
+  /**
+   * @generated from field: string task_id = 1;
+   */
+  taskId: string;
+
+  /**
+   * @generated from field: int64 decision_evt_id = 2;
+   */
+  decisionEvtId: bigint;
+
+  /**
+   * Optional user-edited commit subject; if empty the daemon synthesizes
+   * one from the first line of `decision_text`.
+   *
+   * @generated from field: string subject = 3;
+   */
+  subject: string;
+};
+
+/**
+ * Describes the message jarvis.v1.CommitPhaseRequest.
+ * Use `create(CommitPhaseRequestSchema)` to create a new message.
+ */
+export const CommitPhaseRequestSchema: GenMessage<CommitPhaseRequest> = /*@__PURE__*/
+  messageDesc(file_jarvis, 27);
+
+/**
+ * @generated from message jarvis.v1.CommitInfo
+ */
+export type CommitInfo = Message<"jarvis.v1.CommitInfo"> & {
+  /**
+   * @generated from field: string commit_sha = 1;
+   */
+  commitSha: string;
+
+  /**
+   * @generated from field: string branch = 2;
+   */
+  branch: string;
+
+  /**
+   * @generated from field: string subject = 3;
+   */
+  subject: string;
+
+  /**
+   * @generated from field: int64 ts_micros = 4;
+   */
+  tsMicros: bigint;
+};
+
+/**
+ * Describes the message jarvis.v1.CommitInfo.
+ * Use `create(CommitInfoSchema)` to create a new message.
+ */
+export const CommitInfoSchema: GenMessage<CommitInfo> = /*@__PURE__*/
+  messageDesc(file_jarvis, 28);
+
+/**
  * Jarvis daemon gRPC API.
  * M1: Ping, Ask.
  * M2: SubmitTask, GetTask, ListTasks, StreamEvents, CancelTask.
@@ -1076,6 +1264,39 @@ export const Jarvis: GenService<{
     methodKind: "unary";
     input: typeof TaskHandleSchema;
     output: typeof CostReportSchema;
+  },
+  /**
+   * M8: diff-by-intent — file changes for a task, grouped by the parent
+   * `decision` event that authored them. Drives the phase-gated diff UI.
+   *
+   * @generated from rpc jarvis.v1.Jarvis.GroupDiffByIntent
+   */
+  groupDiffByIntent: {
+    methodKind: "unary";
+    input: typeof TaskHandleSchema;
+    output: typeof DiffGroupListSchema;
+  },
+  /**
+   * M8: atomic git commit for one diff group. The agent's decision text
+   * becomes the commit message body; the user can edit the subject.
+   *
+   * @generated from rpc jarvis.v1.Jarvis.CommitPhase
+   */
+  commitPhase: {
+    methodKind: "unary";
+    input: typeof CommitPhaseRequestSchema;
+    output: typeof CommitInfoSchema;
+  },
+  /**
+   * M8: revert one diff group's file edits (best-effort; works only if
+   * the files have not been touched outside the agent since).
+   *
+   * @generated from rpc jarvis.v1.Jarvis.RejectPhase
+   */
+  rejectPhase: {
+    methodKind: "unary";
+    input: typeof CommitPhaseRequestSchema;
+    output: typeof EmptySchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_jarvis, 0);
