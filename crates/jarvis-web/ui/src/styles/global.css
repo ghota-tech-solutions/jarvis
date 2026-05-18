@@ -282,3 +282,108 @@ pre {
   background: rgba(212, 180, 120, 0.1);
   color: var(--accent);
 }
+
+/* --- Transcript ------------------------------------------------------- */
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 920px;
+}
+
+.evt-block {
+  padding: 0.25rem 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.evt-icon {
+  display: inline-block;
+  width: 1.2em;
+  color: var(--dim);
+}
+
+.evt-decision .evt-prose {
+  color: var(--assistant);
+  font-style: italic;
+  white-space: pre-wrap;
+  padding: 0.35rem 0;
+}
+
+.evt-tool-call {
+  font-family:
+    ui-monospace,
+    'Cascadia Code',
+    'JetBrains Mono',
+    Menlo,
+    Consolas,
+    monospace;
+  color: var(--body);
+}
+
+.evt-tool-call .evt-tool {
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 0.4rem;
+}
+
+.evt-tool-call .evt-args {
+  color: var(--dim);
+}
+
+.evt-tool-result .evt-ok .evt-icon { color: var(--good); }
+.evt-tool-result .evt-fail .evt-icon,
+.evt-error .evt-icon,
+.evt-fail .evt-icon { color: var(--error); }
+
+.evt-collapse {
+  display: inline-block;
+  margin-left: 0.5rem;
+}
+
+.evt-collapse summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 11px;
+  display: inline;
+}
+
+.evt-collapse summary::-webkit-details-marker {
+  display: none;
+}
+
+.evt-output {
+  margin: 0.4rem 0 0 0;
+  padding: 0.5rem 0.7rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid var(--border);
+  border-radius: 2px;
+  max-height: 360px;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.evt-heartbeat,
+.evt-spawn,
+.evt-attempt {
+  font-size: 11px;
+  color: var(--fade);
+  padding: 0.2rem 0;
+  border-top: 1px dashed var(--border);
+  margin-top: 0.3rem;
+}
+
+.evt-continuation {
+  padding: 0.3rem 0.5rem;
+  background: rgba(220, 175, 90, 0.05);
+  border-left: 2px solid var(--warn);
+  font-size: 12px;
+  margin: 0.3rem 0;
+}
+
+.evt-verdict {
+  padding: 0.3rem 0;
+}
