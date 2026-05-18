@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 4173 --strictPort",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen": "buf generate",
+    "gen:clean": "node -e \"require('fs').rmSync('src/lib/api/gen',{recursive:true,force:true})\""
   },
   "dependencies": {
     "solid-js": "^1.9.5",
@@ -16,12 +18,17 @@
     "@tanstack/solid-query": "^5.66.0",
     "nanostores": "^0.11.4",
     "@nanostores/persistent": "^0.10.2",
-    "@nanostores/solid": "^0.5.0"
+    "@nanostores/solid": "^0.5.0",
+    "@bufbuild/protobuf": "^2.2.4",
+    "@connectrpc/connect": "^2.0.2",
+    "@connectrpc/connect-web": "^2.0.2"
   },
   "devDependencies": {
     "vite": "^5.4.14",
     "vite-plugin-solid": "^2.11.6",
     "typescript": "^5.7.3",
-    "@types/node": "^22.13.5"
+    "@types/node": "^22.13.5",
+    "@bufbuild/buf": "^1.50.0",
+    "@bufbuild/protoc-gen-es": "^2.2.4"
   }
 }
