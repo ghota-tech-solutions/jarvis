@@ -6,10 +6,11 @@ use futures::StreamExt;
 use jarvis_agent::{run_agent, AgentRun, HookSpec};
 use jarvis_api::{
     jarvis_server::{Jarvis, JarvisServer},
-    AskChunk, AskRequest, DaemonStatus, Event as ApiEvent, ListTasksRequest,
-    ModelStatus as ApiModelStatus, PingRequest, PingResponse, StatusRequest, StreamEventsRequest,
-    Task as ApiTask, TaskHandle, TaskList, TaskSpec, TimelineEvent as ApiTimelineEvent,
-    TimelineSnapshot, TimelineSpan, UsageStats,
+    AskChunk, AskRequest, CostReport, DaemonStatus, Empty, Event as ApiEvent, FleetEdge,
+    FleetNode, FleetUpdate, ListTasksRequest, ModelSpend, ModelStatus as ApiModelStatus,
+    PingRequest, PingResponse, StatusRequest, StreamEventsRequest, Task as ApiTask, TaskHandle,
+    TaskList, TaskSpec, TimelineEvent as ApiTimelineEvent, TimelineSnapshot, TimelineSpan,
+    UsageStats,
 };
 use jarvis_config::Config;
 use jarvis_core::{
@@ -799,6 +800,101 @@ impl Jarvis for JarvisService {
         }))
     }
 
+    type StreamFleetStream =
+        Pin<Box<dyn Stream<Item = std::result::Result<FleetUpdate, Status>> + Send + 'static>>;
+
+    #[instrument(skip_all)]
+    async fn stream_fleet(
+        &self,
+        _request: Request<Empty>,
+    ) -> std::result::Result<Response<Self::StreamFleetStream>, Status> {
+        let ledger = self.ledger.clone();
+        let (tx, rx) = mpsc::channel::<std::result::Result<FleetUpdate, Status>>(8);
+        let mut live = ledger.subscribe();
+
+        // Send the first snapshot immediately, then any time the ledger
+        // broadcasts a new event we resend a fresh snapshot. SQLite reads are
+        // cheap; for now we don't bother with delta updates.
+        tokio::spawn(async move {
+            let _ = send_fleet_snapshot(&ledger, &tx).await;
+            // Re-snapshot when something changes, but cap the rate at 4 Hz so
+            // a flood of llm_chunk events doesn't melt the client.
+            let mut last_send = std::time::Instant::now()
+                - std::time::Duration::from_millis(250);
+            loop {
+                match live.recv().await {
+                    Ok(_rec) => {
+                        if last_send.elapsed() < std::time::Duration::from_millis(250) {
+                            continue;
+                        }
+                        last_send = std::time::Instant::now();
+                        if send_fleet_snapshot(&ledger, &tx).await.is_err() {
+                            return;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        warn!(skipped, "stream_fleet lagged");
+                        continue;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+                }
+            }
+        });
+
+        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+    }
+
+    async fn get_task_cost_breakdown(
+        &self,
+        request: Request<TaskHandle>,
+    ) -> std::result::Result<Response<CostReport>, Status> {
+        let task_id_str = request.into_inner().id;
+        let task_id = parse_task_id(&task_id_str)?;
+        let events = self
+            .ledger
+            .timeline_events(task_id)
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+
+        // Accumulate per-model usage from llm_chunk / decision payloads.
+        // The exact location of `usage` depends on the agent loop; we look in
+        // both common spots and treat anything missing as 0.
+        let mut by_model: HashMap<String, ModelSpend> = HashMap::new();
+        let registry = self.pool.registry();
+        for e in &events {
+            let (model_opt, in_t, out_t) = extract_usage(&e.payload);
+            if let Some(model) = model_opt
+                && (in_t > 0 || out_t > 0)
+            {
+                let entry = by_model.entry(model.clone()).or_insert(ModelSpend {
+                    model_name: model.clone(),
+                    tokens_in: 0,
+                    tokens_out: 0,
+                    cost_usd: 0.0,
+                    call_count: 0,
+                });
+                entry.tokens_in += in_t;
+                entry.tokens_out += out_t;
+                entry.call_count += 1;
+                let provider_name = ProviderName::new(model);
+                entry.cost_usd += jarvis_llm::estimate_usd(registry, &provider_name, in_t, out_t);
+            }
+        }
+
+        let (total_in, total_out, total_usd) = by_model.values().fold(
+            (0u64, 0u64, 0.0_f64),
+            |(ai, ao, ac), s| (ai + s.tokens_in, ao + s.tokens_out, ac + s.cost_usd),
+        );
+
+        Ok(Response::new(CostReport {
+            task_id: task_id_str,
+            total_tokens_in: total_in,
+            total_tokens_out: total_out,
+            total_cost_usd: total_usd,
+            by_model: by_model.into_values().collect(),
+        }))
+    }
+
     async fn get_timeline(
         &self,
         request: Request<TaskHandle>,
@@ -981,6 +1077,95 @@ fn format_tool_label(tool: &str, args: &str) -> String {
         let truncated: String = raw.chars().take(MAX - 1).collect();
         format!("{truncated}…")
     }
+}
+
+/// Build and ship one `FleetUpdate` snapshot to the subscriber. Returns Err
+/// when the channel is closed so the caller can break its loop.
+async fn send_fleet_snapshot(
+    ledger: &Ledger,
+    tx: &mpsc::Sender<std::result::Result<FleetUpdate, Status>>,
+) -> std::result::Result<(), ()> {
+    let tasks = match ledger.list_tasks(true, 500).await {
+        Ok(t) => t,
+        Err(e) => {
+            let _ = tx.send(Err(Status::internal(format!("ledger: {e}")))).await;
+            return Err(());
+        }
+    };
+    let mut edges = Vec::new();
+    let mut nodes = Vec::with_capacity(tasks.len());
+    let now = chrono::Utc::now().timestamp_micros();
+    for t in &tasks {
+        if let Some(parent) = t.parent {
+            edges.push(FleetEdge {
+                parent_task_id: parent.to_string(),
+                child_task_id: t.id.to_string(),
+            });
+        }
+        // Cheap heuristic for needs_attention: the task is in a failed/error
+        // state. A future refinement will look at recent verdict/continuation
+        // events explicitly.
+        let needs_attention = t.status == jarvis_ledger::TaskStatus::Failed;
+        nodes.push(FleetNode {
+            task_id: t.id.to_string(),
+            short_id: t.id.to_string().chars().take(8).collect(),
+            status: t.status.to_string(),
+            goal: t.goal.clone(),
+            workdir: t.workdir.clone(),
+            sandbox: t.sandbox.clone(),
+            tokens_in: 0,           // populated by M7.S5 metering
+            tokens_out: 0,
+            estimated_cost_usd: 0.0,
+            created_at_micros: t.created_at,
+            updated_at_micros: t.completed_at.unwrap_or(t.created_at),
+            needs_attention,
+        });
+    }
+    let snap = FleetUpdate {
+        nodes,
+        edges,
+        ts_micros: now,
+    };
+    if tx.send(Ok(snap)).await.is_err() {
+        return Err(());
+    }
+    Ok(())
+}
+
+/// Pull `(model_name, tokens_in, tokens_out)` out of an event payload if the
+/// agent logged a `usage` block. Tries the common shapes the agent uses:
+///   { "usage": { "model": "X", "tokens_in": N, "tokens_out": M } }
+///   { "model": "X", "usage": { "prompt_tokens": N, "completion_tokens": M } }
+/// Returns (None, 0, 0) if no usage data is present.
+fn extract_usage(payload: &serde_json::Value) -> (Option<String>, u64, u64) {
+    let usage = payload.get("usage");
+    let model = payload
+        .get("model")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            usage
+                .and_then(|u| u.get("model"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        });
+    let (in_t, out_t) = match usage {
+        Some(u) => {
+            let in_t = u
+                .get("tokens_in")
+                .or_else(|| u.get("prompt_tokens"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let out_t = u
+                .get("tokens_out")
+                .or_else(|| u.get("completion_tokens"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            (in_t, out_t)
+        }
+        None => (0, 0),
+    };
+    (model, in_t, out_t)
 }
 
 fn tool_result_has_error(payload: &serde_json::Value) -> bool {

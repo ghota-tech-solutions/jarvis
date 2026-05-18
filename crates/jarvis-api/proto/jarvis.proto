@@ -21,6 +21,14 @@ service Jarvis {
   // M6: full event timeline + pre-computed spans for a task and its
   // descendant subtasks. Drives the scrubbable canvas timeline in the SPA.
   rpc GetTimeline(TaskHandle) returns (TimelineSnapshot);
+
+  // M7: continuously streamed snapshot of the whole task fleet — current
+  // status, running counts, costs. Drives the fleet DAG dashboard.
+  rpc StreamFleet(Empty) returns (stream FleetUpdate);
+
+  // M7: aggregated cost breakdown for a task and its descendant subtasks,
+  // grouped by model.
+  rpc GetTaskCostBreakdown(TaskHandle) returns (CostReport);
 }
 
 // ---------- M1 ----------
@@ -198,4 +206,59 @@ message TimelineSpan {
   string label = 5;             // short, ~40 chars
   string lane = 6;              // tools | llm | plan | verdict
   string outcome = 7;           // ok | error | running
+}
+
+// ---------- M7: Fleet + cost ----------
+
+message FleetUpdate {
+  // Full snapshot. The first message after subscription is always a full
+  // snapshot; subsequent messages may either be full snapshots (cheap
+  // because tasks are bounded) or deltas (TODO M7.1).
+  repeated FleetNode nodes = 1;
+  repeated FleetEdge edges = 2;
+  int64 ts_micros = 3;
+}
+
+message FleetNode {
+  string task_id = 1;
+  string short_id = 2;          // first 8 chars of UUID, pre-computed
+  string status = 3;             // pending | running | completed | failed | cancelled
+  string goal = 4;
+  string workdir = 5;
+  string sandbox = 6;
+  // Approximate token spend on this task (sum of llm_chunk usage if available;
+  // otherwise 0). The CostReport RPC has the authoritative numbers.
+  uint64 tokens_in = 7;
+  uint64 tokens_out = 8;
+  double estimated_cost_usd = 9;
+  int64 created_at_micros = 10;
+  int64 updated_at_micros = 11;  // ts of last event seen
+  // "attention" flag — true when the task verdict failed or a continuation
+  // was injected. Drives auto-bubble in the dashboard.
+  bool needs_attention = 12;
+}
+
+message FleetEdge {
+  // Directed edge from parent task to child task. Both are root in the DAG
+  // when parent is empty.
+  string parent_task_id = 1;
+  string child_task_id = 2;
+}
+
+message CostReport {
+  string task_id = 1;
+  // Total token + dollar spend across the task and all its descendants.
+  uint64 total_tokens_in = 2;
+  uint64 total_tokens_out = 3;
+  double total_cost_usd = 4;
+  // Per-model breakdown for drill-in.
+  repeated ModelSpend by_model = 5;
+}
+
+message ModelSpend {
+  string model_name = 1;          // "local:gemma", "remote:deepseek_pro"
+  uint64 tokens_in = 2;
+  uint64 tokens_out = 3;
+  double cost_usd = 4;            // 0 for local models
+  uint32 call_count = 5;
 }
