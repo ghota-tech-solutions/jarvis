@@ -1308,6 +1308,19 @@ document.querySelectorAll('a[href="#continue"]').forEach((a) => {{
 window.addEventListener('load', () => {{
   document.querySelector('#continue textarea')?.focus();
 }});
+
+// === Inline "show N more" for action-out + diff-body wrappers =================
+// The button lives inside .output-wrap.clipped. Clicking removes the clip so
+// the same block grows; no separate sub-card is spawned.
+document.addEventListener('click', (e) => {{
+  const btn = e.target.closest('.show-more-btn');
+  if (!btn) return;
+  const wrap = btn.closest('.output-wrap');
+  if (wrap) {{
+    wrap.classList.remove('clipped');
+    window.__jarvisFollow?.onNew();
+  }}
+}});
 </script>
 </body></html>"##,
         short = short(&root.id.to_string()),
@@ -1677,81 +1690,83 @@ fn render_action_card(call: Option<&EventRecord>, result: &EventRecord, anchor: 
     )
 }
 
-/// Render shell stdout/stderr inline. Up to 6 visible lines; the rest in a
-/// `<details>` "show N more". Nothing if both are empty.
+/// Render shell stdout/stderr inline. The whole content is in one block,
+/// clipped via CSS max-height when long; a "show N more" button removes the
+/// clip without splitting the visual block.
 fn render_inline_output(stdout: &str, stderr: &str) -> String {
-    fn block(text: &str, extra_cls: &str, label: &str) -> String {
+    fn block(text: &str, extra_cls: &str) -> String {
         if text.is_empty() {
             return String::new();
         }
         const VISIBLE: usize = 6;
-        let lines: Vec<&str> = text.lines().collect();
-        if lines.len() <= VISIBLE {
-            return format!(
-                r#"<pre class="action-out{cls}">{}</pre>"#,
-                html_escape(text),
-                cls = if extra_cls.is_empty() { String::new() } else { format!(" {extra_cls}") },
-            );
+        let total = text.lines().count();
+        let extra = if extra_cls.is_empty() { String::new() } else { format!(" {extra_cls}") };
+        if total <= VISIBLE {
+            return format!(r#"<pre class="action-out{extra}">{}</pre>"#, html_escape(text));
         }
-        let head = lines[..VISIBLE].join("\n");
-        let tail = lines[VISIBLE..].join("\n");
-        let more = lines.len() - VISIBLE;
-        let _ = label;
+        let more = total - VISIBLE;
+        // Same <pre> contains everything; CSS clips it. data-visible-lines hints
+        // the JS but the clip is purely CSS via the `.clipped` class.
         format!(
-            r#"<pre class="action-out{cls}">{head_html}</pre><details class="action-more"><summary class="muted small">show {more} more line{plural}</summary><pre class="action-out{cls}">{tail_html}</pre></details>"#,
-            head_html = html_escape(&head),
-            tail_html = html_escape(&tail),
+            r#"<div class="output-wrap clipped" data-visible="{VISIBLE}"><pre class="action-out{extra}">{body}</pre><button type="button" class="show-more-btn">show {more} more line{plural}</button></div>"#,
+            body = html_escape(text),
             plural = if more > 1 { "s" } else { "" },
-            cls = if extra_cls.is_empty() { String::new() } else { format!(" {extra_cls}") },
         )
     }
     let mut s = String::new();
-    s.push_str(&block(stdout, "", "stdout"));
-    s.push_str(&block(stderr, "action-err", "stderr"));
+    s.push_str(&block(stdout, ""));
+    s.push_str(&block(stderr, "action-err"));
     s
 }
 
-/// Inline diff: ≤20 lines fully visible, else preview 12 lines + show-more.
+/// Inline diff: same one-block model. ≤20 lines fully visible, else clipped
+/// to ~12 lines with a "show N more" button that unclips the same wrapper.
 fn render_inline_diff(unified: &str) -> String {
     if unified.is_empty() {
         return String::new();
     }
-    let lines: Vec<&str> = unified.lines().collect();
-    let html_body = |slice: &[&str]| -> String {
-        let chunk = slice.join("\n");
-        colorize_unified(&chunk)
-    };
-    if lines.len() <= 20 {
-        return format!(
-            r#"<pre class="diff-body">{}</pre>"#,
-            html_body(&lines),
-        );
+    let total = unified.lines().count();
+    let body = colorize_unified(unified);
+    if total <= 20 {
+        return format!(r#"<div class="diff-body">{body}</div>"#);
     }
-    let head = &lines[..12];
-    let tail = &lines[12..];
-    let more = tail.len();
+    let more = total - 12;
     format!(
-        r#"<pre class="diff-body">{}</pre><details class="action-more"><summary class="muted small">show {more} more line{plural} of diff</summary><pre class="diff-body">{}</pre></details>"#,
-        html_body(head),
-        html_body(tail),
+        r#"<div class="output-wrap diff-wrap clipped" data-visible="12"><div class="diff-body">{body}</div><button type="button" class="show-more-btn">show {more} more line{plural} of diff</button></div>"#,
         plural = if more > 1 { "s" } else { "" },
     )
 }
 
+/// Render a unified diff as a 3-column grid: (old line, new line, text).
+/// Mirrors GitHub's diff view: lines starting with `+` only get a new-side
+/// number, `-` only old-side, context gets both. Each line is a div that the
+/// CSS lays out as grid columns.
 fn colorize_unified(diff: &str) -> String {
-    let mut out = String::with_capacity(diff.len());
-    for line in diff.lines() {
-        let (class, _) = if line.starts_with('+') {
-            ("add", "+")
-        } else if line.starts_with('-') {
-            ("rem", "-")
+    let mut out = String::with_capacity(diff.len() + 64);
+    let mut old_line: u32 = 1;
+    let mut new_line: u32 = 1;
+    for raw in diff.lines() {
+        // Drop the body content's leading marker before display.
+        let (class, marker, body, old_num, new_num) = if let Some(rest) = raw.strip_prefix('+') {
+            let s = ("add", "+", rest.to_string(), None, Some(new_line));
+            new_line += 1;
+            s
+        } else if let Some(rest) = raw.strip_prefix('-') {
+            let s = ("rem", "-", rest.to_string(), Some(old_line), None);
+            old_line += 1;
+            s
         } else {
-            ("ctx", " ")
+            let rest = raw.strip_prefix(' ').unwrap_or(raw).to_string();
+            let s = ("ctx", " ", rest, Some(old_line), Some(new_line));
+            old_line += 1;
+            new_line += 1;
+            s
         };
+        let old_str = old_num.map(|n| n.to_string()).unwrap_or_default();
+        let new_str = new_num.map(|n| n.to_string()).unwrap_or_default();
         out.push_str(&format!(
-            r#"<span class="d-{class}">{}</span>{}"#,
-            html_escape(line),
-            "\n"
+            r#"<div class="d-line d-{class}"><span class="ln ln-old">{old_str}</span><span class="ln ln-new">{new_str}</span><span class="d-marker">{marker}</span><span class="d-text">{}</span></div>"#,
+            html_escape(&body),
         ));
     }
     out
@@ -2092,8 +2107,72 @@ form.continue textarea { min-height: 2.2em; max-height: 300px; overflow-y: auto;
 .evt.evt-tool_result .body { color: var(--dim); }
 .evt.evt-verdict .body { font-weight: 600; }
 
-/* Diff body (used in action-detail) */
-pre.diff-body { background: rgba(0,0,0,0.3); border: 1px solid var(--line); padding: 0.5em 0.7em; font-size: 12px; line-height: 1.45; overflow-x: auto; margin: 0.3em 0 0 0; border-radius: 4px; max-height: 320px; overflow-y: auto; }
+/* Diff body — GitHub-like 3-column grid: old line / new line / text */
+.diff-body {
+  background: rgba(0,0,0,0.28);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.55;
+  border-radius: 4px;
+  margin: 0.35em 0 0 0;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.d-line {
+  display: grid;
+  grid-template-columns: 44px 44px 16px 1fr;
+  align-items: baseline;
+}
+.d-line .ln {
+  text-align: right;
+  padding-right: 8px;
+  color: var(--fade);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+  background: rgba(0,0,0,0.15);
+}
+.d-line .d-marker { color: var(--fade); text-align: center; user-select: none; }
+.d-line .d-text { white-space: pre; padding-right: 0.8em; word-break: break-word; }
+.d-line.d-add { background: var(--add-bg); }
+.d-line.d-add .ln { background: rgba(140,180,110,0.18); color: var(--add-fg); }
+.d-line.d-add .d-marker { color: var(--add-fg); }
+.d-line.d-add .d-text { color: var(--add-fg); }
+.d-line.d-rem { background: var(--rem-bg); }
+.d-line.d-rem .ln { background: rgba(220,110,90,0.18); color: var(--rem-fg); }
+.d-line.d-rem .d-marker { color: var(--rem-fg); }
+.d-line.d-rem .d-text { color: var(--rem-fg); }
+.d-line.d-ctx .d-text { color: var(--dim); }
+
+/* Clip wrapper for long output / diff blocks. The wrapper holds either a
+   <pre class="action-out"> or a <div class="diff-body"> + show-more button.
+   Clicking the button removes `.clipped` and the block grows in place — no
+   second card spawned. */
+.output-wrap { position: relative; }
+.output-wrap.clipped .action-out,
+.output-wrap.clipped .diff-body {
+  max-height: 11em;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
+}
+.output-wrap .show-more-btn {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 0.4em 0.6em;
+  cursor: pointer;
+  margin-top: -1px;
+  border-radius: 0 0 4px 4px;
+}
+.output-wrap .show-more-btn:hover { color: var(--fg); border-color: var(--accent); }
+.output-wrap:not(.clipped) .show-more-btn { display: none; }
+.output-wrap:not(.clipped) .action-out,
+.output-wrap:not(.clipped) .diff-body { max-height: none; -webkit-mask-image: none; mask-image: none; }
+
 .badge.new { background: var(--add-bg); color: var(--add-fg); padding: 0.05em 0.4em; font-size: 10px; font-weight: 600; border-radius: 3px; text-transform: uppercase; }
 .badge.edit { background: rgba(212,180,120,0.15); color: var(--accent); padding: 0.05em 0.4em; font-size: 10px; font-weight: 600; border-radius: 3px; text-transform: uppercase; }
 .d-add { background: var(--add-bg); color: var(--add-fg); display: block; }
