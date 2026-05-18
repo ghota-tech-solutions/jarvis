@@ -1,9 +1,10 @@
-import { Show, createSignal, type Component } from 'solid-js';
+import { Show, createMemo, createSignal, type Component } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { taskQuery, timelineQuery, qkTaskList } from '~/lib/api/queries';
 import { jarvis } from '~/lib/api/client';
 import Transcript from '~/components/Transcript';
+import Timeline from '~/features/timeline/Timeline';
 
 const Task: Component = () => {
   const params = useParams<{ id: string }>();
@@ -14,6 +15,22 @@ const Task: Component = () => {
 
   const [followup, setFollowup] = createSignal('');
   const [submitting, setSubmitting] = createSignal(false);
+  const [view, setView] = createSignal<'timeline' | 'transcript' | 'both'>('both');
+  const [selectedEvtId, setSelectedEvtId] = createSignal(0);
+
+  const scrollToEvent = (id: number) => {
+    setSelectedEvtId(id);
+    if (id === 0) return;
+    queueMicrotask(() => {
+      const el = document.querySelector(`[data-evt-id="${id}"]`);
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  };
+
+  const events = createMemo(() => timelineQ.data?.events ?? []);
+  const spans = createMemo(() => timelineQ.data?.spans ?? []);
+  const minTs = createMemo(() => timelineQ.data?.minTsMicros ?? 0n);
+  const maxTs = createMemo(() => timelineQ.data?.maxTsMicros ?? 0n);
 
   const onContinue = async (ev: Event) => {
     ev.preventDefault();
@@ -77,7 +94,42 @@ const Task: Component = () => {
             </header>
 
             <Show when={timelineQ.data} fallback={<p class="dim">loading events…</p>}>
-              <Transcript events={timelineQ.data!.events} />
+              <div class="view-toggle">
+                <button
+                  type="button"
+                  class={`btn ghost ${view() === 'both' ? 'active' : ''}`}
+                  onClick={() => setView('both')}
+                >
+                  both
+                </button>
+                <button
+                  type="button"
+                  class={`btn ghost ${view() === 'timeline' ? 'active' : ''}`}
+                  onClick={() => setView('timeline')}
+                >
+                  timeline
+                </button>
+                <button
+                  type="button"
+                  class={`btn ghost ${view() === 'transcript' ? 'active' : ''}`}
+                  onClick={() => setView('transcript')}
+                >
+                  transcript
+                </button>
+              </div>
+              <Show when={view() !== 'transcript'}>
+                <Timeline
+                  events={events()}
+                  spans={spans()}
+                  minTs={minTs()}
+                  maxTs={maxTs()}
+                  selectedEvtId={selectedEvtId()}
+                  onSelect={scrollToEvent}
+                />
+              </Show>
+              <Show when={view() !== 'timeline'}>
+                <Transcript events={events()} selectedEvtId={selectedEvtId()} />
+              </Show>
             </Show>
 
             <form class="form" onSubmit={onContinue} style="margin-top: 1.5rem">

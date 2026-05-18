@@ -1,7 +1,7 @@
 import { For, Show, createMemo, type Component } from 'solid-js';
 import type { TimelineEvent } from '~/lib/api/gen/jarvis_pb';
 
-type Props = { events: TimelineEvent[] };
+type Props = { events: TimelineEvent[]; selectedEvtId?: number };
 
 const kindIcon = (kind: string): string => {
   switch (kind) {
@@ -76,11 +76,14 @@ const toolResultSummary = (p: Record<string, unknown>): {
   return { ok, exit, output, bytes };
 };
 
-const EventBlock: Component<{ evt: TimelineEvent }> = (p) => {
+const EventBlock: Component<{ evt: TimelineEvent; selected?: boolean }> = (p) => {
   const payload = createMemo(() => parsePayload(p.evt.payloadJson));
 
   return (
-    <div class={`evt-block ${kindClass(p.evt.kind)}`}>
+    <div
+      class={`evt-block ${kindClass(p.evt.kind)} ${p.selected ? 'evt-selected' : ''}`}
+      data-evt-id={Number(p.evt.id)}
+    >
       <Show when={p.evt.kind === 'decision'}>
         <div class="evt-prose">{decisionText(payload())}</div>
       </Show>
@@ -177,7 +180,9 @@ const Transcript: Component<Props> = (p) => {
 
   return (
     <div class="transcript">
-      <For each={filtered()}>{(evt) => <EventBlock evt={evt} />}</For>
+      <For each={filtered()}>
+        {(evt) => <EventBlock evt={evt} selected={Number(evt.id) === p.selectedEvtId} />}
+      </For>
     </div>
   );
 };

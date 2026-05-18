@@ -387,3 +387,33 @@ pre {
 .evt-verdict {
   padding: 0.3rem 0;
 }
+
+.evt-selected {
+  background: rgba(212, 180, 120, 0.07);
+  border-left: 2px solid var(--accent);
+  padding-left: 0.5rem;
+  margin-left: -0.7rem;
+  border-radius: 2px;
+  scroll-margin-top: 80px;
+}
+
+/* --- Timeline -------------------------------------------------------- */
+
+.timeline-root {
+  margin-bottom: 1rem;
+  padding: 0.4rem 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elev);
+}
+
+.view-toggle {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.7rem 0;
+}
+
+.view-toggle .btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
