@@ -1,4 +1,6 @@
-:root {
+/* Dark is the default; mirrors jarvis-tui/src/theme.rs::DARK_DEFAULT */
+:root,
+[data-theme='dark'] {
   color-scheme: dark;
   --body: rgb(196, 196, 196);
   --dim: rgb(128, 128, 128);
@@ -13,6 +15,24 @@
   --bg: rgb(10, 10, 10);
   --bg-elev: rgb(18, 18, 18);
   --border: rgb(40, 40, 40);
+}
+
+/* Light mirrors jarvis-tui/src/theme.rs::LIGHT */
+[data-theme='light'] {
+  color-scheme: light;
+  --body: rgb(50, 50, 50);
+  --dim: rgb(110, 110, 110);
+  --fade: rgb(170, 170, 170);
+  --heading: rgb(20, 20, 30);
+  --accent: rgb(120, 90, 40);
+  --assistant: rgb(40, 80, 120);
+  --good: rgb(60, 130, 60);
+  --error: rgb(170, 50, 40);
+  --warn: rgb(160, 115, 40);
+  --focus: rgb(0, 0, 0);
+  --bg: rgb(252, 250, 246);
+  --bg-elev: rgb(245, 242, 235);
+  --border: rgb(220, 215, 205);
 }
 
 * {
@@ -417,3 +437,66 @@ pre {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* --- Help overlay --------------------------------------------------- */
+
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.help-modal {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.5rem 2rem;
+  max-width: 480px;
+  min-width: 380px;
+  font-size: 13px;
+}
+
+.help-modal table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0 1rem 0;
+}
+
+.help-modal td {
+  padding: 0.2rem 0.5rem;
+  vertical-align: top;
+}
+
+.help-modal td:first-child {
+  width: 110px;
+  white-space: nowrap;
+}
+
+kbd {
+  display: inline-block;
+  font-family:
+    ui-monospace,
+    'Cascadia Code',
+    monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--body);
+}
+
+/* --- Filter bar ---------------------------------------------------- */
+
+.filter-bar {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.filter-bar .input { flex: 1 1 200px; }

@@ -148,6 +148,8 @@ const NewTaskForm: Component = () => {
 
 const Dashboard: Component = () => {
   const tasksQ = createQuery(() => taskListQuery(true));
+  const [filter, setFilter] = createSignal('');
+  const [statusFilter, setStatusFilter] = createSignal<string>('');
 
   const conversations = createMemo<Conversation[]>(() => {
     const tasks = tasksQ.data?.tasks ?? [];
@@ -176,20 +178,56 @@ const Dashboard: Component = () => {
     });
   });
 
+  const filtered = createMemo<Conversation[]>(() => {
+    const q = filter().toLowerCase().trim();
+    const sf = statusFilter();
+    return conversations().filter((c) => {
+      if (sf && c.root.status !== sf) return false;
+      if (!q) return true;
+      return (
+        c.root.goal.toLowerCase().includes(q) ||
+        c.root.id.toLowerCase().startsWith(q) ||
+        c.root.workdir.toLowerCase().includes(q)
+      );
+    });
+  });
+
   return (
     <section>
       <header style="margin-bottom: 1rem">
         <h2 class="heading" style="margin: 0 0 0.2rem 0">Tasks</h2>
         <p class="dim" style="margin: 0; font-size: 12px">
-          {tasksQ.data?.tasks.length ?? 0} task(s) ·{' '}
-          <Show when={tasksQ.isFetching}>refreshing</Show>
+          {filtered().length} of {conversations().length} conversation(s)
+          {tasksQ.isFetching && <span class="fade"> · refreshing</span>}
         </p>
       </header>
+
+      <div class="filter-bar">
+        <input
+          class="input"
+          placeholder="search by goal / id / workdir — press / to focus"
+          value={filter()}
+          onInput={(e) => setFilter(e.currentTarget.value)}
+          data-search
+        />
+        <select
+          class="select"
+          value={statusFilter()}
+          onChange={(e) => setStatusFilter(e.currentTarget.value)}
+        >
+          <option value="">all statuses</option>
+          <option value="running">running</option>
+          <option value="pending">pending</option>
+          <option value="completed">completed</option>
+          <option value="failed">failed</option>
+          <option value="cancelled">cancelled</option>
+        </select>
+      </div>
 
       <div
         style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.7rem"
       >
-        <For each={conversations()}>{(conv) => <TaskCard conv={conv} />}</For>
+        <For each={filtered()}>{(conv) => <TaskCard conv={conv} />}</For>
       </div>
 
       <NewTaskForm />
