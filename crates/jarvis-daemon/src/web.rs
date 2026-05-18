@@ -1552,6 +1552,19 @@ fn render_event_blocks(events: &[EventRecord]) -> String {
                 pending_tool = None;
             }
             "error" => {
+                // Legacy error events recorded from failing tool invocations
+                // (M6.7 and earlier) have the shape of a tool_result with
+                // `is_error: true` rather than a `message`. Route them through
+                // the action-card renderer with a red border, the way M6.7-H+
+                // does at the source.
+                if ev.payload.get("tool").and_then(|v| v.as_str()).is_some()
+                    && (ev.payload.get("summary").is_some() || ev.payload.get("data").is_some())
+                {
+                    let pair_id = pending_tool.map(|c| c.id.0).unwrap_or(ev.id.0);
+                    out.push_str(&render_action_card(pending_tool, ev, pair_id));
+                    pending_tool = None;
+                    continue;
+                }
                 pending_tool = None;
                 let msg = ev
                     .payload
@@ -2342,7 +2355,10 @@ form.continue textarea { min-height: 2.2em; max-height: 300px; overflow-y: auto;
 .git-row .git-branch { color: var(--heading); font-weight: 600; }
 .git-row .git-row-label { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .git-row .git-meta { color: var(--fade); font-size: 11px; font-variant-numeric: tabular-nums; }
-.git-row .git-hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); font-size: 11px; min-width: 50px; }
+.git-row .git-hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); font-size: 11px; white-space: nowrap; }
+/* Commit rows have a wider first column for the hash, otherwise it overlaps
+   the subject — the default 16px column is sized for an icon. */
+.git-row-commit { grid-template-columns: 62px 1fr auto; }
 .git-row-commit .git-row-label { color: var(--dim); font-size: 12px; }
 .git-row-commit:hover .git-row-label { color: var(--fg); }
 .git-row-file .monoline { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }

@@ -321,13 +321,14 @@ async fn run_tool_step(
     let result = tools.invoke(tool_name, args, ctx).await;
     let event = match result {
         Ok(out) => {
-            let kind = if out.is_error { EventKind::Error } else { EventKind::ToolResult };
-            // Include `args` so SSE-stream consumers can render a complete action
-            // card from the tool_result alone (the matching tool_call event lands
-            // in the ledger but is silenced on the wire).
+            // A tool that ran and returned a non-zero exit code (or set
+            // is_error=true) is still a successful INVOCATION — we keep the
+            // event as ToolResult and let `is_error` inside the payload drive
+            // the red-card rendering. Reserve EventKind::Error for failures
+            // where the tool couldn't be executed at all (Err branch below).
             NewEvent::new(
                 run.task_id,
-                kind,
+                EventKind::ToolResult,
                 json!({
                     "tool": tool_name,
                     "args": args_for_result,
@@ -340,7 +341,11 @@ async fn run_tool_step(
         Err(e) => NewEvent::new(
             run.task_id,
             EventKind::Error,
-            json!({ "tool": tool_name, "args": args_for_result, "error": e.to_string() }),
+            json!({
+                "tool": tool_name,
+                "args": args_for_result,
+                "message": format!("tool `{tool_name}` failed to run: {e}"),
+            }),
         ),
     };
     let mut event = event.with_agent(run.agent_id);
