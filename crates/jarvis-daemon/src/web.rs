@@ -527,7 +527,9 @@ fn render_event_for_sse(ev: &EventRecord) -> Option<SseEvent> {
             )
         }
         // Noise we don't want on the page at all.
-        "heartbeat" | "attempt" => None,
+        // tool_call is silenced because the matching tool_result carries `args`
+        // (since M6.7) and renders the full action card on its own.
+        "heartbeat" | "attempt" | "tool_call" => None,
         _ => {
             let html = render_event_blocks(std::slice::from_ref(ev));
             Some(
@@ -1106,8 +1108,8 @@ fn render_task_page(
   </nav>
   <main class="main">
     <header class="task-header">
-      <h1>{goal}</h1>
-      <p class="muted small">{status} · {backend} · {short_id} {chain_label_inline}</p>
+      <h1>{goal}<span class="status-pill s-{status}"><span class="dot"></span>{status}</span></h1>
+      <p class="muted small">{backend} · {short_id} {chain_label_inline}</p>
     </header>
     <div class="events"
          id="events"
@@ -1116,8 +1118,10 @@ fn render_task_page(
          sse-swap="event"
          hx-swap="beforeend">
       {blocks}
+      {empty_state}
       <div id="composing" class="turn assistant composing" hidden></div>
     </div>
+    <button class="jump-bottom" id="jump-bottom">↓ <span id="jump-count">new</span></button>
     {files_rollup}
     <form id="continue" class="continue"
           hx-post="/api/tasks"
@@ -1152,57 +1156,136 @@ fn render_task_page(
   </aside>
 </div>
 <script>
-// Live LLM streaming: the SSE emits `chunk` events while the model is
-// typing, and a `decision` event when the full reply is parsed. We type
-// chunks into #composing, then clear it the moment the decision arrives
-// (its full markdown-rendered block lands in #events right after).
+// === Smart-follow auto-scroll =================================================
+// The page (window) scrolls now — not the events container — so we follow on
+// window.scrollY. We track "following" state: when the user has scrolled near
+// the bottom we keep snapping; if they scroll up we pause and show a floating
+// "↓ N new" button to jump back.
+(function setupSmartFollow() {{
+  const SLACK = 80;
+  const jumpBtn = document.getElementById('jump-bottom');
+  const jumpCount = document.getElementById('jump-count');
+  const isAtBottom = () => (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - SLACK);
+  let following = true;
+  let unseen = 0;
+  function refreshJump() {{
+    if (!jumpBtn) return;
+    if (!following && unseen > 0) {{
+      jumpCount.textContent = unseen + ' new';
+      jumpBtn.classList.add('show');
+    }} else {{
+      jumpBtn.classList.remove('show');
+    }}
+  }}
+  function snapBottom() {{ window.scrollTo({{top: document.documentElement.scrollHeight, behavior: 'instant'}}); }}
+  window.addEventListener('scroll', () => {{
+    following = isAtBottom();
+    if (following) {{ unseen = 0; refreshJump(); }}
+  }}, {{passive: true}});
+  jumpBtn?.addEventListener('click', () => {{
+    following = true;
+    unseen = 0;
+    snapBottom();
+    refreshJump();
+  }});
+  window.__jarvisFollow = {{
+    onNew() {{ if (following) snapBottom(); else {{ unseen++; refreshJump(); }} }},
+    isFollowing() {{ return following; }},
+  }};
+  // Initial scroll-to-bottom on load.
+  window.addEventListener('load', () => snapBottom());
+}})();
+
+// === Streaming composer + thinking timer ======================================
 (function setupStreamingComposer() {{
   const composing = document.getElementById('composing');
   if (!composing) return;
   const events = document.getElementById('events');
   if (!events) return;
-  // HTMX SSE extension exposes the EventSource via the element's `htmx`
-  // internal data. We attach raw listeners after the connection is open.
+
+  let thinkingEl = null;
+  let thinkingTimer = null;
+  const THINKING_DELAY = 1500;
+
+  function showThinking() {{
+    if (thinkingEl || !composing.hidden) return;
+    thinkingEl = document.createElement('div');
+    thinkingEl.className = 'turn thinking';
+    thinkingEl.innerHTML = '<span class="dots"><span></span><span></span><span></span></span><span>thinking…</span>';
+    composing.parentNode.insertBefore(thinkingEl, composing);
+    window.__jarvisFollow?.onNew();
+  }}
+  function clearThinking() {{
+    if (thinkingTimer) {{ clearTimeout(thinkingTimer); thinkingTimer = null; }}
+    if (thinkingEl) {{ thinkingEl.remove(); thinkingEl = null; }}
+  }}
+  function armThinking() {{
+    clearThinking();
+    thinkingTimer = setTimeout(showThinking, THINKING_DELAY);
+  }}
+
+  function fadeOutComposing() {{
+    composing.classList.add('fade-out');
+    setTimeout(() => {{
+      composing.hidden = true;
+      composing.textContent = '';
+      composing.classList.remove('fade-out');
+    }}, 220);
+  }}
+
   function tryAttach() {{
-    const es = events.__sse?.source || htmx.find(events).__sse?.source;
+    const es = events.__sse?.source || htmx.find(events)?.__sse?.source;
     if (!es || es._jarvis_attached) {{
       setTimeout(tryAttach, 100);
       return;
     }}
     es._jarvis_attached = true;
+    es.addEventListener('open', () => armThinking());
     es.addEventListener('chunk', (ev) => {{
-      if (composing.hidden) {{ composing.hidden = false; composing.textContent = ''; }}
+      clearThinking();
+      if (composing.hidden) {{ composing.hidden = false; composing.textContent = ''; composing.classList.remove('fade-out'); }}
       composing.textContent += ev.data;
-      events.scrollTop = events.scrollHeight;
+      window.__jarvisFollow?.onNew();
     }});
     es.addEventListener('decision', (ev) => {{
-      // Clear the live buffer; the full rendered decision will land in #events.
-      composing.hidden = true;
-      composing.textContent = '';
-      // HTMX SSE swap with name="decision" was not registered, so do it ourselves.
+      clearThinking();
+      fadeOutComposing();
+      // Insert the rendered decision block AFTER the composing element.
       events.insertAdjacentHTML('beforeend', ev.data);
-      events.scrollTop = events.scrollHeight;
+      window.__jarvisFollow?.onNew();
+      armThinking();
     }});
-    es.addEventListener('open', () => {{}});
+    es.addEventListener('event', () => {{
+      // Any non-chunk event resets the thinking timer.
+      clearThinking();
+      armThinking();
+      window.__jarvisFollow?.onNew();
+    }});
   }}
   tryAttach();
 }})();
-// Auto-scroll the events container on every swap.
-document.body.addEventListener('htmx:afterSwap', (e) => {{
-  const ev = document.getElementById('events');
-  if (ev && e.target && (e.target === ev || ev.contains(e.target))) {{
-    ev.scrollTop = ev.scrollHeight;
-  }}
+
+// === Auto-scroll on HTMX swaps (covers initial backfill + sse swaps) ==========
+document.body.addEventListener('htmx:afterSwap', () => {{
+  window.__jarvisFollow?.onNew();
 }});
-// Clear + refocus the continue textarea once submitted.
+
+// === Continue form: refocus + clear textarea after submit =====================
 document.body.addEventListener('htmx:afterRequest', (e) => {{
   if (e.target.id === 'continue' && e.detail.successful) {{
     const ta = e.target.querySelector('textarea');
-    if (ta) {{ ta.value = ''; ta.focus(); }}
+    if (ta) {{ ta.value = ''; ta.style.height = 'auto'; ta.focus(); }}
   }}
 }});
-// Enter submits the textarea form; Shift+Enter / Ctrl+Enter inserts a newline.
+
+// === Auto-resize textareas as you type ========================================
+function autoResize(ta) {{
+  ta.style.height = 'auto';
+  const next = Math.min(ta.scrollHeight, 300);
+  ta.style.height = next + 'px';
+}}
 document.querySelectorAll('textarea[name="goal"]').forEach((ta) => {{
+  ta.addEventListener('input', () => autoResize(ta));
   ta.addEventListener('keydown', (e) => {{
     if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {{
       e.preventDefault();
@@ -1211,7 +1294,8 @@ document.querySelectorAll('textarea[name="goal"]').forEach((ta) => {{
     }}
   }});
 }});
-// "+ Continue" link in the left nav: focus the textarea rather than jumping.
+
+// === "+ Continue" link in the left nav: focus + scroll the textarea ===========
 document.querySelectorAll('a[href="#continue"]').forEach((a) => {{
   a.addEventListener('click', (e) => {{
     e.preventDefault();
@@ -1219,7 +1303,8 @@ document.querySelectorAll('a[href="#continue"]').forEach((a) => {{
     if (ta) {{ ta.focus(); ta.scrollIntoView({{behavior: 'smooth', block: 'end'}}); }}
   }});
 }});
-// Auto-focus the continue textarea on page load if there is one.
+
+// === Auto-focus the continue textarea on page load ============================
 window.addEventListener('load', () => {{
   document.querySelector('#continue textarea')?.focus();
 }});
@@ -1245,6 +1330,11 @@ window.addEventListener('load', () => {{
             String::new()
         },
         blocks = blocks,
+        empty_state = if events.is_empty() {
+            r#"<div class="turn empty-state"><div class="glyph">○</div><div>Jarvis is starting…</div><div class="muted small">The first turn will appear here.</div></div>"#.to_string()
+        } else {
+            String::new()
+        },
         projects_html = projects_html,
         sandbox_kv = if leaf.sandbox.is_empty() {
             String::new()
@@ -1465,7 +1555,7 @@ fn render_action_card(call: Option<&EventRecord>, result: &EventRecord, anchor: 
         .unwrap_or(false);
     let data = result.payload.get("data");
 
-    let inner = match tool.as_str() {
+    let (inner, data_tool, data_new) = match tool.as_str() {
         "shell" => {
             let cmd = args.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
             let exit = data
@@ -1494,27 +1584,14 @@ fn render_action_card(call: Option<&EventRecord>, result: &EventRecord, anchor: 
             } else {
                 String::new()
             };
-            let output_section = if stdout.is_empty() && stderr.is_empty() {
-                String::new()
-            } else {
-                let preview_out = clip(stdout, 600);
-                let preview_err = clip(stderr, 600);
-                let blocks = if !preview_err.is_empty() {
-                    format!(
-                        r#"<pre class="action-out">{}</pre><pre class="action-out action-err">{}</pre>"#,
-                        html_escape(&preview_out),
-                        html_escape(&preview_err)
-                    )
-                } else {
-                    format!(r#"<pre class="action-out">{}</pre>"#, html_escape(&preview_out))
-                };
+            let output_section = render_inline_output(stdout, stderr);
+            (
                 format!(
-                    r#"<details class="action-detail"><summary class="muted small">output</summary>{blocks}</details>"#,
-                )
-            };
-            format!(
-                r#"<div class="action-head"><span class="action-tool">$</span> <code class="action-cmd">{cmd}</code> {exit_chip}{backend_chip}</div>{output_section}"#,
-                cmd = html_escape(cmd),
+                    r#"<div class="action-head"><span class="action-tool">$</span> <code class="action-cmd">{cmd}</code> <span class="chip-spacer"></span>{exit_chip}{backend_chip}</div>{output_section}"#,
+                    cmd = html_escape(cmd),
+                ),
+                "shell",
+                false,
             )
         }
         "fs_read" => {
@@ -1532,9 +1609,18 @@ fn render_action_card(call: Option<&EventRecord>, result: &EventRecord, anchor: 
             } else {
                 String::new()
             };
-            format!(
-                r#"<div class="action-head"><span class="action-tool">📖</span> <span class="action-verb">Read</span> <code class="action-path">{path}</code> {bytes_chip}</div>"#,
-                path = html_escape(&path),
+            let preview = data
+                .and_then(|d| d.get("content"))
+                .and_then(|v| v.as_str())
+                .map(|c| render_inline_output(c, ""))
+                .unwrap_or_default();
+            (
+                format!(
+                    r#"<div class="action-head"><span class="action-verb">Read</span> <code class="action-path">{path}</code> <span class="chip-spacer"></span>{bytes_chip}</div>{preview}"#,
+                    path = html_escape(&path),
+                ),
+                "fs_read",
+                false,
             )
         }
         "fs_write" => {
@@ -1561,23 +1647,94 @@ fn render_action_card(call: Option<&EventRecord>, result: &EventRecord, anchor: 
                 .and_then(|d| d.get("diff_unified"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let body = colorize_unified(unified);
-            format!(
-                r#"<div class="action-head"><span class="action-tool">✎</span> <span class="action-verb">{verb}</span> <code class="action-path">{path}</code> <span class="add">+{added}</span> <span class="rem">-{removed}</span></div><details class="action-detail"><summary class="muted small">diff</summary><pre class="diff-body">{body}</pre></details>"#,
-                path = html_escape(&path),
+            let diff_block = render_inline_diff(unified);
+            (
+                format!(
+                    r#"<div class="action-head"><span class="action-verb">{verb}</span> <code class="action-path">{path}</code> <span class="chip-spacer"></span><span class="add">+{added}</span> <span class="rem">-{removed}</span></div>{diff_block}"#,
+                    path = html_escape(&path),
+                ),
+                "fs_write",
+                is_new,
             )
         }
         _ => {
             let summary_html = html_escape(summary);
-            format!(r#"<div class="action-head"><span class="action-tool">⚙</span> <span class="action-verb">{tool}</span> {summary_html}</div>"#,
-                tool = html_escape(&tool),
+            (
+                format!(
+                    r#"<div class="action-head"><span class="action-verb">{tool}</span> {summary_html}</div>"#,
+                    tool = html_escape(&tool),
+                ),
+                "other",
+                false,
             )
         }
     };
 
     let state_cls = if is_error { " action-error" } else { "" };
+    let new_attr = if data_new { r#" data-new="true""# } else { "" };
     format!(
-        r#"<div class="turn action{state_cls}" data-id="{anchor}">{inner}</div>"#,
+        r#"<div class="turn action{state_cls}" data-id="{anchor}" data-tool="{data_tool}"{new_attr}>{inner}</div>"#,
+    )
+}
+
+/// Render shell stdout/stderr inline. Up to 6 visible lines; the rest in a
+/// `<details>` "show N more". Nothing if both are empty.
+fn render_inline_output(stdout: &str, stderr: &str) -> String {
+    fn block(text: &str, extra_cls: &str, label: &str) -> String {
+        if text.is_empty() {
+            return String::new();
+        }
+        const VISIBLE: usize = 6;
+        let lines: Vec<&str> = text.lines().collect();
+        if lines.len() <= VISIBLE {
+            return format!(
+                r#"<pre class="action-out{cls}">{}</pre>"#,
+                html_escape(text),
+                cls = if extra_cls.is_empty() { String::new() } else { format!(" {extra_cls}") },
+            );
+        }
+        let head = lines[..VISIBLE].join("\n");
+        let tail = lines[VISIBLE..].join("\n");
+        let more = lines.len() - VISIBLE;
+        let _ = label;
+        format!(
+            r#"<pre class="action-out{cls}">{head_html}</pre><details class="action-more"><summary class="muted small">show {more} more line{plural}</summary><pre class="action-out{cls}">{tail_html}</pre></details>"#,
+            head_html = html_escape(&head),
+            tail_html = html_escape(&tail),
+            plural = if more > 1 { "s" } else { "" },
+            cls = if extra_cls.is_empty() { String::new() } else { format!(" {extra_cls}") },
+        )
+    }
+    let mut s = String::new();
+    s.push_str(&block(stdout, "", "stdout"));
+    s.push_str(&block(stderr, "action-err", "stderr"));
+    s
+}
+
+/// Inline diff: ≤20 lines fully visible, else preview 12 lines + show-more.
+fn render_inline_diff(unified: &str) -> String {
+    if unified.is_empty() {
+        return String::new();
+    }
+    let lines: Vec<&str> = unified.lines().collect();
+    let html_body = |slice: &[&str]| -> String {
+        let chunk = slice.join("\n");
+        colorize_unified(&chunk)
+    };
+    if lines.len() <= 20 {
+        return format!(
+            r#"<pre class="diff-body">{}</pre>"#,
+            html_body(&lines),
+        );
+    }
+    let head = &lines[..12];
+    let tail = &lines[12..];
+    let more = tail.len();
+    format!(
+        r#"<pre class="diff-body">{}</pre><details class="action-more"><summary class="muted small">show {more} more line{plural} of diff</summary><pre class="diff-body">{}</pre></details>"#,
+        html_body(head),
+        html_body(tail),
+        plural = if more > 1 { "s" } else { "" },
     )
 }
 
@@ -1687,9 +1844,9 @@ p { margin: 0.3em 0; }
 
 /* 3-column shell */
 .shell { display: grid; grid-template-columns: 260px minmax(0, 1fr) 320px; min-height: 100vh; }
-.left { background: var(--panel); border-right: 1px solid var(--line); padding: 1em 0.8em; overflow-y: auto; }
-.main { padding: 1.4em 2em; min-width: 0; }
-.right { background: var(--panel); border-left: 1px solid var(--line); padding: 1em 0.8em; overflow-y: auto; }
+.left { background: var(--panel); border-right: 1px solid var(--line); padding: 1em 0.8em; overflow-y: auto; position: sticky; top: 0; height: 100vh; }
+.main { padding: 1.4em 2em 0; min-width: 0; }
+.right { background: var(--panel); border-left: 1px solid var(--line); padding: 1em 0.8em; overflow-y: auto; position: sticky; top: 0; height: 100vh; }
 
 /* Left nav */
 .brand { font-weight: 700; color: var(--heading); padding: 0.2em 0.4em 1em; font-size: 14px; }
@@ -1712,6 +1869,50 @@ details.project[open] > summary { color: var(--heading); }
 
 /* Main */
 .task-header { margin-bottom: 1em; }
+.task-header .status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.15em 0.7em;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+  margin-left: 0.6em;
+}
+.task-header .status-pill.s-running { background: rgba(220,175,90,0.15); color: var(--warn); }
+.task-header .status-pill.s-completed { background: var(--add-bg); color: var(--add-fg); }
+.task-header .status-pill.s-failed { background: var(--rem-bg); color: var(--rem-fg); }
+.task-header .status-pill.s-cancelled { background: var(--panel-2); color: var(--fade); }
+.task-header .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.task-header .status-pill.s-running .dot { animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* Floating "jump to bottom" button when smart-follow is paused */
+.jump-bottom {
+  position: fixed;
+  right: 360px;
+  bottom: 120px;
+  background: var(--accent);
+  color: #1a1408;
+  border: none;
+  border-radius: 999px;
+  padding: 0.5em 0.95em;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  display: none;
+  z-index: 20;
+}
+.jump-bottom.show { display: inline-flex; align-items: center; gap: 0.4em; }
+.jump-bottom:hover { background: #e0c890; }
+@media (max-width: 1200px) {
+  .jump-bottom { right: 24px; }
+}
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1em; margin: 0.6em 0; }
 table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 1em; }
 table.tasks th { text-align: left; color: var(--fade); font-weight: 400; padding: 0.4em 0.5em; border-bottom: 1px solid var(--line); }
@@ -1734,42 +1935,122 @@ form button.ghost { background: transparent; color: var(--fg); border: 1px solid
 form button.ghost:hover { background: var(--panel-2); color: var(--err); }
 .checkbox { display: flex; gap: 0.3em; align-items: center; color: var(--dim); font-size: 12px; }
 
-/* Continue (follow-up) */
-form.continue { position: sticky; bottom: 0; background: var(--bg); padding: 0.6em 0; border-top: 1px solid var(--line); margin-top: 1em; }
-.continue-actions { display: flex; justify-content: flex-end; margin-top: 0.4em; }
+/* Continue (follow-up) — sticky at bottom with translucent backdrop */
+form.continue {
+  position: sticky;
+  bottom: 0;
+  background: rgba(10,10,12,0.85);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  padding: 0.8em 0 1em 0;
+  margin: 1.2em -2em 0;
+  padding-left: 2em;
+  padding-right: 2em;
+  border-top: 1px solid var(--line);
+  z-index: 5;
+}
+form.continue textarea { min-height: 2.2em; max-height: 300px; overflow-y: auto; transition: height 80ms ease-out; }
+.continue-actions { display: flex; justify-content: flex-end; margin-top: 0.4em; gap: 0.5em; }
 
-/* Events stream — Codex-style conversation flow */
-.events { display: flex; flex-direction: column; gap: 0.9em; max-height: calc(100vh - 260px); overflow-y: auto; padding-right: 0.5em; padding-top: 0.5em; }
+/* Custom scrollbars across the app (Webkit + Firefox) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--dim); background-clip: padding-box; border: 2px solid transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+/* Events stream — single page scroll, no nested container */
+.events { display: flex; flex-direction: column; gap: 0.9em; padding-top: 0.5em; }
 .turn { line-height: 1.55; }
 .turn.assistant { color: var(--fg); padding: 0.2em 0; }
 .turn.user { display: flex; justify-content: flex-end; }
-.turn.user .user-bubble { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 0.55em 0.9em; max-width: 80%; color: var(--fg); }
-.turn.error { color: var(--err); padding: 0.2em 0; }
-.turn.verdict { padding: 0.4em 0; border-top: 1px dashed var(--line); margin-top: 0.4em; }
-.turn.verdict .badge { padding: 0.05em 0.5em; border-radius: 3px; font-size: 11px; font-weight: 700; margin-right: 0.5em; text-transform: uppercase; }
+.turn.user .user-bubble {
+  background: rgba(212,180,120,0.06);
+  border: 1px solid rgba(212,180,120,0.35);
+  border-radius: 12px 12px 4px 12px;
+  padding: 0.6em 0.95em;
+  max-width: 78%;
+  color: var(--fg);
+}
+.turn.user .user-bubble p { margin: 0; }
+.turn.error { color: var(--err); padding: 0.4em 0.8em; background: rgba(220,110,90,0.06); border-left: 3px solid var(--err); border-radius: 0 4px 4px 0; }
+.turn.verdict {
+  padding: 0.85em 1em;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 1em;
+}
+.turn.verdict.verdict-pass { border-color: rgba(140,180,110,0.45); background: rgba(140,180,110,0.05); }
+.turn.verdict.verdict-fail { border-color: rgba(220,110,90,0.45); background: rgba(220,110,90,0.05); }
+.turn.verdict.verdict-other { border-color: rgba(220,175,90,0.45); background: rgba(220,175,90,0.05); }
+.turn.verdict .badge { padding: 0.15em 0.55em; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 0.6em; text-transform: uppercase; vertical-align: middle; }
 .turn.verdict .badge.verdict-pass { background: var(--add-bg); color: var(--add-fg); }
 .turn.verdict .badge.verdict-fail { background: var(--rem-bg); color: var(--rem-fg); }
 .turn.verdict .badge.verdict-other { background: rgba(220,175,90,0.15); color: var(--warn); }
 
-/* Live LLM streaming */
-.turn.assistant.composing { white-space: pre-wrap; color: var(--assistant); font-style: italic; min-height: 1em; position: relative; }
+/* Live LLM streaming with smooth fade transitions */
+.turn.assistant.composing {
+  white-space: pre-wrap;
+  color: var(--assistant);
+  min-height: 1em;
+  position: relative;
+  opacity: 1;
+  transition: opacity 200ms ease-out;
+}
+.turn.assistant.composing.fade-out { opacity: 0; }
 .turn.assistant.composing::after { content: '▊'; color: var(--accent); animation: blink 1s step-end infinite; margin-left: 1px; }
 @keyframes blink { 50% { opacity: 0; } }
 
-/* Action card */
-.turn.action { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 0.45em 0.7em; }
-.turn.action.action-error { border-color: var(--err); }
+/* Thinking indicator (timer-driven) */
+.turn.thinking { color: var(--dim); font-size: 12px; padding: 0.4em 0; display: flex; align-items: center; gap: 0.5em; }
+.turn.thinking .dots span { display: inline-block; width: 4px; height: 4px; background: var(--accent); border-radius: 50%; margin-right: 3px; animation: think 1.4s infinite ease-in-out both; }
+.turn.thinking .dots span:nth-child(1) { animation-delay: -0.32s; }
+.turn.thinking .dots span:nth-child(2) { animation-delay: -0.16s; }
+@keyframes think { 0%,80%,100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+/* Empty state */
+.turn.empty-state { color: var(--dim); text-align: center; padding: 3em 1em; }
+.turn.empty-state .glyph { font-size: 24px; color: var(--fade); margin-bottom: 0.5em; }
+
+/* Action card — left-border accent per tool */
+.turn.action {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 0.55em 0.8em;
+}
+.turn.action[data-tool="shell"] { border-left-color: var(--dim); }
+.turn.action[data-tool="fs_read"] { border-left-color: #7a9cb8; }
+.turn.action[data-tool="fs_write"] { border-left-color: var(--accent); }
+.turn.action[data-tool="fs_write"][data-new="true"] { border-left-color: var(--add-fg); }
+.turn.action[data-tool="other"] { border-left-color: var(--accent); }
+.turn.action.action-error { border-color: var(--err); border-left-color: var(--err); background: rgba(220,110,90,0.04); }
+
 .action-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5em; font-size: 12px; }
 .action-tool { color: var(--accent); font-weight: 700; }
 .action-verb { color: var(--heading); font-weight: 600; }
-.action-cmd, .action-path { color: var(--fg); background: rgba(255,255,255,0.04); padding: 0.05em 0.4em; border-radius: 3px; }
-.action-chip { font-size: 10px; padding: 0.05em 0.45em; border-radius: 10px; background: rgba(212,180,120,0.15); color: var(--accent); font-weight: 600; }
+.action-cmd, .action-path { color: var(--fg); background: rgba(255,255,255,0.04); padding: 0.1em 0.45em; border-radius: 3px; word-break: break-all; }
+.chip-spacer { flex: 1; }
+.action-chip { font-size: 10px; padding: 0.05em 0.5em; border-radius: 10px; background: rgba(212,180,120,0.15); color: var(--accent); font-weight: 600; letter-spacing: 0.02em; }
 .action-chip.muted-chip { background: rgba(255,255,255,0.04); color: var(--dim); font-weight: 400; }
-.action-detail { margin-top: 0.35em; }
-.action-detail > summary { cursor: pointer; padding: 0.1em 0; list-style: none; color: var(--dim); }
-.action-detail > summary::-webkit-details-marker { display: none; }
-.action-out { background: rgba(0,0,0,0.3); border: 1px solid var(--line); padding: 0.5em 0.7em; font-size: 12px; line-height: 1.45; max-height: 280px; overflow-y: auto; border-radius: 4px; margin: 0.3em 0 0 0; }
-.action-out.action-err { color: var(--err); background: rgba(220,110,90,0.06); }
+.action-more { margin-top: 0.3em; }
+.action-more > summary { cursor: pointer; padding: 0.15em 0; list-style: none; color: var(--dim); }
+.action-more > summary:hover { color: var(--fg); }
+.action-more > summary::-webkit-details-marker { display: none; }
+.action-out {
+  background: rgba(0,0,0,0.28);
+  border: 1px solid var(--line);
+  padding: 0.5em 0.7em;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 4px;
+  margin: 0.35em 0 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.action-out.action-err { color: var(--err); background: rgba(220,110,90,0.06); border-color: rgba(220,110,90,0.3); }
 
 /* Rollup card */
 .rollup.card { margin: 1.2em 0 0; padding: 0; }
@@ -1782,21 +2063,24 @@ form.continue { position: sticky; bottom: 0; background: var(--bg); padding: 0.6
 .file-row .add, .file-row .rem { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Inline markdown rendering inside decision/verdict bodies */
-.md p { display: inline; margin: 0; }
-.md p + p { display: block; margin-top: 0.4em; }
+.md p { display: block; margin: 0.3em 0; }
+.md p:first-child { margin-top: 0; }
+.md p:last-child { margin-bottom: 0; }
 .md strong { color: var(--heading); font-weight: 700; }
 .md em { font-style: italic; }
 .md code { background: rgba(212,180,120,0.10); color: var(--accent); padding: 0.05em 0.35em; border-radius: 3px; font-size: 0.95em; }
 .md pre { background: var(--panel-2); border: 1px solid var(--line); padding: 0.6em 0.8em; border-radius: 4px; overflow-x: auto; margin: 0.5em 0; }
 .md pre code { background: transparent; color: var(--fg); padding: 0; font-size: 12px; }
-.md h1, .md h2, .md h3, .md h4 { color: var(--heading); margin: 0.6em 0 0.3em; font-weight: 700; font-style: normal; display: block; }
+.md h1, .md h2, .md h3, .md h4 { color: var(--heading); margin: 0.6em 0 0.3em; font-weight: 700; }
 .md h1 { font-size: 16px; }
 .md h2 { font-size: 15px; }
 .md h3, .md h4 { font-size: 14px; }
-.md ul, .md ol { margin: 0.3em 0 0.3em 1.2em; padding: 0; display: block; font-style: normal; }
-.md ul li, .md ol li { margin: 0.1em 0; }
+.md ul, .md ol { margin: 0.4em 0 0.4em 1.6em; padding: 0; list-style-position: outside; }
+.md ul li, .md ol li { margin: 0.15em 0; padding-left: 0.2em; }
 .md ul { list-style: disc; }
 .md ol { list-style: decimal; }
+.md ul ul, .md ol ol, .md ul ol, .md ol ul { margin-left: 1.2em; margin-top: 0.1em; }
+.md blockquote { border-left: 2px solid var(--line); margin: 0.4em 0; padding: 0.1em 0.8em; color: var(--dim); }
 .md blockquote { border-left: 2px solid var(--line); margin: 0.4em 0; padding: 0.1em 0.8em; color: var(--dim); display: block; font-style: normal; }
 .md a { color: var(--link); text-decoration: underline; }
 .md hr { border: none; border-top: 1px solid var(--line); margin: 0.8em 0; }

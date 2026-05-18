@@ -317,15 +317,20 @@ async fn run_tool_step(
         )
         .await?;
 
+    let args_for_result = args.clone();
     let result = tools.invoke(tool_name, args, ctx).await;
     let event = match result {
         Ok(out) => {
             let kind = if out.is_error { EventKind::Error } else { EventKind::ToolResult };
+            // Include `args` so SSE-stream consumers can render a complete action
+            // card from the tool_result alone (the matching tool_call event lands
+            // in the ledger but is silenced on the wire).
             NewEvent::new(
                 run.task_id,
                 kind,
                 json!({
                     "tool": tool_name,
+                    "args": args_for_result,
                     "summary": out.summary,
                     "data": out.data,
                     "is_error": out.is_error,
@@ -335,7 +340,7 @@ async fn run_tool_step(
         Err(e) => NewEvent::new(
             run.task_id,
             EventKind::Error,
-            json!({ "tool": tool_name, "error": e.to_string() }),
+            json!({ "tool": tool_name, "args": args_for_result, "error": e.to_string() }),
         ),
     };
     let mut event = event.with_agent(run.agent_id);
