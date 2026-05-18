@@ -133,7 +133,13 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         None
     };
 
+    // The same port speaks two protocols:
+    //   - binary gRPC over HTTP/2 (for TUI/CLI tonic clients)
+    //   - gRPC-Web over HTTP/1.1 (for the SolidJS SPA via connect-es)
+    // The tonic-web layer transparently translates between the two.
     let result = Server::builder()
+        .accept_http1(true)
+        .layer(tonic_web::GrpcWebLayer::new())
         .add_service(JarvisServer::new(svc))
         .serve(addr)
         .await
