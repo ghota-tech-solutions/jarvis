@@ -13,6 +13,7 @@ members = [
     "crates/jarvis-daemon",
     "crates/jarvis-cli",
     "crates/jarvis-tui",
+    "crates/jarvis-web",
 ]
 
 [workspace.package]
@@ -34,6 +35,7 @@ jarvis-tools = { path = "crates/jarvis-tools" }
 jarvis-sandbox = { path = "crates/jarvis-sandbox" }
 jarvis-mcp = { path = "crates/jarvis-mcp" }
 jarvis-agent = { path = "crates/jarvis-agent" }
+jarvis-web = { path = "crates/jarvis-web" }
 
 # Async / runtime
 tokio = { version = "1.43", features = ["full"] }

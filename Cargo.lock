@@ -1827,6 +1827,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "jarvis-web"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "async-trait",
+ "axum",
+ "chrono",
+ "futures",
+ "git2",
+ "jarvis-agent",
+ "jarvis-api",
+ "jarvis-config",
+ "jarvis-core",
+ "jarvis-ledger",
+ "jarvis-llm",
+ "jarvis-sandbox",
+ "jarvis-tools",
+ "maud",
+ "prost",
+ "pulldown-cmark",
+ "regex",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tonic",
+ "tower-http",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "jobserver"
 version = "0.1.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
