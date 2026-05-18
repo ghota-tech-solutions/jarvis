@@ -452,16 +452,25 @@ async fn api_events_sse(
     State(s): State<WebState>,
     Query(q): Query<SseQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, AppError> {
-    let task_id =
+    let subscribed_root =
         TaskId::from_str(&q.task).map_err(|_| AppError::BadRequest("invalid task id".into()))?;
-    let chain = s.ledger.walk_ancestors(task_id).await.unwrap_or_default();
-    let chain_ids: std::collections::HashSet<TaskId> = chain.iter().map(|t| t.id).collect();
+    let chain = s.ledger.walk_ancestors(subscribed_root).await.unwrap_or_default();
     let backfill = s
         .ledger
         .query_events_multi(&chain.iter().map(|t| t.id).collect::<Vec<_>>(), q.since, 0)
         .await
         .unwrap_or_default();
     let mut live = s.ledger.subscribe();
+
+    // Per-event cache of "this task's chain root" so we don't re-walk on every
+    // event for the same task. Children dynamically attach to the chain — that's
+    // why we walk ancestors instead of capturing chain_ids statically.
+    let mut root_cache: std::collections::HashMap<TaskId, TaskId> =
+        std::collections::HashMap::new();
+    for t in &chain {
+        root_cache.insert(t.id, subscribed_root);
+    }
+    let ledger = s.ledger.clone();
 
     let stream = async_stream::stream! {
         for ev in backfill {
@@ -475,16 +484,17 @@ async fn api_events_sse(
         }
         loop {
             match live.recv().await {
-                Ok(ev) if chain_ids.contains(&ev.task_id) => {
-                    let html = render_event_blocks(std::slice::from_ref(&ev));
-                    yield Ok(
-                        SseEvent::default()
-                            .event("event")
-                            .id(ev.id.0.to_string())
-                            .data(html)
-                    );
+                Ok(ev) => {
+                    if descends_from(&ledger, &mut root_cache, ev.task_id, subscribed_root).await {
+                        let html = render_event_blocks(std::slice::from_ref(&ev));
+                        yield Ok(
+                            SseEvent::default()
+                                .event("event")
+                                .id(ev.id.0.to_string())
+                                .data(html)
+                        );
+                    }
                 }
-                Ok(_) => continue,
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(_) => return,
             }
@@ -492,6 +502,43 @@ async fn api_events_sse(
     };
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+/// Returns true if `task_id` is `root` or any ancestor of `task_id` is `root`.
+/// Caches results keyed by task_id so we don't re-walk for streaming events
+/// that come from the same task in bursts.
+async fn descends_from(
+    ledger: &Ledger,
+    cache: &mut std::collections::HashMap<TaskId, TaskId>,
+    task_id: TaskId,
+    root: TaskId,
+) -> bool {
+    if let Some(known_root) = cache.get(&task_id) {
+        return *known_root == root;
+    }
+    let mut current = Some(task_id);
+    let mut walked = Vec::new();
+    while let Some(id) = current {
+        walked.push(id);
+        if id == root {
+            for w in &walked {
+                cache.insert(*w, root);
+            }
+            return true;
+        }
+        if let Some(known_root) = cache.get(&id).copied() {
+            let same = known_root == root;
+            for w in &walked {
+                cache.insert(*w, known_root);
+            }
+            return same;
+        }
+        match ledger.get_task(id).await {
+            Ok(t) => current = t.parent,
+            Err(_) => return false,
+        }
+    }
+    false
 }
 
 // ----------------- Projects + Git -----------------
@@ -758,7 +805,7 @@ fn render_index(
     <section id="new-task" class="card">
       <h2>New task</h2>
       <form hx-post="/api/tasks" hx-encoding="application/x-www-form-urlencoded" class="newtask" hx-on::after-request="if (event.detail.successful) this.reset()">
-        <textarea name="goal" rows="2" placeholder="Describe the goal — Enter to submit" required></textarea>
+        <textarea name="goal" rows="2" placeholder="Describe the goal — Enter to submit, Shift+Enter for a newline" required></textarea>
         <div class="row">
           <input name="workdir" placeholder="workdir (leave empty for cwd)">
           <select name="sandbox"><option value="">sandbox: default</option><option>native</option><option>docker</option></select>
@@ -769,9 +816,21 @@ fn render_index(
         </div>
       </form>
     </section>
-    <table class="tasks" hx-get="/api/tasks?all=true&format=html" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML">
+    <script>
+      // Enter to submit on the dashboard form too.
+      document.querySelectorAll('textarea[name="goal"]').forEach((ta) => {{
+        ta.addEventListener('keydown', (e) => {{
+          if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {{
+            e.preventDefault();
+            if (typeof ta.form.requestSubmit === 'function') ta.form.requestSubmit();
+            else ta.form.submit();
+          }}
+        }});
+      }});
+    </script>
+    <table class="tasks">
       <thead><tr><th>id</th><th>status</th><th>sandbox</th><th>goal</th><th>created</th></tr></thead>
-      <tbody>{task_rows}</tbody>
+      <tbody hx-get="/api/tasks?all=true&format=html" hx-trigger="every 2s" hx-target="this" hx-swap="innerHTML">{task_rows}</tbody>
     </table>
   </main>
   <aside class="right">
@@ -820,15 +879,16 @@ fn render_projects_nav(
             .map(|w| w == workdir.as_str())
             .unwrap_or(false);
         let open = if active { " open" } else { "" };
+        let roots: Vec<_> = tasks.iter().filter(|t| t.parent.is_none()).collect();
+        // Each root is one conversation. Children show up rendered inside the
+        // conversation via the ancestor chain.
         out.push_str(&format!(
             r#"<details class="project{open}"><summary>📁 {short} <span class="muted small">{n}</span></summary>"#,
             open = open,
             short = html_escape(&short),
-            n = tasks.len(),
+            n = roots.len(),
         ));
-        // Roots only — display only top-level tasks (parent == null). Children are
-        // reachable via continuation. Cap at 12 entries per project.
-        for t in tasks.iter().filter(|t| t.parent.is_none()).take(12) {
+        for t in roots.iter().take(12) {
             let ago = relative_time(t.created_at);
             out.push_str(&format!(
                 r#"<a href="/task/{id}" class="project-task t-{status}"><span class="goal">{goal}</span><span class="ago muted small">{ago}</span></a>"#,
@@ -962,7 +1022,7 @@ fn render_task_page(
           hx-swap="none"
           hx-on::after-request="if (event.detail.successful) this.reset()">
       <input type="hidden" name="parent_task_id" value="{leaf_id}">
-      <textarea name="goal" rows="2" placeholder="Ask for follow-up changes… (Enter to send)" required></textarea>
+      <textarea name="goal" rows="2" placeholder="Ask for follow-up changes — Enter to send, Shift+Enter for newline" required></textarea>
       <div class="continue-actions">
         <button type="submit" title="Send">↑ send</button>
       </div>
@@ -989,19 +1049,41 @@ fn render_task_page(
   </aside>
 </div>
 <script>
-// HTMX is configured to ignore SSE 'event' name unless explicitly subscribed.
-// Auto-scroll the events container to the bottom on every swap.
+// Auto-scroll the events container on every swap.
 document.body.addEventListener('htmx:afterSwap', (e) => {{
   const ev = document.getElementById('events');
   if (ev && e.target && (e.target === ev || ev.contains(e.target))) {{
     ev.scrollTop = ev.scrollHeight;
   }}
 }});
-// Clear the textarea once submitted, then refocus.
+// Clear + refocus the continue textarea once submitted.
 document.body.addEventListener('htmx:afterRequest', (e) => {{
   if (e.target.id === 'continue' && e.detail.successful) {{
-    e.target.querySelector('textarea').focus();
+    const ta = e.target.querySelector('textarea');
+    if (ta) {{ ta.value = ''; ta.focus(); }}
   }}
+}});
+// Enter submits the textarea form; Shift+Enter / Ctrl+Enter inserts a newline.
+document.querySelectorAll('textarea[name="goal"]').forEach((ta) => {{
+  ta.addEventListener('keydown', (e) => {{
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {{
+      e.preventDefault();
+      if (typeof ta.form.requestSubmit === 'function') ta.form.requestSubmit();
+      else ta.form.submit();
+    }}
+  }});
+}});
+// "+ Continue" link in the left nav: focus the textarea rather than jumping.
+document.querySelectorAll('a[href="#continue"]').forEach((a) => {{
+  a.addEventListener('click', (e) => {{
+    e.preventDefault();
+    const ta = document.querySelector('#continue textarea');
+    if (ta) {{ ta.focus(); ta.scrollIntoView({{behavior: 'smooth', block: 'end'}}); }}
+  }});
+}});
+// Auto-focus the continue textarea on page load if there is one.
+window.addEventListener('load', () => {{
+  document.querySelector('#continue textarea')?.focus();
 }});
 </script>
 </body></html>"##,
