@@ -21,8 +21,13 @@ function bootstrapToken(): string | null {
   return sessionStorage.getItem(STORAGE_KEY);
 }
 
+// In dev, the Vite proxy forwards /jarvis.v1.Jarvis/* to :7777 — keeping
+// requests same-origin so we don't pay CORS. In production builds (Tauri
+// or the jarvis-web static serve), the SPA calls :7777 directly; CORS is
+// allowed on the tonic-web layer for the SPA's origin.
 export const API_BASE: string =
-  (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://127.0.0.1:7777';
+  (import.meta.env.VITE_API_BASE as string | undefined) ??
+  (import.meta.env.DEV ? window.location.origin : 'http://127.0.0.1:7777');
 
 export const SPA_BASE: string =
   (import.meta.env.VITE_SPA_BASE as string | undefined) ?? 'http://127.0.0.1:7879';

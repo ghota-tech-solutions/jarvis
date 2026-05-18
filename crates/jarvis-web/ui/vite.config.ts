@@ -10,7 +10,8 @@ export default defineConfig({
     proxy: {
       // gRPC-Web calls go straight to the daemon; the proxy keeps them
       // same-origin in dev so we don't need CORS on the tonic-web layer.
-      '/jarvis.JarvisService': {
+      // Path prefix matches the proto package: jarvis.v1.Jarvis/<Method>.
+      '/jarvis.v1.Jarvis': {
         target: 'http://127.0.0.1:7777',
         changeOrigin: true,
       },
