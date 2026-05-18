@@ -1695,6 +1695,7 @@ dependencies = [
  "jarvis-mcp",
  "jarvis-sandbox",
  "jarvis-tools",
+ "jarvis-web",
  "maud",
  "prost",
  "pulldown-cmark",

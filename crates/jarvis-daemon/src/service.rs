@@ -118,6 +118,20 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         None
     };
 
+    // M6: start the new SPA layer on a separate port (default 7879).
+    // It coexists with the legacy HTMX UI above and consumes the daemon
+    // only via the public gRPC API — no internal type sharing.
+    let spa_handle = if cfg.web.enable {
+        let spa_addr = jarvis_web::resolve_addr();
+        Some(tokio::spawn(async move {
+            if let Err(e) = jarvis_web::serve(spa_addr).await {
+                warn!(error = %e, "jarvis-web SPA server stopped");
+            }
+        }))
+    } else {
+        None
+    };
+
     let result = Server::builder()
         .add_service(JarvisServer::new(svc))
         .serve(addr)
@@ -125,6 +139,9 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         .context("gRPC server");
 
     if let Some(h) = web_handle {
+        h.abort();
+    }
+    if let Some(h) = spa_handle {
         h.abort();
     }
     result
