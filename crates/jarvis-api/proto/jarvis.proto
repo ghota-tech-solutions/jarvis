@@ -17,6 +17,10 @@ service Jarvis {
 
   // M5: daemon-wide status snapshot (models, uptime, running tasks).
   rpc GetStatus(StatusRequest) returns (DaemonStatus);
+
+  // M6: full event timeline + pre-computed spans for a task and its
+  // descendant subtasks. Drives the scrubbable canvas timeline in the SPA.
+  rpc GetTimeline(TaskHandle) returns (TimelineSnapshot);
 }
 
 // ---------- M1 ----------
@@ -158,4 +162,40 @@ message Event {
   // JSON-encoded payload (M2). May migrate to CBOR later.
   string payload_json = 7;
   int64 parent_evt = 8;     // 0 if none
+}
+
+// ---------- M6: Timeline ----------
+//
+// GetTimeline returns every event for a task + its descendant subtasks,
+// plus pre-computed spans (tool_call→tool_result, attempt→verdict) so the
+// SPA can render lanes with O(N) work. Min/max ts_micros are mirrored at the
+// top level so the client can set up its scale without scanning the events.
+
+message TimelineSnapshot {
+  string task_id = 1;
+  repeated TimelineEvent events = 2;
+  repeated TimelineSpan spans = 3;
+  int64 min_ts_micros = 4;
+  int64 max_ts_micros = 5;
+}
+
+message TimelineEvent {
+  int64 id = 1;
+  int64 ts_micros = 2;
+  string task_id = 3;
+  string agent_id = 4;      // empty if not agent-scoped
+  string kind = 5;
+  string subject = 6;
+  string payload_json = 7;
+  int64 parent_evt = 8;     // 0 if none
+}
+
+message TimelineSpan {
+  int64 start_evt_id = 1;
+  int64 end_evt_id = 2;        // 0 if the span is still open (running)
+  int64 start_ts_micros = 3;
+  int64 end_ts_micros = 4;     // 0 if running
+  string label = 5;             // short, ~40 chars
+  string lane = 6;              // tools | llm | plan | verdict
+  string outcome = 7;           // ok | error | running
 }

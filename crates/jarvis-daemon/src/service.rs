@@ -8,7 +8,8 @@ use jarvis_api::{
     jarvis_server::{Jarvis, JarvisServer},
     AskChunk, AskRequest, DaemonStatus, Event as ApiEvent, ListTasksRequest,
     ModelStatus as ApiModelStatus, PingRequest, PingResponse, StatusRequest, StreamEventsRequest,
-    Task as ApiTask, TaskHandle, TaskList, TaskSpec, UsageStats,
+    Task as ApiTask, TaskHandle, TaskList, TaskSpec, TimelineEvent as ApiTimelineEvent,
+    TimelineSnapshot, TimelineSpan, UsageStats,
 };
 use jarvis_config::Config;
 use jarvis_core::{
@@ -823,6 +824,201 @@ impl Jarvis for JarvisService {
             running_tasks: running,
         }))
     }
+
+    async fn get_timeline(
+        &self,
+        request: Request<TaskHandle>,
+    ) -> std::result::Result<Response<TimelineSnapshot>, Status> {
+        let task_id_str = request.into_inner().id;
+        let task_id = parse_task_id(&task_id_str)?;
+        let events = self
+            .ledger
+            .timeline_events(task_id)
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+
+        let api_events: Vec<ApiTimelineEvent> = events
+            .iter()
+            .map(|e| ApiTimelineEvent {
+                id: e.id.0,
+                ts_micros: e.ts_micros,
+                task_id: e.task_id.to_string(),
+                agent_id: e.agent_id.map(|a| a.to_string()).unwrap_or_default(),
+                kind: e.kind.to_string(),
+                subject: e.subject.clone().unwrap_or_default(),
+                payload_json: serde_json::to_string(&e.payload).unwrap_or_default(),
+                parent_evt: e.parent_evt.map(|p| p.0).unwrap_or(0),
+            })
+            .collect();
+
+        let spans = pair_timeline_spans(&events);
+
+        let (min_ts, max_ts) = match (events.first(), events.last()) {
+            (Some(a), Some(b)) => (a.ts_micros, b.ts_micros),
+            _ => (0, 0),
+        };
+
+        Ok(Response::new(TimelineSnapshot {
+            task_id: task_id_str,
+            events: api_events,
+            spans,
+            min_ts_micros: min_ts,
+            max_ts_micros: max_ts,
+        }))
+    }
+}
+
+/// Pair-up events into spans for the SPA timeline.
+///
+/// - `tool_call` → next event with `parent_evt == call.id` and kind in
+///   {`tool_result`, `error`} on the same `task_id`.
+/// - `attempt` → next `verdict` or `continuation` on the same `task_id`.
+/// - `decision` is rendered as a point event by the SPA; no span generated here.
+///
+/// Unmatched openers get `end_evt_id = 0`, `end_ts_micros = 0`, `outcome = "running"`.
+fn pair_timeline_spans(events: &[EventRecord]) -> Vec<TimelineSpan> {
+    use jarvis_ledger::EventKind;
+    let mut spans: Vec<TimelineSpan> = Vec::new();
+
+    for (i, opener) in events.iter().enumerate() {
+        match opener.kind {
+            EventKind::ToolCall => {
+                let mut matched: Option<&EventRecord> = None;
+                for cand in &events[i + 1..] {
+                    if cand.parent_evt.map(|p| p.0) == Some(opener.id.0)
+                        && matches!(cand.kind, EventKind::ToolResult | EventKind::Error)
+                    {
+                        matched = Some(cand);
+                        break;
+                    }
+                }
+                let (tool, args_summary) = parse_tool_call_payload(&opener.payload);
+                let label = format_tool_label(&tool, &args_summary);
+                let lane = if tool == "update_plan" { "plan" } else { "tools" };
+                match matched {
+                    Some(closer) => {
+                        let outcome = if matches!(closer.kind, EventKind::Error)
+                            || tool_result_has_error(&closer.payload)
+                        {
+                            "error"
+                        } else {
+                            "ok"
+                        };
+                        spans.push(TimelineSpan {
+                            start_evt_id: opener.id.0,
+                            end_evt_id: closer.id.0,
+                            start_ts_micros: opener.ts_micros,
+                            end_ts_micros: closer.ts_micros,
+                            label,
+                            lane: lane.to_string(),
+                            outcome: outcome.to_string(),
+                        });
+                    }
+                    None => spans.push(TimelineSpan {
+                        start_evt_id: opener.id.0,
+                        end_evt_id: 0,
+                        start_ts_micros: opener.ts_micros,
+                        end_ts_micros: 0,
+                        label,
+                        lane: lane.to_string(),
+                        outcome: "running".to_string(),
+                    }),
+                }
+            }
+            EventKind::Attempt => {
+                let mut matched: Option<&EventRecord> = None;
+                for cand in &events[i + 1..] {
+                    if cand.task_id == opener.task_id
+                        && matches!(cand.kind, EventKind::Verdict | EventKind::Continuation)
+                    {
+                        matched = Some(cand);
+                        break;
+                    }
+                }
+                let step = opener
+                    .payload
+                    .get("step")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let label = format!("step {step}");
+                match matched {
+                    Some(closer) => {
+                        let outcome = match closer.payload.get("verdict").and_then(|v| v.as_str())
+                        {
+                            Some("pass") | Some("done") => "ok",
+                            Some("fail") => "error",
+                            _ => "ok",
+                        };
+                        spans.push(TimelineSpan {
+                            start_evt_id: opener.id.0,
+                            end_evt_id: closer.id.0,
+                            start_ts_micros: opener.ts_micros,
+                            end_ts_micros: closer.ts_micros,
+                            label,
+                            lane: "verdict".to_string(),
+                            outcome: outcome.to_string(),
+                        });
+                    }
+                    None => spans.push(TimelineSpan {
+                        start_evt_id: opener.id.0,
+                        end_evt_id: 0,
+                        start_ts_micros: opener.ts_micros,
+                        end_ts_micros: 0,
+                        label,
+                        lane: "verdict".to_string(),
+                        outcome: "running".to_string(),
+                    }),
+                }
+            }
+            _ => {}
+        }
+    }
+    spans
+}
+
+fn parse_tool_call_payload(payload: &serde_json::Value) -> (String, String) {
+    let tool = payload
+        .get("tool")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?")
+        .to_string();
+    let args = payload.get("args").and_then(|v| {
+        // Prefer a single distinguishing arg: cmd / path / pattern / file.
+        for key in ["cmd", "path", "pattern", "file", "target"] {
+            if let Some(s) = v.get(key).and_then(|x| x.as_str()) {
+                return Some(s.to_string());
+            }
+        }
+        None
+    });
+    let args = args.unwrap_or_default();
+    (tool, args)
+}
+
+fn format_tool_label(tool: &str, args: &str) -> String {
+    const MAX: usize = 40;
+    if args.is_empty() {
+        return tool.chars().take(MAX).collect();
+    }
+    let raw = format!("{tool}: {args}");
+    if raw.chars().count() <= MAX {
+        raw
+    } else {
+        let truncated: String = raw.chars().take(MAX - 1).collect();
+        format!("{truncated}…")
+    }
+}
+
+fn tool_result_has_error(payload: &serde_json::Value) -> bool {
+    payload
+        .get("error")
+        .map(|v| !v.is_null())
+        .unwrap_or(false)
+        || payload
+            .get("exit_code")
+            .and_then(|v| v.as_i64())
+            .map(|c| c != 0)
+            .unwrap_or(false)
 }
 
 #[allow(clippy::result_large_err)]
@@ -854,4 +1050,167 @@ fn parse_required_caps(caps: &[String]) -> RequiredCapabilities {
         }
     }
     r
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jarvis_core::EventId;
+    use jarvis_ledger::EventKind;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    fn make_event(
+        id: i64,
+        ts: i64,
+        task_id: TaskId,
+        kind: EventKind,
+        payload: serde_json::Value,
+        parent_evt: Option<i64>,
+    ) -> EventRecord {
+        EventRecord {
+            id: EventId(id),
+            ts_micros: ts,
+            task_id,
+            agent_id: None,
+            kind,
+            subject: None,
+            payload,
+            parent_evt: parent_evt.map(EventId),
+        }
+    }
+
+    #[test]
+    fn pair_spans_tool_call_to_tool_result() {
+        let task = TaskId(Uuid::new_v4());
+        let events = vec![
+            make_event(
+                1,
+                100,
+                task,
+                EventKind::ToolCall,
+                json!({"tool":"shell","args":{"cmd":"cargo test"}}),
+                None,
+            ),
+            make_event(
+                2,
+                200,
+                task,
+                EventKind::ToolResult,
+                json!({"exit_code": 0}),
+                Some(1),
+            ),
+        ];
+        let spans = pair_timeline_spans(&events);
+        assert_eq!(spans.len(), 1);
+        let s = &spans[0];
+        assert_eq!(s.start_evt_id, 1);
+        assert_eq!(s.end_evt_id, 2);
+        assert_eq!(s.lane, "tools");
+        assert_eq!(s.outcome, "ok");
+        assert!(s.label.starts_with("shell:"));
+    }
+
+    #[test]
+    fn pair_spans_unmatched_tool_call_is_running() {
+        let task = TaskId(Uuid::new_v4());
+        let events = vec![make_event(
+            1,
+            100,
+            task,
+            EventKind::ToolCall,
+            json!({"tool":"shell","args":{"cmd":"sleep 9999"}}),
+            None,
+        )];
+        let spans = pair_timeline_spans(&events);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].end_evt_id, 0);
+        assert_eq!(spans[0].outcome, "running");
+    }
+
+    #[test]
+    fn pair_spans_tool_result_with_nonzero_exit_is_error() {
+        let task = TaskId(Uuid::new_v4());
+        let events = vec![
+            make_event(
+                1,
+                100,
+                task,
+                EventKind::ToolCall,
+                json!({"tool":"shell","args":{"cmd":"false"}}),
+                None,
+            ),
+            make_event(
+                2,
+                200,
+                task,
+                EventKind::ToolResult,
+                json!({"exit_code": 1}),
+                Some(1),
+            ),
+        ];
+        let spans = pair_timeline_spans(&events);
+        assert_eq!(spans[0].outcome, "error");
+    }
+
+    #[test]
+    fn pair_spans_update_plan_lane_is_plan() {
+        let task = TaskId(Uuid::new_v4());
+        let events = vec![
+            make_event(
+                1,
+                100,
+                task,
+                EventKind::ToolCall,
+                json!({"tool":"update_plan","args":{}}),
+                None,
+            ),
+            make_event(
+                2,
+                200,
+                task,
+                EventKind::ToolResult,
+                json!({"exit_code": 0}),
+                Some(1),
+            ),
+        ];
+        let spans = pair_timeline_spans(&events);
+        assert_eq!(spans[0].lane, "plan");
+    }
+
+    #[test]
+    fn pair_spans_attempt_to_verdict() {
+        let task = TaskId(Uuid::new_v4());
+        let events = vec![
+            make_event(
+                1,
+                100,
+                task,
+                EventKind::Attempt,
+                json!({"step": 3}),
+                None,
+            ),
+            make_event(
+                2,
+                200,
+                task,
+                EventKind::Verdict,
+                json!({"verdict": "pass"}),
+                None,
+            ),
+        ];
+        let spans = pair_timeline_spans(&events);
+        assert_eq!(spans.len(), 1);
+        let s = &spans[0];
+        assert_eq!(s.lane, "verdict");
+        assert_eq!(s.label, "step 3");
+        assert_eq!(s.outcome, "ok");
+    }
+
+    #[test]
+    fn format_label_truncates_long_args() {
+        let l = format_tool_label("shell", &"a".repeat(100));
+        assert!(l.chars().count() <= 40);
+        assert!(l.ends_with('…'));
+    }
 }

@@ -290,6 +290,30 @@ impl Ledger {
         rows.iter().map(row_to_event).collect()
     }
 
+    /// Every event for `root` and all its descendant tasks, ordered by id ASC.
+    /// Walks the task-tree via the `tasks.parent` self-reference in a single
+    /// recursive CTE — bounded by SQLite's default 1000-row recursion depth,
+    /// which is far beyond any realistic agent fan-out.
+    ///
+    /// Used by the `GetTimeline` RPC to feed the scrubbable canvas timeline
+    /// in the SolidJS SPA.
+    pub async fn timeline_events(&self, root: TaskId) -> Result<Vec<EventRecord>, LedgerError> {
+        let rows = sqlx::query(
+            "WITH RECURSIVE descendants(id) AS ( \
+                SELECT id FROM tasks WHERE id = ? \
+                UNION ALL \
+                SELECT t.id FROM tasks t JOIN descendants d ON t.parent = d.id \
+             ) \
+             SELECT e.id, e.ts, e.task_id, e.agent_id, e.kind, e.subject, e.payload, e.parent_evt \
+             FROM events e JOIN descendants d ON e.task_id = d.id \
+             ORDER BY e.id ASC",
+        )
+        .bind(uuid_bytes(root.as_uuid()))
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter().map(row_to_event).collect()
+    }
+
     /// Fast last-N events for a task (used by agent loop to build context).
     pub async fn recent_events(
         &self,
@@ -552,6 +576,35 @@ mod tests {
         let after = l.get_task(t.id).await.unwrap();
         assert_eq!(after.status, TaskStatus::Completed);
         assert!(after.completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn timeline_events_walks_descendants_recursively() {
+        let l = open_temp().await;
+        let root = l.create_task("root", ".", None).await.unwrap();
+        let child = l.create_task("child", ".", Some(root.id)).await.unwrap();
+        let grandchild = l.create_task("grandchild", ".", Some(child.id)).await.unwrap();
+        let sibling_orphan = l.create_task("orphan", ".", None).await.unwrap();
+
+        // Mix of events across the three connected tasks + the orphan.
+        l.append(NewEvent::new(root.id, EventKind::Decision, json!({"r": 1}))).await.unwrap();
+        l.append(NewEvent::new(child.id, EventKind::ToolCall, json!({"tool": "shell"}))).await.unwrap();
+        l.append(NewEvent::new(grandchild.id, EventKind::Verdict, json!({"v": "pass"}))).await.unwrap();
+        l.append(NewEvent::new(sibling_orphan.id, EventKind::Decision, json!({"o": 1}))).await.unwrap();
+
+        let timeline = l.timeline_events(root.id).await.unwrap();
+        assert_eq!(timeline.len(), 3, "orphan task's event must not appear");
+        assert!(timeline.windows(2).all(|w| w[0].id.0 < w[1].id.0), "must be id-ascending");
+        let kinds: Vec<EventKind> = timeline.iter().map(|e| e.kind).collect();
+        assert_eq!(kinds, vec![EventKind::Decision, EventKind::ToolCall, EventKind::Verdict]);
+    }
+
+    #[tokio::test]
+    async fn timeline_events_empty_for_unknown_root() {
+        let l = open_temp().await;
+        let phantom = TaskId(Uuid::new_v4());
+        let timeline = l.timeline_events(phantom).await.unwrap();
+        assert!(timeline.is_empty());
     }
 }
 
