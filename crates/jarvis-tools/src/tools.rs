@@ -260,10 +260,16 @@ impl Tool for ShellTool {
 
 fn clip(s: &str, max: usize) -> String {
     if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}…[{}b truncated]", &s[..max], s.len() - max)
+        return s.to_string();
     }
+    // Walk back to the previous char boundary so we don't split a multi-byte
+    // UTF-8 codepoint. Without this, `&s[..max]` panics when `max` falls
+    // inside e.g. a `†` (3-byte) or an accented char (2-byte).
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…[{}b truncated]", &s[..end], s.len() - end)
 }
 
 #[cfg(test)]
@@ -313,6 +319,17 @@ mod tests {
         let r = FsReadTool;
         let err = r.invoke(json!({"path": "../escape"}), &ctx).await.err();
         assert!(matches!(err, Some(ToolError::PathEscapes { .. })));
+    }
+
+    #[test]
+    fn clip_respects_char_boundaries() {
+        // Multi-byte char at the boundary: must not panic.
+        let s = "ab†c"; // † is 3 bytes (U+2020 = E2 80 A0)
+        let out = clip(s, 3); // mid-char of †
+        assert!(out.starts_with("ab"));
+        assert!(out.contains("truncated"));
+        // Far below the boundary: shouldn't clip.
+        assert_eq!(clip("hi", 100), "hi");
     }
 
     #[tokio::test]

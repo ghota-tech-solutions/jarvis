@@ -53,16 +53,13 @@ impl Sandbox for NativeSandbox {
 fn shell_cmd(cmd: &str) -> Command {
     #[cfg(windows)]
     {
-        // `cmd.exe /U /C` forces every built-in (dir, type, where, set, …) to
-        // emit Unicode (UTF-16LE) on its stdout, regardless of the active
-        // console codepage. Combined with the UTF-16 decoder in `decode_stdio`
-        // below, this is how we get clean accented characters on French/German
-        // Windows where the default OEM codepage is CP850. We tried
-        // `chcp 65001 && {cmd}` first — some Windows builds ignore the new
-        // codepage for built-ins until the cmd process is fully reinitialised,
-        // so `/U` is the only reliable knob.
+        // Plain `cmd.exe /C` — we used to try `/U` to force UTF-16LE on the
+        // built-ins, but that interpretation breaks **every external** program
+        // (git, cargo, node, …) whose pipe output is already UTF-8 or CP-encoded
+        // bytes. We now decode bytes after the fact in `decode_stdio` with a
+        // UTF-8 → CP850 priority chain, which handles both worlds.
         let mut c = Command::new("cmd.exe");
-        c.arg("/U").arg("/C").arg(cmd);
+        c.arg("/C").arg(cmd);
         c
     }
     #[cfg(not(windows))]
@@ -74,29 +71,66 @@ fn shell_cmd(cmd: &str) -> Command {
 }
 
 /// Decode child-process stdout/stderr bytes.
-/// * On Windows we requested UTF-16LE output via `cmd /U`, so the bytes are
-///   little-endian u16 pairs that need decoding.
-/// * Everywhere else, plain UTF-8 with lossy fallback.
+///
+/// Priority chain:
+///   1. **Strict UTF-8** — covers every modern external program on Windows
+///      (git, cargo, node, python, …) plus all of Linux/macOS.
+///   2. **CP850 fallback** (Windows only) — the default OEM codepage of
+///      French/German/Spanish Windows consoles. `dir`, `type`, `where`,
+///      `vol`, `chkdsk`, and other built-ins still write in this codepage.
+///
+/// Without the fallback, French `dir` output's `Répertoire` would arrive as
+/// `R\x82pertoire` (CP850 `\x82` = é), `String::from_utf8` would fail, and
+/// `from_utf8_lossy` would replace `\x82` with U+FFFD → `R�pertoire`.
 fn decode_stdio(bytes: &[u8]) -> String {
+    if let Ok(s) = std::str::from_utf8(bytes) {
+        return s.to_string();
+    }
     #[cfg(windows)]
     {
-        // Strip an optional UTF-16LE BOM (FF FE).
-        let stripped = if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
-            &bytes[2..]
-        } else {
-            bytes
-        };
-        // Ensure even length — odd trailing byte means truncated final code unit.
-        let units: Vec<u16> = stripped
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect();
-        String::from_utf16_lossy(&units)
+        decode_cp850(bytes)
     }
     #[cfg(not(windows))]
     {
         String::from_utf8_lossy(bytes).into_owned()
     }
+}
+
+/// Decode a byte slice assuming it is in CP850 (the default Windows OEM
+/// codepage for many Western European locales). High bytes 0x80-0xFF are
+/// mapped via the static table below; low bytes are ASCII pass-through.
+#[cfg(windows)]
+fn decode_cp850(bytes: &[u8]) -> String {
+    /// CP850 → Unicode mapping for bytes 0x80-0xFF.
+    /// Sourced from the IBM/Microsoft CP850 specification.
+    const CP850_HIGH: [char; 128] = [
+        // 0x80
+        'Ç', 'ü', 'é', 'â', 'ä', 'à', 'å', 'ç', 'ê', 'ë', 'è', 'ï', 'î', 'ì', 'Ä', 'Å',
+        // 0x90
+        'É', 'æ', 'Æ', 'ô', 'ö', 'ò', 'û', 'ù', 'ÿ', 'Ö', 'Ü', 'ø', '£', 'Ø', '×', 'ƒ',
+        // 0xA0
+        'á', 'í', 'ó', 'ú', 'ñ', 'Ñ', 'ª', 'º', '¿', '®', '¬', '½', '¼', '¡', '«', '»',
+        // 0xB0
+        '░', '▒', '▓', '│', '┤', 'Á', 'Â', 'À', '©', '╣', '║', '╗', '╝', '¢', '¥', '┐',
+        // 0xC0
+        '└', '┴', '┬', '├', '─', '┼', 'ã', 'Ã', '╚', '╔', '╩', '╦', '╠', '═', '╬', '¤',
+        // 0xD0
+        'ð', 'Ð', 'Ê', 'Ë', 'È', 'ı', 'Í', 'Î', 'Ï', '┘', '┌', '█', '▄', '¦', 'Ì', '▀',
+        // 0xE0
+        'Ó', 'ß', 'Ô', 'Ò', 'õ', 'Õ', 'µ', 'þ', 'Þ', 'Ú', 'Û', 'Ù', 'ý', 'Ý', '¯', '´',
+        // 0xF0
+        '\u{00AD}', '±', '‗', '¾', '¶', '§', '÷', '¸', '°', '¨', '·', '¹', '³', '²', '■',
+        '\u{00A0}',
+    ];
+    let mut out = String::with_capacity(bytes.len());
+    for &b in bytes {
+        if b < 0x80 {
+            out.push(b as char);
+        } else {
+            out.push(CP850_HIGH[(b - 0x80) as usize]);
+        }
+    }
+    out
 }
 
 fn clip(s: &str, max: usize) -> String {
@@ -112,6 +146,22 @@ mod tests {
     use super::*;
     use std::time::Duration;
     use tempfile::tempdir;
+
+    #[test]
+    fn decode_stdio_picks_utf8_when_valid() {
+        let s = decode_stdio("Répertoire".as_bytes());
+        assert_eq!(s, "Répertoire");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn decode_stdio_falls_back_to_cp850() {
+        // CP850 bytes for "Répertoire": R(0x52) é(0x82) p(0x70) e(0x65) r(0x72)
+        // t(0x74) o(0x6F) i(0x69) r(0x72) e(0x65)
+        let cp850 = b"R\x82pertoire";
+        let s = decode_stdio(cp850);
+        assert_eq!(s, "Répertoire");
+    }
 
     #[tokio::test]
     async fn echoes_back() {
