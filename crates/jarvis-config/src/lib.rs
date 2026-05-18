@@ -24,6 +24,33 @@ pub struct Config {
     pub routing: RoutingConfig,
     #[serde(default)]
     pub sandbox: SandboxConfig,
+    #[serde(default)]
+    pub web: WebConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WebConfig {
+    #[serde(default = "default_web_enable")]
+    pub enable: bool,
+    #[serde(default = "default_web_addr")]
+    pub addr: String,
+}
+
+impl Default for WebConfig {
+    fn default() -> Self {
+        Self {
+            enable: default_web_enable(),
+            addr: default_web_addr(),
+        }
+    }
+}
+
+fn default_web_enable() -> bool {
+    true
+}
+fn default_web_addr() -> String {
+    "127.0.0.1:7878".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -68,19 +68,60 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         warn!("config requests docker backend but daemon could not connect — tasks will fall back to native");
     }
 
-    let worktrees = WorktreeManager::new(cfg.daemon.data_dir.join("worktrees"));
+    let worktrees = Arc::new(WorktreeManager::new(cfg.daemon.data_dir.join("worktrees")));
 
-    let svc = JarvisService::new(pool, ask_provider, ledger, tools, native, docker, worktrees, cfg);
+    let running: Arc<Mutex<HashMap<TaskId, RuntimeHandle>>> = Arc::new(Mutex::new(HashMap::new()));
+    let started = Instant::now();
+
+    let svc = JarvisService {
+        pool: pool.clone(),
+        ask_provider,
+        ledger: ledger.clone(),
+        tools: tools.clone(),
+        native: native.clone(),
+        docker: docker.clone(),
+        worktrees: worktrees.clone(),
+        cfg: cfg.clone(),
+        started,
+        running: running.clone(),
+    };
 
     let addr: std::net::SocketAddr = bind.parse().context("parse daemon.addr")?;
     info!(%addr, ledger = %ledger_path.display(), "jarvis-daemon listening");
 
-    Server::builder()
+    // Optionally start the embedded web UI alongside gRPC.
+    let web_handle = if cfg.web.enable {
+        let web_state = super::web::WebState {
+            pool: pool.clone(),
+            ledger: ledger.clone(),
+            tools: tools.clone(),
+            native: native.clone(),
+            docker: docker.clone(),
+            worktrees: worktrees.clone(),
+            cfg: Arc::new(cfg.clone()),
+            started,
+            running: running.clone(),
+        };
+        let web_addr = cfg.web.addr.clone();
+        Some(tokio::spawn(async move {
+            if let Err(e) = super::web::serve(web_state, web_addr).await {
+                warn!(error = %e, "web server stopped");
+            }
+        }))
+    } else {
+        None
+    };
+
+    let result = Server::builder()
         .add_service(JarvisServer::new(svc))
         .serve(addr)
         .await
-        .context("gRPC server")?;
-    Ok(())
+        .context("gRPC server");
+
+    if let Some(h) = web_handle {
+        h.abort();
+    }
+    result
 }
 
 fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
@@ -193,51 +234,26 @@ async fn build_docker_sandbox(cfg: &jarvis_config::SandboxConfig) -> Option<Arc<
     }
 }
 
-struct JarvisService {
-    pool: Arc<LlmPool>,
-    ask_provider: Arc<dyn LlmProvider>,
-    ledger: Ledger,
-    tools: ToolRegistry,
-    native: Arc<dyn Sandbox>,
-    docker: Option<Arc<dyn Sandbox>>,
-    worktrees: Arc<WorktreeManager>,
-    cfg: Config,
-    started: Instant,
-    running: Arc<Mutex<HashMap<TaskId, RuntimeHandle>>>,
+pub(crate) struct JarvisService {
+    pub pool: Arc<LlmPool>,
+    pub ask_provider: Arc<dyn LlmProvider>,
+    pub ledger: Ledger,
+    pub tools: ToolRegistry,
+    pub native: Arc<dyn Sandbox>,
+    pub docker: Option<Arc<dyn Sandbox>>,
+    pub worktrees: Arc<WorktreeManager>,
+    pub cfg: Config,
+    pub started: Instant,
+    pub running: Arc<Mutex<HashMap<TaskId, RuntimeHandle>>>,
 }
 
-struct RuntimeHandle {
-    cancel: CancellationToken,
-    source_workdir: PathBuf,
-    worktree: Worktree,
+pub struct RuntimeHandle {
+    pub cancel: CancellationToken,
+    pub source_workdir: PathBuf,
+    pub worktree: Worktree,
 }
 
 impl JarvisService {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        pool: Arc<LlmPool>,
-        ask_provider: Arc<dyn LlmProvider>,
-        ledger: Ledger,
-        tools: ToolRegistry,
-        native: Arc<dyn Sandbox>,
-        docker: Option<Arc<dyn Sandbox>>,
-        worktrees: WorktreeManager,
-        cfg: Config,
-    ) -> Self {
-        Self {
-            pool,
-            ask_provider,
-            ledger,
-            tools,
-            native,
-            docker,
-            worktrees: Arc::new(worktrees),
-            cfg,
-            started: Instant::now(),
-            running: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
     #[allow(clippy::result_large_err)]
     fn parse_routing(&self, raw: &str) -> Result<RoutingPolicy, Status> {
         let raw = raw.trim();
@@ -696,7 +712,7 @@ fn parse_task_id(s: &str) -> std::result::Result<TaskId, Status> {
     TaskId::from_str(s).map_err(|_| Status::invalid_argument("invalid task id"))
 }
 
-fn parse_routing_str(s: &str) -> Option<RoutingPolicy> {
+pub(crate) fn parse_routing_str(s: &str) -> Option<RoutingPolicy> {
     let s = s.trim();
     match s {
         "auto" | "" => Some(RoutingPolicy::Auto),
