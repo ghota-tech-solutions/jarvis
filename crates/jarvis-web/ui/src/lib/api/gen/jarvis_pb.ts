@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file jarvis.proto.
  */
 export const file_jarvis: GenFile = /*@__PURE__*/
-  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLPAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCSIPCg1TdGF0dXNSZXF1ZXN0InYKDERhZW1vblN0YXR1cxIPCgd2ZXJzaW9uGAEgASgJEhYKDnVwdGltZV9zZWNvbmRzGAIgASgDEiYKBm1vZGVscxgDIAMoCzIWLmphcnZpcy52MS5Nb2RlbFN0YXR1cxIVCg1ydW5uaW5nX3Rhc2tzGAQgASgNIvoBCgtNb2RlbFN0YXR1cxIMCgRuYW1lGAEgASgJEgwKBGtpbmQYAiABKAkSEAoIbW9kZWxfaWQYAyABKAkSEAoIcHJpb3JpdHkYBCABKAUSDgoGb25saW5lGAUgASgIEhMKC3F1YXJhbnRpbmVkGAYgASgIEiAKGHF1YXJhbnRpbmVkX3VudGlsX21pY3JvcxgHIAEoAxIaChJmYWlsdXJlc19pbl93aW5kb3cYCCABKA0SDwoHY3R4X2xlbhgJIAEoDRISCgp0b29sX2NhbGxzGAogASgIEhMKC2pzb25fc2NoZW1hGAsgASgIEg4KBnZpc2lvbhgMIAEoCCKMAgoEVGFzaxIKCgJpZBgBIAEoCRIMCgRnb2FsGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIPCgd3b3JrZGlyGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAMSGQoMY29tcGxldGVkX2F0GAYgASgDSACIAQESEgoFZXJyb3IYByABKAlIAYgBARIPCgdzYW5kYm94GAggASgJEhIKCm5ldF9wb2xpY3kYCSABKAkSFQoNd29ya3RyZWVfcGF0aBgKIAEoCRIXCg93b3JrdHJlZV9icmFuY2gYCyABKAkSFgoOcGFyZW50X3Rhc2tfaWQYDCABKAlCDwoNX2NvbXBsZXRlZF9hdEIICgZfZXJyb3IiOwoQTGlzdFRhc2tzUmVxdWVzdBIYChBpbmNsdWRlX2ZpbmlzaGVkGAEgASgIEg0KBWxpbWl0GAIgASgNIioKCFRhc2tMaXN0Eh4KBXRhc2tzGAEgAygLMg8uamFydmlzLnYxLlRhc2siYwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEg4KBmZvbGxvdxgCIAEoCBIQCghzaW5jZV9pZBgDIAEoAxIZChFpbmNsdWRlX2FuY2VzdG9ycxgEIAEoCCKSAQoFRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIqMBChBUaW1lbGluZVNuYXBzaG90Eg8KB3Rhc2tfaWQYASABKAkSKAoGZXZlbnRzGAIgAygLMhguamFydmlzLnYxLlRpbWVsaW5lRXZlbnQSJgoFc3BhbnMYAyADKAsyFy5qYXJ2aXMudjEuVGltZWxpbmVTcGFuEhUKDW1pbl90c19taWNyb3MYBCABKAMSFQoNbWF4X3RzX21pY3JvcxgFIAEoAyKaAQoNVGltZWxpbmVFdmVudBIKCgJpZBgBIAEoAxIRCgl0c19taWNyb3MYAiABKAMSDwoHdGFza19pZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIMCgRraW5kGAUgASgJEg8KB3N1YmplY3QYBiABKAkSFAoMcGF5bG9hZF9qc29uGAcgASgJEhIKCnBhcmVudF9ldnQYCCABKAMilgEKDFRpbWVsaW5lU3BhbhIUCgxzdGFydF9ldnRfaWQYASABKAMSEgoKZW5kX2V2dF9pZBgCIAEoAxIXCg9zdGFydF90c19taWNyb3MYAyABKAMSFQoNZW5kX3RzX21pY3JvcxgEIAEoAxINCgVsYWJlbBgFIAEoCRIMCgRsYW5lGAYgASgJEg8KB291dGNvbWUYByABKAkyoAQKBkphcnZpcxI3CgRQaW5nEhYuamFydmlzLnYxLlBpbmdSZXF1ZXN0GhcuamFydmlzLnYxLlBpbmdSZXNwb25zZRIzCgNBc2sSFS5qYXJ2aXMudjEuQXNrUmVxdWVzdBoTLmphcnZpcy52MS5Bc2tDaHVuazABEjgKClN1Ym1pdFRhc2sSEy5qYXJ2aXMudjEuVGFza1NwZWMaFS5qYXJ2aXMudjEuVGFza0hhbmRsZRIxCgdHZXRUYXNrEhUuamFydmlzLnYxLlRhc2tIYW5kbGUaDy5qYXJ2aXMudjEuVGFzaxI9CglMaXN0VGFza3MSGy5qYXJ2aXMudjEuTGlzdFRhc2tzUmVxdWVzdBoTLmphcnZpcy52MS5UYXNrTGlzdBI1CgpDYW5jZWxUYXNrEhUuamFydmlzLnYxLlRhc2tIYW5kbGUaEC5qYXJ2aXMudjEuRW1wdHkSQgoMU3RyZWFtRXZlbnRzEh4uamFydmlzLnYxLlN0cmVhbUV2ZW50c1JlcXVlc3QaEC5qYXJ2aXMudjEuRXZlbnQwARI+CglHZXRTdGF0dXMSGC5qYXJ2aXMudjEuU3RhdHVzUmVxdWVzdBoXLmphcnZpcy52MS5EYWVtb25TdGF0dXMSQQoLR2V0VGltZWxpbmUSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRobLmphcnZpcy52MS5UaW1lbGluZVNuYXBzaG90YgZwcm90bzM");
+  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLPAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCSIPCg1TdGF0dXNSZXF1ZXN0InYKDERhZW1vblN0YXR1cxIPCgd2ZXJzaW9uGAEgASgJEhYKDnVwdGltZV9zZWNvbmRzGAIgASgDEiYKBm1vZGVscxgDIAMoCzIWLmphcnZpcy52MS5Nb2RlbFN0YXR1cxIVCg1ydW5uaW5nX3Rhc2tzGAQgASgNIvoBCgtNb2RlbFN0YXR1cxIMCgRuYW1lGAEgASgJEgwKBGtpbmQYAiABKAkSEAoIbW9kZWxfaWQYAyABKAkSEAoIcHJpb3JpdHkYBCABKAUSDgoGb25saW5lGAUgASgIEhMKC3F1YXJhbnRpbmVkGAYgASgIEiAKGHF1YXJhbnRpbmVkX3VudGlsX21pY3JvcxgHIAEoAxIaChJmYWlsdXJlc19pbl93aW5kb3cYCCABKA0SDwoHY3R4X2xlbhgJIAEoDRISCgp0b29sX2NhbGxzGAogASgIEhMKC2pzb25fc2NoZW1hGAsgASgIEg4KBnZpc2lvbhgMIAEoCCKMAgoEVGFzaxIKCgJpZBgBIAEoCRIMCgRnb2FsGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIPCgd3b3JrZGlyGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAMSGQoMY29tcGxldGVkX2F0GAYgASgDSACIAQESEgoFZXJyb3IYByABKAlIAYgBARIPCgdzYW5kYm94GAggASgJEhIKCm5ldF9wb2xpY3kYCSABKAkSFQoNd29ya3RyZWVfcGF0aBgKIAEoCRIXCg93b3JrdHJlZV9icmFuY2gYCyABKAkSFgoOcGFyZW50X3Rhc2tfaWQYDCABKAlCDwoNX2NvbXBsZXRlZF9hdEIICgZfZXJyb3IiOwoQTGlzdFRhc2tzUmVxdWVzdBIYChBpbmNsdWRlX2ZpbmlzaGVkGAEgASgIEg0KBWxpbWl0GAIgASgNIioKCFRhc2tMaXN0Eh4KBXRhc2tzGAEgAygLMg8uamFydmlzLnYxLlRhc2siYwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEg4KBmZvbGxvdxgCIAEoCBIQCghzaW5jZV9pZBgDIAEoAxIZChFpbmNsdWRlX2FuY2VzdG9ycxgEIAEoCCKSAQoFRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIqMBChBUaW1lbGluZVNuYXBzaG90Eg8KB3Rhc2tfaWQYASABKAkSKAoGZXZlbnRzGAIgAygLMhguamFydmlzLnYxLlRpbWVsaW5lRXZlbnQSJgoFc3BhbnMYAyADKAsyFy5qYXJ2aXMudjEuVGltZWxpbmVTcGFuEhUKDW1pbl90c19taWNyb3MYBCABKAMSFQoNbWF4X3RzX21pY3JvcxgFIAEoAyKaAQoNVGltZWxpbmVFdmVudBIKCgJpZBgBIAEoAxIRCgl0c19taWNyb3MYAiABKAMSDwoHdGFza19pZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIMCgRraW5kGAUgASgJEg8KB3N1YmplY3QYBiABKAkSFAoMcGF5bG9hZF9qc29uGAcgASgJEhIKCnBhcmVudF9ldnQYCCABKAMilgEKDFRpbWVsaW5lU3BhbhIUCgxzdGFydF9ldnRfaWQYASABKAMSEgoKZW5kX2V2dF9pZBgCIAEoAxIXCg9zdGFydF90c19taWNyb3MYAyABKAMSFQoNZW5kX3RzX21pY3JvcxgEIAEoAxINCgVsYWJlbBgFIAEoCRIMCgRsYW5lGAYgASgJEg8KB291dGNvbWUYByABKAkiagoLRmxlZXRVcGRhdGUSIwoFbm9kZXMYASADKAsyFC5qYXJ2aXMudjEuRmxlZXROb2RlEiMKBWVkZ2VzGAIgAygLMhQuamFydmlzLnYxLkZsZWV0RWRnZRIRCgl0c19taWNyb3MYAyABKAMigAIKCUZsZWV0Tm9kZRIPCgd0YXNrX2lkGAEgASgJEhAKCHNob3J0X2lkGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIMCgRnb2FsGAQgASgJEg8KB3dvcmtkaXIYBSABKAkSDwoHc2FuZGJveBgGIAEoCRIRCgl0b2tlbnNfaW4YByABKAQSEgoKdG9rZW5zX291dBgIIAEoBBIaChJlc3RpbWF0ZWRfY29zdF91c2QYCSABKAESGQoRY3JlYXRlZF9hdF9taWNyb3MYCiABKAMSGQoRdXBkYXRlZF9hdF9taWNyb3MYCyABKAMSFwoPbmVlZHNfYXR0ZW50aW9uGAwgASgIIjoKCUZsZWV0RWRnZRIWCg5wYXJlbnRfdGFza19pZBgBIAEoCRIVCg1jaGlsZF90YXNrX2lkGAIgASgJIpEBCgpDb3N0UmVwb3J0Eg8KB3Rhc2tfaWQYASABKAkSFwoPdG90YWxfdG9rZW5zX2luGAIgASgEEhgKEHRvdGFsX3Rva2Vuc19vdXQYAyABKAQSFgoOdG90YWxfY29zdF91c2QYBCABKAESJwoIYnlfbW9kZWwYBSADKAsyFS5qYXJ2aXMudjEuTW9kZWxTcGVuZCJtCgpNb2RlbFNwZW5kEhIKCm1vZGVsX25hbWUYASABKAkSEQoJdG9rZW5zX2luGAIgASgEEhIKCnRva2Vuc19vdXQYAyABKAQSEAoIY29zdF91c2QYBCABKAESEgoKY2FsbF9jb3VudBgFIAEoDTKhBQoGSmFydmlzEjcKBFBpbmcSFi5qYXJ2aXMudjEuUGluZ1JlcXVlc3QaFy5qYXJ2aXMudjEuUGluZ1Jlc3BvbnNlEjMKA0FzaxIVLmphcnZpcy52MS5Bc2tSZXF1ZXN0GhMuamFydmlzLnYxLkFza0NodW5rMAESOAoKU3VibWl0VGFzaxITLmphcnZpcy52MS5UYXNrU3BlYxoVLmphcnZpcy52MS5UYXNrSGFuZGxlEjEKB0dldFRhc2sSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoPLmphcnZpcy52MS5UYXNrEj0KCUxpc3RUYXNrcxIbLmphcnZpcy52MS5MaXN0VGFza3NSZXF1ZXN0GhMuamFydmlzLnYxLlRhc2tMaXN0EjUKCkNhbmNlbFRhc2sSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoQLmphcnZpcy52MS5FbXB0eRJCCgxTdHJlYW1FdmVudHMSHi5qYXJ2aXMudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBoQLmphcnZpcy52MS5FdmVudDABEj4KCUdldFN0YXR1cxIYLmphcnZpcy52MS5TdGF0dXNSZXF1ZXN0GhcuamFydmlzLnYxLkRhZW1vblN0YXR1cxJBCgtHZXRUaW1lbGluZRIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhsuamFydmlzLnYxLlRpbWVsaW5lU25hcHNob3QSOQoLU3RyZWFtRmxlZXQSEC5qYXJ2aXMudjEuRW1wdHkaFi5qYXJ2aXMudjEuRmxlZXRVcGRhdGUwARJEChRHZXRUYXNrQ29zdEJyZWFrZG93bhIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhUuamFydmlzLnYxLkNvc3RSZXBvcnRiBnByb3RvMw");
 
 /**
  * @generated from message jarvis.v1.PingRequest
@@ -749,6 +749,228 @@ export const TimelineSpanSchema: GenMessage<TimelineSpan> = /*@__PURE__*/
   messageDesc(file_jarvis, 18);
 
 /**
+ * @generated from message jarvis.v1.FleetUpdate
+ */
+export type FleetUpdate = Message<"jarvis.v1.FleetUpdate"> & {
+  /**
+   * Full snapshot. The first message after subscription is always a full
+   * snapshot; subsequent messages may either be full snapshots (cheap
+   * because tasks are bounded) or deltas (TODO M7.1).
+   *
+   * @generated from field: repeated jarvis.v1.FleetNode nodes = 1;
+   */
+  nodes: FleetNode[];
+
+  /**
+   * @generated from field: repeated jarvis.v1.FleetEdge edges = 2;
+   */
+  edges: FleetEdge[];
+
+  /**
+   * @generated from field: int64 ts_micros = 3;
+   */
+  tsMicros: bigint;
+};
+
+/**
+ * Describes the message jarvis.v1.FleetUpdate.
+ * Use `create(FleetUpdateSchema)` to create a new message.
+ */
+export const FleetUpdateSchema: GenMessage<FleetUpdate> = /*@__PURE__*/
+  messageDesc(file_jarvis, 19);
+
+/**
+ * @generated from message jarvis.v1.FleetNode
+ */
+export type FleetNode = Message<"jarvis.v1.FleetNode"> & {
+  /**
+   * @generated from field: string task_id = 1;
+   */
+  taskId: string;
+
+  /**
+   * first 8 chars of UUID, pre-computed
+   *
+   * @generated from field: string short_id = 2;
+   */
+  shortId: string;
+
+  /**
+   * pending | running | completed | failed | cancelled
+   *
+   * @generated from field: string status = 3;
+   */
+  status: string;
+
+  /**
+   * @generated from field: string goal = 4;
+   */
+  goal: string;
+
+  /**
+   * @generated from field: string workdir = 5;
+   */
+  workdir: string;
+
+  /**
+   * @generated from field: string sandbox = 6;
+   */
+  sandbox: string;
+
+  /**
+   * Approximate token spend on this task (sum of llm_chunk usage if available;
+   * otherwise 0). The CostReport RPC has the authoritative numbers.
+   *
+   * @generated from field: uint64 tokens_in = 7;
+   */
+  tokensIn: bigint;
+
+  /**
+   * @generated from field: uint64 tokens_out = 8;
+   */
+  tokensOut: bigint;
+
+  /**
+   * @generated from field: double estimated_cost_usd = 9;
+   */
+  estimatedCostUsd: number;
+
+  /**
+   * @generated from field: int64 created_at_micros = 10;
+   */
+  createdAtMicros: bigint;
+
+  /**
+   * ts of last event seen
+   *
+   * @generated from field: int64 updated_at_micros = 11;
+   */
+  updatedAtMicros: bigint;
+
+  /**
+   * "attention" flag — true when the task verdict failed or a continuation
+   * was injected. Drives auto-bubble in the dashboard.
+   *
+   * @generated from field: bool needs_attention = 12;
+   */
+  needsAttention: boolean;
+};
+
+/**
+ * Describes the message jarvis.v1.FleetNode.
+ * Use `create(FleetNodeSchema)` to create a new message.
+ */
+export const FleetNodeSchema: GenMessage<FleetNode> = /*@__PURE__*/
+  messageDesc(file_jarvis, 20);
+
+/**
+ * @generated from message jarvis.v1.FleetEdge
+ */
+export type FleetEdge = Message<"jarvis.v1.FleetEdge"> & {
+  /**
+   * Directed edge from parent task to child task. Both are root in the DAG
+   * when parent is empty.
+   *
+   * @generated from field: string parent_task_id = 1;
+   */
+  parentTaskId: string;
+
+  /**
+   * @generated from field: string child_task_id = 2;
+   */
+  childTaskId: string;
+};
+
+/**
+ * Describes the message jarvis.v1.FleetEdge.
+ * Use `create(FleetEdgeSchema)` to create a new message.
+ */
+export const FleetEdgeSchema: GenMessage<FleetEdge> = /*@__PURE__*/
+  messageDesc(file_jarvis, 21);
+
+/**
+ * @generated from message jarvis.v1.CostReport
+ */
+export type CostReport = Message<"jarvis.v1.CostReport"> & {
+  /**
+   * @generated from field: string task_id = 1;
+   */
+  taskId: string;
+
+  /**
+   * Total token + dollar spend across the task and all its descendants.
+   *
+   * @generated from field: uint64 total_tokens_in = 2;
+   */
+  totalTokensIn: bigint;
+
+  /**
+   * @generated from field: uint64 total_tokens_out = 3;
+   */
+  totalTokensOut: bigint;
+
+  /**
+   * @generated from field: double total_cost_usd = 4;
+   */
+  totalCostUsd: number;
+
+  /**
+   * Per-model breakdown for drill-in.
+   *
+   * @generated from field: repeated jarvis.v1.ModelSpend by_model = 5;
+   */
+  byModel: ModelSpend[];
+};
+
+/**
+ * Describes the message jarvis.v1.CostReport.
+ * Use `create(CostReportSchema)` to create a new message.
+ */
+export const CostReportSchema: GenMessage<CostReport> = /*@__PURE__*/
+  messageDesc(file_jarvis, 22);
+
+/**
+ * @generated from message jarvis.v1.ModelSpend
+ */
+export type ModelSpend = Message<"jarvis.v1.ModelSpend"> & {
+  /**
+   * "local:gemma", "remote:deepseek_pro"
+   *
+   * @generated from field: string model_name = 1;
+   */
+  modelName: string;
+
+  /**
+   * @generated from field: uint64 tokens_in = 2;
+   */
+  tokensIn: bigint;
+
+  /**
+   * @generated from field: uint64 tokens_out = 3;
+   */
+  tokensOut: bigint;
+
+  /**
+   * 0 for local models
+   *
+   * @generated from field: double cost_usd = 4;
+   */
+  costUsd: number;
+
+  /**
+   * @generated from field: uint32 call_count = 5;
+   */
+  callCount: number;
+};
+
+/**
+ * Describes the message jarvis.v1.ModelSpend.
+ * Use `create(ModelSpendSchema)` to create a new message.
+ */
+export const ModelSpendSchema: GenMessage<ModelSpend> = /*@__PURE__*/
+  messageDesc(file_jarvis, 23);
+
+/**
  * Jarvis daemon gRPC API.
  * M1: Ping, Ask.
  * M2: SubmitTask, GetTask, ListTasks, StreamEvents, CancelTask.
@@ -832,6 +1054,28 @@ export const Jarvis: GenService<{
     methodKind: "unary";
     input: typeof TaskHandleSchema;
     output: typeof TimelineSnapshotSchema;
+  },
+  /**
+   * M7: continuously streamed snapshot of the whole task fleet — current
+   * status, running counts, costs. Drives the fleet DAG dashboard.
+   *
+   * @generated from rpc jarvis.v1.Jarvis.StreamFleet
+   */
+  streamFleet: {
+    methodKind: "server_streaming";
+    input: typeof EmptySchema;
+    output: typeof FleetUpdateSchema;
+  },
+  /**
+   * M7: aggregated cost breakdown for a task and its descendant subtasks,
+   * grouped by model.
+   *
+   * @generated from rpc jarvis.v1.Jarvis.GetTaskCostBreakdown
+   */
+  getTaskCostBreakdown: {
+    methodKind: "unary";
+    input: typeof TaskHandleSchema;
+    output: typeof CostReportSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_jarvis, 0);
