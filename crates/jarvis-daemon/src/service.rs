@@ -95,33 +95,9 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
     let addr: std::net::SocketAddr = bind.parse().context("parse daemon.addr")?;
     info!(%addr, ledger = %ledger_path.display(), "jarvis-daemon listening");
 
-    // Optionally start the embedded web UI alongside gRPC.
-    let web_handle = if cfg.web.enable {
-        let web_state = super::web::WebState {
-            pool: pool.clone(),
-            ledger: ledger.clone(),
-            tools: tools.clone(),
-            native: native.clone(),
-            docker: docker.clone(),
-            worktrees: worktrees.clone(),
-            cfg: Arc::new(cfg.clone()),
-            started,
-            running: running.clone(),
-            mcp_status: mcp_status.clone(),
-        };
-        let web_addr = cfg.web.addr.clone();
-        Some(tokio::spawn(async move {
-            if let Err(e) = super::web::serve(web_state, web_addr).await {
-                warn!(error = %e, "web server stopped");
-            }
-        }))
-    } else {
-        None
-    };
-
-    // M6: start the new SPA layer on a separate port (default 7879).
-    // It coexists with the legacy HTMX UI above and consumes the daemon
-    // only via the public gRPC API — no internal type sharing.
+    // M6.S15: the SolidJS SPA replaces the legacy HTMX UI. The SPA
+    // serves auth + static bundle on JARVIS_SPA_ADDR (default 7879) and
+    // calls the daemon's gRPC-Web endpoint on :7777 for data.
     let spa_handle = if cfg.web.enable {
         let spa_addr = jarvis_web::resolve_addr();
         let spa_data_dir = cfg.daemon.data_dir.clone();
@@ -146,9 +122,6 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         .await
         .context("gRPC server");
 
-    if let Some(h) = web_handle {
-        h.abort();
-    }
     if let Some(h) = spa_handle {
         h.abort();
     }
@@ -217,6 +190,7 @@ async fn pick_ask_provider(pool: &Arc<LlmPool>) -> Arc<dyn LlmProvider> {
 
 /// Public snapshot of MCP server health, surfaced through the API/sidebar.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct McpServerStatus {
     pub name: String,
     pub connected: bool,

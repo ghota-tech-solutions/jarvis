@@ -5,7 +5,6 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 mod service;
-mod web;
 
 #[derive(Debug, Parser)]
 #[command(name = "jarvis-daemon", version, about = "Jarvis daemon — long-running gRPC server")]
