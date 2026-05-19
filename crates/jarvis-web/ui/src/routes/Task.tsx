@@ -1,4 +1,13 @@
-import { Show, createMemo, createSignal, type Component } from 'solid-js';
+import {
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+  type Component,
+} from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { taskQuery, qkTaskList } from '~/lib/api/queries';
@@ -22,6 +31,10 @@ const Task: Component = () => {
   const [submitting, setSubmitting] = createSignal(false);
   const [view, setView] = createSignal<'timeline' | 'transcript' | 'both' | 'diff'>('both');
   const [selectedEvtId, setSelectedEvtId] = createSignal(0);
+  // § C UX — goal text per task id, populated lazily from getTask so the
+  // transcript can label each follow-up turn. The leaf (latest task in
+  // the chain) is what new follow-ups attach to.
+  const [taskGoals, setTaskGoals] = createSignal<Record<string, string>>({});
 
   const scrollToEvent = (id: number) => {
     setSelectedEvtId(id);
@@ -36,6 +49,92 @@ const Task: Component = () => {
   const spans = createMemo(() => stream.spans());
   const minTs = createMemo(() => stream.minTsMicros());
   const maxTs = createMemo(() => stream.maxTsMicros());
+
+  // Distinct task ids present in the streamed events, oldest → newest by
+  // first appearance. The last one is the chain leaf.
+  const chainTaskIds = createMemo<string[]>(() => {
+    const seen: string[] = [];
+    for (const e of events()) {
+      if (e.taskId && !seen.includes(e.taskId)) seen.push(e.taskId);
+    }
+    return seen;
+  });
+
+  // The leaf task — what a new follow-up should attach to so the chain
+  // stays linear instead of fanning siblings off an old ancestor.
+  const leafTaskId = createMemo(() => {
+    const ids = chainTaskIds();
+    return ids.length > 0 ? ids[ids.length - 1] : params.id;
+  });
+
+  // Lazily fetch the goal of every task in the chain for the transcript
+  // turn headers. getTask is cheap + cached; fetch each id once.
+  createEffect(() => {
+    const ids = chainTaskIds();
+    const known = taskGoals();
+    for (const id of ids) {
+      if (known[id] !== undefined) continue;
+      jarvis
+        .getTask({ id })
+        .then((t) =>
+          setTaskGoals((prev) => ({ ...prev, [id]: t.goal })),
+        )
+        .catch(() => {
+          /* leave unset — transcript falls back to "follow-up" */
+        });
+    }
+  });
+
+  // § C UX — follow the live conversation. After submitting a follow-up,
+  // the page navigates to the new (running) task and we want the user
+  // looking at the BOTTOM where the new turn is unfolding, not scrolled
+  // back to the top of the chain.
+  //
+  // `autoFollow` stays true while the user is near the bottom; if they
+  // scroll up to read earlier turns we stop yanking them back down.
+  let autoFollow = true;
+  const nearBottom = () =>
+    window.innerHeight + window.scrollY >= document.body.scrollHeight - 200;
+  const onScroll = () => {
+    autoFollow = nearBottom();
+  };
+  onMount(() => window.addEventListener('scroll', onScroll, { passive: true }));
+  onCleanup(() => window.removeEventListener('scroll', onScroll));
+
+  const scrollToBottom = (smooth: boolean) =>
+    queueMicrotask(() =>
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto',
+      }),
+    );
+
+  // On task load: if the task is active (running/pending), jump to the
+  // bottom so the user sees the live turn. Completed tasks opened from
+  // the dashboard keep their natural top position for reading.
+  createEffect(
+    on([() => stream.loaded(), () => params.id], ([loaded]) => {
+      if (!loaded) return;
+      const st = taskQ.data?.status;
+      if (st === 'running' || st === 'pending') {
+        autoFollow = true;
+        scrollToBottom(false);
+      }
+    }),
+  );
+
+  // While events stream in, keep following the bottom if the user hasn't
+  // scrolled away.
+  createEffect(
+    on(
+      () => events().length,
+      (len, prev) => {
+        if (prev !== undefined && len > prev && autoFollow) {
+          scrollToBottom(true);
+        }
+      },
+    ),
+  );
 
   const onContinue = async (ev: Event) => {
     ev.preventDefault();
@@ -52,7 +151,10 @@ const Task: Component = () => {
         maxSteps: 0,
         baseRef: '',
         requireCaps: [],
-        parentTaskId: params.id,
+        // § C UX — attach to the chain LEAF, not whatever task page we
+        // happen to be viewing, so the conversation stays a linear
+        // thread instead of fanning siblings off an ancestor.
+        parentTaskId: leafTaskId(),
       });
       setFollowup('');
       await qc.invalidateQueries({ queryKey: qkTaskList(true) });
@@ -140,7 +242,11 @@ const Task: Component = () => {
                 />
               </Show>
               <Show when={view() === 'both' || view() === 'transcript'}>
-                <Transcript events={events()} selectedEvtId={selectedEvtId()} />
+                <Transcript
+                  events={events()}
+                  selectedEvtId={selectedEvtId()}
+                  taskGoals={taskGoals()}
+                />
               </Show>
               <Show when={view() === 'diff'}>
                 <DiffByIntent taskId={params.id} />

@@ -2,7 +2,19 @@ import { For, Show, createMemo, type Component } from 'solid-js';
 import type { TimelineEvent } from '~/lib/api/gen/jarvis_pb';
 import Markdown from './Markdown';
 
-type Props = { events: TimelineEvent[]; selectedEvtId?: number };
+type Props = {
+  events: TimelineEvent[];
+  selectedEvtId?: number;
+  // § C UX — goal text per task id, so a follow-up chain renders a
+  // "user turn" header between each task's events.
+  taskGoals?: Record<string, string>;
+};
+
+// A render item is either an event block or a conversation-turn header
+// inserted when the task_id changes between consecutive events.
+type Row =
+  | { kind: 'event'; evt: TimelineEvent }
+  | { kind: 'turn'; taskId: string; goal: string; index: number };
 
 const kindIcon = (kind: string): string => {
   switch (kind) {
@@ -40,11 +52,6 @@ const parsePayload = (raw: string): Record<string, unknown> => {
   } catch {
     return { _raw: raw };
   }
-};
-
-const decisionText = (p: Record<string, unknown>): string => {
-  const t = p.thought ?? p.text ?? p.content ?? p.message ?? '';
-  return typeof t === 'string' ? t : JSON.stringify(t, null, 2);
 };
 
 const toolCallSummary = (p: Record<string, unknown>): { tool: string; args: string } => {
@@ -86,12 +93,38 @@ const EventBlock: Component<{ evt: TimelineEvent; selected?: boolean }> = (p) =>
       data-evt-id={Number(p.evt.id)}
     >
       <Show when={p.evt.kind === 'decision'}>
-        <div class="evt-prose">
-          <Markdown text={decisionText(payload())} />
-          <Show when={typeof payload().message === 'string' && payload().message !== payload().thought}>
-            <Markdown text={String(payload().message)} />
-          </Show>
-        </div>
+        {(() => {
+          const pl = payload();
+          const thought = typeof pl.thought === 'string' ? pl.thought.trim() : '';
+          const message = typeof pl.message === 'string' ? pl.message.trim() : '';
+          const action = typeof pl.action === 'string' ? pl.action : '';
+          const answerLabel =
+            action === 'done' ? 'answer' : action === 'fail' ? 'gave up' : 'note';
+          const hasMessage = message !== '' && message !== thought;
+          return (
+            <div class="evt-decision-body">
+              {/* `thought` = the model's internal reasoning (often English
+                  even when the answer is French). Muted + secondary so it
+                  doesn't compete visually with the real answer. */}
+              <Show when={thought}>
+                <div class="evt-thought">
+                  <span class="evt-label">reasoning</span>
+                  <div class="evt-thought-body">
+                    <Markdown text={thought} />
+                  </div>
+                </div>
+              </Show>
+              {/* `message` = the user-facing answer (done / fail). Given a
+                  prominent container so it reads as THE answer. */}
+              <Show when={hasMessage}>
+                <div class="evt-answer">
+                  <span class="evt-label">{answerLabel}</span>
+                  <Markdown text={message} />
+                </div>
+              </Show>
+            </div>
+          );
+        })()}
       </Show>
 
       <Show when={p.evt.kind === 'tool_call'}>
@@ -129,25 +162,44 @@ const EventBlock: Component<{ evt: TimelineEvent; selected?: boolean }> = (p) =>
       </Show>
 
       <Show when={p.evt.kind === 'error'}>
-        <div class="evt-fail">
-          <span class="evt-icon">{kindIcon(p.evt.kind)}</span>
-          <pre class="evt-output">{JSON.stringify(payload(), null, 2)}</pre>
-        </div>
+        {(() => {
+          const pl = payload();
+          // § C — parse_recovered is a benign breadcrumb, not a failure:
+          // the agent loop caught a malformed/prose reply and either
+          // coerced it to Done or retried. Render it compact + muted.
+          const isRecovered = pl.kind === 'parse_recovered';
+          if (isRecovered) {
+            const how = pl.recovered_as === 'coerced_to_done'
+              ? 'reply had no JSON — accepted as final answer'
+              : 'reply was not valid JSON — asked the model to retry';
+            return (
+              <div class="evt-recovered">
+                <span class="evt-icon">↻</span>
+                <span class="dim">parse recovered · {how}</span>
+              </div>
+            );
+          }
+          return (
+            <div class="evt-fail">
+              <span class="evt-icon">{kindIcon(p.evt.kind)}</span>
+              <pre class="evt-output">{JSON.stringify(pl, null, 2)}</pre>
+            </div>
+          );
+        })()}
       </Show>
 
       <Show when={p.evt.kind === 'verdict'}>
         {(() => {
           const v = payload().verdict;
           const ok = v === 'pass' || v === 'done';
+          // The verdict's `message` repeats the preceding `done` decision
+          // verbatim — don't render it twice. Just show the validation
+          // outcome as a compact badge row.
           return (
-            <div class={ok ? 'evt-ok' : 'evt-fail'}>
-              <div>
-                <span class="evt-icon">{kindIcon(p.evt.kind)}</span>
-                <span class={`pill ${ok ? 'good' : 'error'}`}>{String(v)}</span>
-              </div>
-              <Show when={typeof payload().message === 'string'}>
-                <div class="dim"><Markdown text={String(payload().message)} /></div>
-              </Show>
+            <div class={`evt-verdict-row ${ok ? 'evt-ok' : 'evt-fail'}`}>
+              <span class="evt-icon">{kindIcon(p.evt.kind)}</span>
+              <span class={`pill ${ok ? 'good' : 'error'}`}>{String(v)}</span>
+              <span class="dim">validation {ok ? 'passed' : 'failed'}</span>
             </div>
           );
         })()}
@@ -221,10 +273,47 @@ const Transcript: Component<Props> = (p) => {
     return out;
   });
 
+  // Interleave conversation-turn headers: every time the task_id changes
+  // from one event to the next, the user started a new follow-up turn.
+  const rows = createMemo<Row[]>(() => {
+    const evs = filtered();
+    const out: Row[] = [];
+    let lastTaskId: string | undefined;
+    let turnIndex = 0;
+    for (const e of evs) {
+      if (e.taskId !== lastTaskId) {
+        turnIndex += 1;
+        out.push({
+          kind: 'turn',
+          taskId: e.taskId,
+          goal: p.taskGoals?.[e.taskId] ?? '',
+          index: turnIndex,
+        });
+        lastTaskId = e.taskId;
+      }
+      out.push({ kind: 'event', evt: e });
+    }
+    return out;
+  });
+
   return (
     <div class="transcript">
-      <For each={filtered()}>
-        {(evt) => <EventBlock evt={evt} selected={Number(evt.id) === p.selectedEvtId} />}
+      <For each={rows()}>
+        {(row) =>
+          row.kind === 'turn' ? (
+            <div class="turn-header">
+              <span class="turn-badge">turn {row.index}</span>
+              <Show when={row.goal} fallback={<span class="dim">follow-up</span>}>
+                <span class="turn-goal">{row.goal}</span>
+              </Show>
+            </div>
+          ) : (
+            <EventBlock
+              evt={row.evt}
+              selected={Number(row.evt.id) === p.selectedEvtId}
+            />
+          )
+        }
       </For>
     </div>
   );

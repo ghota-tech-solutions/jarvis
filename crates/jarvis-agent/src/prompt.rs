@@ -294,7 +294,7 @@ pub fn build_messages(
             prior.push_str(&format!("  {}. {}\n", i + 1, g));
         }
         format!(
-            "Goal: {goal}\nWorkdir: {workdir}\n\nThis is a follow-up turn in a multi-step conversation. Prior turn goals (oldest → newest):\n{prior}\nThe ASSISTANT and USER messages that follow are the recorded conversation history (decisions and tool observations from those prior turns). The goal stated above is the user's NEW request — interpret it as a continuation of that conversation, not as a fresh task. If it would be ambiguous on its own (e.g. \"a Lyon\" after a weather question), resolve the ambiguity using the prior turns.\n\nBegin."
+            "Goal: {goal}\nWorkdir: {workdir}\n\nThis is a follow-up turn in a multi-step conversation. Prior turn goals (oldest → newest):\n{prior}\nThe ASSISTANT and USER messages that follow are the recorded conversation history (decisions and tool observations from those prior turns).\n\nThe goal stated above is the user's NEW request. Use the prior turns ONLY to resolve what the new request refers to — for example \"et a Marseille ?\" after a weather question means: get the weather FOR MARSEILLE.\n\nCRITICAL — the new goal asks about something DIFFERENT from the prior turns. Do NOT copy or repeat a previous turn's answer. If the new goal needs fresh data (a different city, a different file, a different computation), you MUST call the appropriate tools again for the NEW goal. Only answer directly without tools if the prior turns ALREADY contain the exact answer to this specific new goal.\n\nBegin."
         )
     };
     msgs.push(ChatMessage {

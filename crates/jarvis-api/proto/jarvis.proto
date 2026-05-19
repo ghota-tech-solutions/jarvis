@@ -18,9 +18,10 @@ service Jarvis {
   // M5: daemon-wide status snapshot (models, uptime, running tasks).
   rpc GetStatus(StatusRequest) returns (DaemonStatus);
 
-  // M6: full event timeline + pre-computed spans for a task and its
-  // descendant subtasks. Drives the scrubbable canvas timeline in the SPA.
-  rpc GetTimeline(TaskHandle) returns (TimelineSnapshot);
+  // M6: full event timeline + pre-computed spans for a task. With
+  // `include_ancestors`, the SPA's conversation-thread view merges the
+  // parent chain so follow-up tasks render as one continuous transcript.
+  rpc GetTimeline(GetTimelineRequest) returns (TimelineSnapshot);
 
   // M7: continuously streamed snapshot of the whole task fleet — current
   // status, running counts, costs. Drives the fleet DAG dashboard.
@@ -218,6 +219,13 @@ message TimelineSnapshot {
   repeated TimelineSpan spans = 3;
   int64 min_ts_micros = 4;
   int64 max_ts_micros = 5;
+}
+
+message GetTimelineRequest {
+  string id = 1;
+  // When true, prepend events from the task's ancestor chain so the
+  // SPA can render a follow-up conversation as one transcript.
+  bool include_ancestors = 2;
 }
 
 message TimelineEvent {

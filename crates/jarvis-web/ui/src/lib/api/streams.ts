@@ -129,8 +129,10 @@ export function useTaskEventStream(taskIdAccessor: Accessor<string>): TaskStream
     if (!sess.id) return;
 
     // 1) Initial snapshot — backfills events + spans + bounds.
+    //    `includeAncestors: true` so a follow-up task page shows the full
+    //    conversation chain, not just the latest user turn.
     try {
-      const snap = await jarvis.getTimeline({ id: sess.id });
+      const snap = await jarvis.getTimeline({ id: sess.id, includeAncestors: true });
       if (sess.cancelled || sess !== session) return;
       setEvents(snap.events);
       setSpans(snap.spans);

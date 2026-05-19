@@ -30,10 +30,28 @@ const shortId = (id: string) => id.split('-')[0] ?? id;
 
 const TaskCard: Component<{ conv: Conversation }> = (p) => {
   const { root, children } = p.conv;
+  // § C UX — link to the chain LEAF (latest task by createdAt) so the
+  // user lands on the most-recent turn. With includeAncestors the Task
+  // page still shows the whole conversation from the top.
+  const leafId = () => {
+    if (children.length === 0) return root.id;
+    return children.reduce(
+      (acc, c) => (c.createdAt > acc.createdAt ? c : acc),
+      children[0],
+    ).id;
+  };
+  // The status that matters for the card is the leaf's, not the root's.
+  const leafStatus = () => {
+    if (children.length === 0) return root.status;
+    return children.reduce(
+      (acc, c) => (c.createdAt > acc.createdAt ? c : acc),
+      children[0],
+    ).status;
+  };
   return (
-    <A href={`/task/${root.id}`} class="task-card">
+    <A href={`/task/${leafId()}`} class="task-card">
       <div class="row">
-        <span class={`pill ${statusClass(root.status)}`}>{root.status}</span>
+        <span class={`pill ${statusClass(leafStatus())}`}>{leafStatus()}</span>
         <code class="dim" style="font-size: 11px">{shortId(root.id)}</code>
         <Show when={children.length > 0}>
           <span class="pill accent">×{children.length + 1}</span>

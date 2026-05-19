@@ -5,6 +5,7 @@
 
 import { Show, createSignal, type Component } from 'solid-js';
 import { jarvis } from '~/lib/api/client';
+import Markdown from './Markdown';
 
 const QuickAsk: Component = () => {
   const [prompt, setPrompt] = createSignal('');
@@ -72,7 +73,7 @@ const QuickAsk: Component = () => {
       </form>
       <Show when={answer() || error()}>
         <div class="quick-ask-answer">
-          <Show when={error()} fallback={<pre>{answer()}</pre>}>
+          <Show when={error()} fallback={<Markdown text={answer()} />}>
             <span class="error">{error()}</span>
           </Show>
         </div>

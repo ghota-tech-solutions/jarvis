@@ -115,6 +115,38 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         scheduler_handles: scheduler_handles.clone(),
     };
 
+    // § C boot reconciliation — any task still marked `running` or
+    // `pending` is orphaned: its tokio worker died when the daemon last
+    // stopped, but the ledger never recorded a terminal status. Left
+    // alone these poison the HUD ("11 running" forever) and the fleet
+    // view. Mark them `failed` so the ledger reflects reality.
+    match ledger.list_tasks(false, 10_000).await {
+        Ok(active) => {
+            let mut reconciled = 0u32;
+            for t in active {
+                if let Err(e) = ledger
+                    .set_task_status(
+                        t.id,
+                        jarvis_ledger::TaskStatus::Failed,
+                        Some("orphaned — daemon restarted while task was running"),
+                    )
+                    .await
+                {
+                    warn!(task = %t.id, error = %e, "could not reconcile orphaned task");
+                } else {
+                    reconciled += 1;
+                }
+            }
+            if reconciled > 0 {
+                info!(
+                    reconciled,
+                    "marked orphaned running/pending tasks as failed"
+                );
+            }
+        }
+        Err(e) => warn!(error = %e, "could not list active tasks for boot reconciliation"),
+    }
+
     // M12.S1: boot any existing non-paused schedules into live cron loops.
     // Done after svc is built so the loops can call back via gRPC.
     match ledger.list_schedules().await {
@@ -1362,15 +1394,32 @@ impl Jarvis for JarvisService {
 
     async fn get_timeline(
         &self,
-        request: Request<TaskHandle>,
+        request: Request<jarvis_api::GetTimelineRequest>,
     ) -> std::result::Result<Response<TimelineSnapshot>, Status> {
-        let task_id_str = request.into_inner().id;
+        let req = request.into_inner();
+        let task_id_str = req.id;
         let task_id = parse_task_id(&task_id_str)?;
-        let events = self
-            .ledger
-            .timeline_events(task_id)
-            .await
-            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+        // § C UX fix — when the SPA is rendering a follow-up conversation,
+        // include the ancestor chain's events so the transcript reads as
+        // one continuous thread instead of starting blank with just the
+        // latest user message.
+        let events = if req.include_ancestors {
+            let chain = self
+                .ledger
+                .walk_ancestors(task_id)
+                .await
+                .map_err(|e| Status::internal(format!("ledger ancestors: {e}")))?;
+            let ids: Vec<_> = chain.iter().map(|t| t.id).collect();
+            self.ledger
+                .query_events_multi(&ids, 0, 0)
+                .await
+                .map_err(|e| Status::internal(format!("ledger multi: {e}")))?
+        } else {
+            self.ledger
+                .timeline_events(task_id)
+                .await
+                .map_err(|e| Status::internal(format!("ledger: {e}")))?
+        };
 
         let api_events: Vec<ApiTimelineEvent> = events
             .iter()

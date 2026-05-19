@@ -151,8 +151,7 @@ pub async fn run_agent(
         let history = if ancestors.len() <= 1 {
             ledger.recent_relevant_events(run.task_id, 80).await?
         } else {
-            let chain_ids: Vec<jarvis_core::TaskId> =
-                ancestors.iter().map(|t| t.id).collect();
+            let chain_ids: Vec<jarvis_core::TaskId> = ancestors.iter().map(|t| t.id).collect();
             // Pull a larger raw window (oldest → newest by event id),
             // filter to relevant kinds, then keep the most-recent 80
             // globally. Ledger ids are monotonic → most-recent-80-by-id

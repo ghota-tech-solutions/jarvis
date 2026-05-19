@@ -329,6 +329,56 @@ pre {
   padding: 0.35rem 0;
 }
 
+/* § C UX — clear visual hierarchy inside a decision event:
+   `reasoning` (model's internal thought, secondary/muted) vs
+   `answer` (the user-facing message, primary). */
+.evt-decision-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+}
+.evt-label {
+  display: inline-block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 700;
+  color: var(--dim);
+  margin-bottom: 0.15rem;
+}
+.evt-thought {
+  border-left: 2px solid var(--border);
+  padding-left: 0.6rem;
+}
+.evt-thought .evt-label {
+  color: var(--fade);
+}
+.evt-thought-body {
+  font-size: 12px;
+  color: var(--dim);
+}
+.evt-thought-body .markdown p {
+  margin: 0.2em 0;
+}
+.evt-answer {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.6rem;
+}
+.evt-answer .evt-label {
+  color: var(--accent);
+}
+.evt-answer .markdown {
+  color: var(--body);
+  font-size: 14px;
+}
+.evt-verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+}
+
 /* § C front-fix — render LLM-emitted markdown without rotting layout.
    Italics live INSIDE the markdown now (via `*text*`) so we drop the
    container-level font-style. */
@@ -408,6 +458,47 @@ pre {
 }
 .markdown strong { font-weight: 600; }
 .markdown em { font-style: italic; }
+
+/* § C UX — conversation-turn header between follow-up tasks in a chain */
+.turn-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1.4rem 0 0.6rem 0;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+}
+.turn-header:first-child {
+  margin-top: 0;
+}
+.turn-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.turn-goal {
+  font-size: 13px;
+  color: var(--body);
+  font-weight: 500;
+}
+
+/* § C — parse-recovery breadcrumb: benign, muted, not alarming */
+.evt-recovered {
+  font-size: 11px;
+  color: var(--fade);
+  padding: 0.2rem 0;
+}
+.evt-recovered .evt-icon {
+  color: var(--warn);
+}
 
 .evt-tool-call {
   font-family:
