@@ -524,10 +524,19 @@ impl Jarvis for JarvisService {
         &self,
         req: Request<TaskSpec>,
     ) -> std::result::Result<Response<TaskHandle>, Status> {
-        let spec = req.into_inner();
+        let mut spec = req.into_inner();
         if spec.goal.trim().is_empty() {
             return Err(Status::invalid_argument("goal is empty"));
         }
+        // M10.S4: `resume_from` is just sugar for "spawn me a child of this
+        // task and inherit everything". Normalize before the parent-lookup
+        // path. Explicit `parent_task_id` wins if both are set.
+        let resumed_from = if !spec.resume_from.is_empty() && spec.parent_task_id.is_empty() {
+            spec.parent_task_id = spec.resume_from.clone();
+            Some(spec.resume_from.clone())
+        } else {
+            None
+        };
         // Resolve parent task (if any) so we can inherit sensible defaults.
         let parent_record = if spec.parent_task_id.is_empty() {
             None
@@ -579,6 +588,27 @@ impl Jarvis for JarvisService {
             .create_task(&spec.goal, &source_workdir.display().to_string(), parent_id)
             .await
             .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+
+        // M10.S4: if this is a resume, drop a `continuation` event marker
+        // so the timeline reflects the inheritance and the agent loop's
+        // prompt builder picks it up alongside the parent's history.
+        if let Some(src) = resumed_from {
+            let _ = self
+                .ledger
+                .append(
+                    jarvis_ledger::NewEvent::new(
+                        task.id,
+                        jarvis_ledger::EventKind::Continuation,
+                        serde_json::json!({
+                            "kind": "resume",
+                            "resumed_from": src,
+                            "reason": "user invoked resume; inheriting workdir/sandbox/net from source",
+                        }),
+                    )
+                    .with_subject(format!("resume from {}", &src[..src.len().min(8)])),
+                )
+                .await;
+        }
 
         // Create worktree if requested. Falls back to source path if no git repo.
         let worktree = if spec.use_worktree {

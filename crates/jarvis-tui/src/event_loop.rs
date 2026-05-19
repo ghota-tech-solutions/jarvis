@@ -339,6 +339,7 @@ async fn submit_task(
             routing_policy: String::new(),
             require_caps: Vec::new(),
             parent_task_id: parent_task_id.unwrap_or_default(),
+            resume_from: String::new(),
         };
         match client.submit_task(spec).await {
             Ok(h) => {

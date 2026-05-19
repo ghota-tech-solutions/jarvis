@@ -112,6 +112,13 @@ message TaskSpec {
   // fields are left empty, and the ledger records the parent link so the TUI
   // can render a chronological conversation across the chain.
   string parent_task_id = 10;
+  // M10.S4: resume a previously-interrupted task. When set, the new task
+  // inherits workdir/sandbox/net_policy/worktree from `resume_from`, sets
+  // parent_task_id = resume_from so the agent loop's history walker carries
+  // the full prior context, and logs a `continuation` event referencing the
+  // source. `goal`, `sandbox`, etc. on this spec override the inherited
+  // values when non-empty.
+  string resume_from = 11;
 }
 
 // ---------- Status / model registry ----------

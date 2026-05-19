@@ -37,6 +37,7 @@ struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Cmd {
     /// Health-check the daemon.
     Ping,
@@ -58,6 +59,7 @@ enum Cmd {
 }
 
 #[derive(Debug, Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum TaskCmd {
     /// Submit a new task to the daemon.
     Add(AddTaskArgs),
@@ -121,6 +123,12 @@ struct AddTaskArgs {
     /// Continue a conversation: parent task id (UUID). Inherits workdir / sandbox.
     #[arg(long = "parent")]
     parent: Option<String>,
+    /// Resume an interrupted task: source task id (UUID). Inherits
+    /// workdir/sandbox/net/worktree from the source and logs a continuation
+    /// event referencing it. The agent loop picks up with the full history
+    /// of the source in its prompt context.
+    #[arg(long = "resume")]
+    resume: Option<String>,
     /// Watch events live after submission.
     #[arg(long)]
     watch: bool,
@@ -234,6 +242,7 @@ async fn task_cmd(client: &mut AuthedClient, cmd: TaskCmd) -> Result<()> {
                 routing_policy,
                 require_caps: a.require,
                 parent_task_id: a.parent.unwrap_or_default(),
+                resume_from: a.resume.clone().unwrap_or_default(),
             };
             let h = client.submit_task(spec).await?.into_inner();
             println!("submitted task: {}", h.id);

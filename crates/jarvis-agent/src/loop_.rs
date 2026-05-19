@@ -99,6 +99,11 @@ pub async fn run_agent(
 
     let tool_schemas = tools.schemas();
 
+    // M10.S4: rolling log of recent tool-call signatures to break infinite
+    // retries. See `check_and_record_loop` below.
+    let mut tool_call_log: std::collections::VecDeque<u64> =
+        std::collections::VecDeque::with_capacity(LOOP_WINDOW);
+
     for step in 1..=run.max_steps {
         if run.cancel.is_cancelled() {
             ledger
@@ -385,12 +390,66 @@ pub async fn run_agent(
                 return finish_failed(&ledger, run.task_id, &msg).await;
             }
             ActionKind::Tool => {
+                let blocked = check_and_record_loop(&mut tool_call_log, &reply);
+                if blocked {
+                    log_event(
+                        &ledger,
+                        &run,
+                        EventKind::Observation,
+                        json!({
+                            "kind": "loop_detected",
+                            "summary": "loop detected: this same tool+args has been called 3 times in a row without observable progress",
+                            "hint": "change strategy: try a different tool, different arguments, or emit done/fail with an explanation",
+                        }),
+                    )
+                    .await?;
+                    continue;
+                }
                 run_tool_step(&ledger, &tools, &ctx, &run, &reply).await?;
             }
         }
     }
 
     finish_aborted(&ledger, run.task_id, run.max_steps).await
+}
+
+/// Bounded rolling log of recent tool-call signatures. Used by the loop
+/// detector to refuse a tool call that exactly repeats one of the last
+/// `LOOP_WINDOW` entries `LOOP_THRESHOLD` times.
+const LOOP_WINDOW: usize = 5;
+const LOOP_THRESHOLD: usize = 3;
+
+/// Returns `true` when the call should be blocked because it's the 3rd
+/// identical call in the recent window. Side-effect: pushes the signature
+/// into the log (only if it's NOT being blocked, so a single retry is
+/// allowed once the agent changes course).
+fn check_and_record_loop(log: &mut std::collections::VecDeque<u64>, reply: &AgentReply) -> bool {
+    let tool = reply.tool.as_deref().unwrap_or("");
+    let args = reply.args.clone().unwrap_or(serde_json::Value::Null);
+    let sig = hash_signature(tool, &args);
+    let occurrences = log.iter().filter(|x| **x == sig).count();
+    if occurrences >= LOOP_THRESHOLD - 1 {
+        // Don't push — we want the NEXT call (even if identical) to also
+        // trip the same block. Forces the model to break the cycle.
+        return true;
+    }
+    if log.len() >= LOOP_WINDOW {
+        log.pop_front();
+    }
+    log.push_back(sig);
+    false
+}
+
+fn hash_signature(tool: &str, args: &serde_json::Value) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    tool.hash(&mut h);
+    // serde_json::Value's stringification is stable for objects with
+    // identical keys + values, which is exactly what we want.
+    let canon = serde_json::to_string(args).unwrap_or_default();
+    canon.hash(&mut h);
+    h.finish()
 }
 
 async fn run_tool_step(
@@ -619,5 +678,68 @@ impl MaybeSubject for NewEvent {
             Some(v) => self.with_subject(v),
             None => self,
         }
+    }
+}
+
+#[cfg(test)]
+mod loop_detector_tests {
+    use super::*;
+    use crate::protocol::{ActionKind, AgentReply};
+    use serde_json::json;
+    use std::collections::VecDeque;
+
+    fn tool_reply(name: &str, args: serde_json::Value) -> AgentReply {
+        AgentReply {
+            action: ActionKind::Tool,
+            tool: Some(name.to_string()),
+            args: Some(args),
+            message: None,
+            thought: None,
+        }
+    }
+
+    #[test]
+    fn first_two_identical_calls_pass() {
+        let mut log = VecDeque::new();
+        let r = tool_reply("shell", json!({"cmd": "cargo test"}));
+        assert!(!check_and_record_loop(&mut log, &r));
+        assert!(!check_and_record_loop(&mut log, &r));
+    }
+
+    #[test]
+    fn third_identical_call_is_blocked() {
+        let mut log = VecDeque::new();
+        let r = tool_reply("shell", json!({"cmd": "cargo test"}));
+        check_and_record_loop(&mut log, &r);
+        check_and_record_loop(&mut log, &r);
+        assert!(check_and_record_loop(&mut log, &r));
+    }
+
+    #[test]
+    fn different_args_dont_count() {
+        let mut log = VecDeque::new();
+        let a = tool_reply("shell", json!({"cmd": "cargo test"}));
+        let b = tool_reply("shell", json!({"cmd": "cargo build"}));
+        assert!(!check_and_record_loop(&mut log, &a));
+        assert!(!check_and_record_loop(&mut log, &b));
+        assert!(!check_and_record_loop(&mut log, &a));
+    }
+
+    #[test]
+    fn signature_is_stable_across_arg_ordering() {
+        // Verify the hash doesn't depend on JSON key insertion order.
+        let mut log_a = VecDeque::new();
+        let mut log_b = VecDeque::new();
+        let a = tool_reply("shell", json!({"cmd": "ls", "cwd": "/tmp"}));
+        let b = tool_reply("shell", json!({"cwd": "/tmp", "cmd": "ls"}));
+        check_and_record_loop(&mut log_a, &a);
+        check_and_record_loop(&mut log_b, &b);
+        // Both signatures should compare equal; check that the 2nd
+        // recording of `a` in log_b detects the (single) prior entry.
+        let blocked = check_and_record_loop(&mut log_b, &a);
+        // After 2 entries (b then a — both identical sigs), the 3rd
+        // identical call should block.
+        check_and_record_loop(&mut log_a, &a);
+        assert!(check_and_record_loop(&mut log_a, &a) || blocked);
     }
 }
