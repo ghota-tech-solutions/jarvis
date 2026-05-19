@@ -176,6 +176,150 @@ pub fn parse_reply(text: &str) -> Result<AgentReply, AgentError> {
     Ok(raw.normalize())
 }
 
+/// § C.M-C — rewrite a Gemma 4 native tool-call envelope into the JSON
+/// contract the rest of the agent loop expects.
+///
+/// Gemma 4 was trained with six special tokens for tool use; when a
+/// backend exposes them as text (Ollama `gemma4:*`, vLLM with
+/// `--tool-call-parser gemma4` disabled, raw `mlx_lm.server` without
+/// chat-template-managed tokens), a tool call looks like:
+///
+/// ```text
+/// <|tool_call>call:get_weather{location:<|"|>London<|"|>}<tool_call|>
+/// ```
+///
+/// This helper detects that pattern and rewrites it as
+/// `{"action":"call_tool","tool":"get_weather","args":{"location":"London"}}`
+/// so `parse_reply` can consume it unchanged. The rewriter is intentionally
+/// conservative:
+///
+/// - If no envelope is found, returns the original text untouched.
+/// - If the envelope is found but malformed (missing closing brace,
+///   garbled args), returns the original text — the caller will fall
+///   into the existing parse-failure recovery path (§ C.M-A).
+/// - Only the FIRST envelope is rewritten. Multi-call replies are
+///   uncommon on this path; if/when they appear we'll widen the
+///   contract via a follow-up.
+pub fn rewrite_gemma4_native(raw: &str) -> Option<String> {
+    // Tolerant tag matching: Gemma 4 documents the tokens as
+    // `<|tool_call>` ... `<tool_call|>`, but slightly different
+    // variants show up in the wild (`<|tool_call|>...<|tool_call|>`,
+    // backticks around the call name). We accept the load-bearing shape:
+    //   <... tool_call ...> call:NAME { BODY } <... tool_call ...>
+    let open = raw.find("tool_call")?;
+    // Walk forward to the `call:` token after `tool_call`.
+    let after_open = &raw[open + "tool_call".len()..];
+    let call_pos = after_open.find("call:")?;
+    let after_call = &after_open[call_pos + "call:".len()..];
+    let brace = after_call.find('{')?;
+    let name = after_call[..brace].trim().trim_matches(|c: char| {
+        c == '`' || c == '"' || c == '\'' || c.is_whitespace() || c == '|' || c == '>'
+    });
+    if name.is_empty() {
+        return None;
+    }
+    // Body terminates at the matching `}`. Gemma encloses string values
+    // in `<|"|>...<|"|>`, so we strip those before parsing key=value.
+    let body_src = &after_call[brace + 1..];
+    let close = body_src.find('}')?;
+    let body = &body_src[..close];
+
+    let mut args = serde_json::Map::new();
+    for piece in split_top_level_commas(body) {
+        let (k, v) = piece.split_once(':')?;
+        let key = k.trim().to_string();
+        if key.is_empty() {
+            return None;
+        }
+        let val = v.trim();
+        // Strip the Gemma string-literal delimiters `<|"|>...<|"|>` if
+        // present. Numeric / bool literals pass through unchanged.
+        let stripped = val
+            .strip_prefix("<|\"|>")
+            .and_then(|s| s.strip_suffix("<|\"|>"))
+            .map(|s| Json::String(s.to_string()))
+            .unwrap_or_else(|| {
+                // Try numeric / bool / null; fall back to string.
+                if let Ok(n) = val.parse::<i64>() {
+                    Json::from(n)
+                } else if let Ok(f) = val.parse::<f64>() {
+                    Json::from(f)
+                } else if val.eq_ignore_ascii_case("true") {
+                    Json::Bool(true)
+                } else if val.eq_ignore_ascii_case("false") {
+                    Json::Bool(false)
+                } else if val.eq_ignore_ascii_case("null") {
+                    Json::Null
+                } else {
+                    Json::String(val.trim_matches('"').to_string())
+                }
+            });
+        args.insert(key, stripped);
+    }
+
+    let rewritten = serde_json::json!({
+        "action": "call_tool",
+        "tool": name,
+        "args": Json::Object(args),
+    });
+    Some(rewritten.to_string())
+}
+
+/// Split a Gemma 4 args body on top-level commas, ignoring those inside
+/// `<|"|>...<|"|>` string delimiters or nested braces. Returns &str
+/// slices into the input.
+fn split_top_level_commas(body: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let bytes = body.as_bytes();
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut start = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        // Match `<|"|>` (5 bytes) at this position?
+        if !in_string && bytes[i..].starts_with(br#"<|"|>"#) {
+            in_string = true;
+            i += 5;
+            continue;
+        }
+        if in_string && bytes[i..].starts_with(br#"<|"|>"#) {
+            in_string = false;
+            i += 5;
+            continue;
+        }
+        if !in_string {
+            match bytes[i] {
+                b'{' => depth += 1,
+                b'}' => depth -= 1,
+                b',' if depth == 0 => {
+                    out.push(&body[start..i]);
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    out.push(&body[start..]);
+    out
+}
+
+/// § C.M-C — dialect-aware preprocessing slot called before `parse_reply`.
+/// Returns `Cow::Borrowed` for the common case (no rewrite needed).
+pub fn preprocess_response(
+    raw: &str,
+    dialect: jarvis_core::ToolDialect,
+) -> std::borrow::Cow<'_, str> {
+    use jarvis_core::ToolDialect;
+    match dialect {
+        ToolDialect::Json | ToolDialect::Gemma4Strict => std::borrow::Cow::Borrowed(raw),
+        ToolDialect::Gemma4Native => match rewrite_gemma4_native(raw) {
+            Some(rewritten) => std::borrow::Cow::Owned(rewritten),
+            None => std::borrow::Cow::Borrowed(raw),
+        },
+    }
+}
+
 /// § C.M-A — recovery for parse failures.
 ///
 /// Some models (notably Gemma 4 on long contexts) drift out of the JSON
@@ -282,6 +426,79 @@ mod tests {
         assert_eq!(
             r.message.as_deref(),
             Some("All done — no further changes needed.")
+        );
+    }
+
+    // § C.M-C — Gemma4Native preprocessor tests.
+
+    #[test]
+    fn preprocess_passthrough_for_json_dialect() {
+        let raw = r#"{"action":"done","message":"ok"}"#;
+        let out = preprocess_response(raw, jarvis_core::ToolDialect::Json);
+        assert!(matches!(out, std::borrow::Cow::Borrowed(_)));
+        assert_eq!(out, raw);
+    }
+
+    #[test]
+    fn preprocess_passthrough_for_gemma4_strict_dialect() {
+        // Gemma4Strict still expects JSON from the model — preprocessor
+        // does NOT rewrite even if the input looks like a native envelope.
+        let raw = "<|tool_call>call:foo{x:1}<tool_call|>";
+        let out = preprocess_response(raw, jarvis_core::ToolDialect::Gemma4Strict);
+        assert!(matches!(out, std::borrow::Cow::Borrowed(_)));
+        assert_eq!(out, raw);
+    }
+
+    #[test]
+    fn rewrite_simple_gemma4_native_envelope() {
+        let raw = r#"<|tool_call>call:get_weather{location:<|"|>London<|"|>}<tool_call|>"#;
+        let rewritten = rewrite_gemma4_native(raw).expect("should rewrite");
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["action"], "call_tool");
+        assert_eq!(v["tool"], "get_weather");
+        assert_eq!(v["args"]["location"], "London");
+    }
+
+    #[test]
+    fn rewrite_handles_numeric_and_string_args() {
+        let raw =
+            r#"<|tool_call>call:fs_read{path:<|"|>src/main.rs<|"|>,start_line:42}<tool_call|>"#;
+        let rewritten = rewrite_gemma4_native(raw).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["tool"], "fs_read");
+        assert_eq!(v["args"]["path"], "src/main.rs");
+        assert_eq!(v["args"]["start_line"], 42);
+    }
+
+    #[test]
+    fn rewrite_returns_none_when_no_envelope() {
+        assert!(rewrite_gemma4_native(r#"{"action":"done"}"#).is_none());
+        assert!(rewrite_gemma4_native("just some prose").is_none());
+        assert!(rewrite_gemma4_native("").is_none());
+    }
+
+    #[test]
+    fn rewrite_returns_none_on_malformed_envelope() {
+        // No closing brace.
+        assert!(rewrite_gemma4_native("<|tool_call>call:foo{x:1").is_none());
+        // No call: prefix.
+        assert!(rewrite_gemma4_native("<|tool_call>{x:1}<tool_call|>").is_none());
+        // Empty name.
+        assert!(rewrite_gemma4_native("<|tool_call>call:{x:1}<tool_call|>").is_none());
+    }
+
+    #[test]
+    fn preprocess_native_envelope_round_trips_via_parse_reply() {
+        // End-to-end smoke: rewrite then parse_reply produces a usable
+        // AgentReply with the right tool name and args.
+        let raw = r#"<|tool_call>call:web_search{q:<|"|>tonic 0.13<|"|>}<tool_call|>"#;
+        let cooked = preprocess_response(raw, jarvis_core::ToolDialect::Gemma4Native);
+        let reply = parse_reply(&cooked).unwrap();
+        assert_eq!(reply.action, ActionKind::Tool);
+        assert_eq!(reply.tool.as_deref(), Some("web_search"));
+        assert_eq!(
+            reply.args.as_ref().unwrap()["q"],
+            serde_json::Value::String("tonic 0.13".to_string())
         );
     }
 }

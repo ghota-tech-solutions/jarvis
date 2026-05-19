@@ -2,7 +2,8 @@
 
 use crate::prompt;
 use crate::protocol::{
-    ActionKind, AgentError, AgentReply, Outcome, parse_reply, recover_from_parse_failure,
+    ActionKind, AgentError, AgentReply, Outcome, parse_reply, preprocess_response,
+    recover_from_parse_failure,
 };
 use futures_util::StreamExt;
 use jarvis_core::{
@@ -161,8 +162,10 @@ pub async fn run_agent(
         .await?;
 
         // 2) Pick a model — try, on failure quarantine + forbid + retry until exhausted.
+        // Returns (raw text, dialect of the model that produced it) so the
+        // § C.M-C preprocessor below can apply the dialect-specific rewrite.
         let mut forbidden: HashSet<ProviderName> = HashSet::new();
-        let text = loop {
+        let (text, dialect) = loop {
             let pick_req = PickRequest {
                 required: run.required.clone(),
                 kind: run.kind,
@@ -322,12 +325,17 @@ pub async fn run_agent(
                 )
                 .await?;
             }
-            break text;
+            break (text, picked.tool_dialect);
         };
 
-        // 2) Parse the reply. § C.M-A: recover from common failure modes
+        // 2) § C.M-C — dialect-aware preprocessing. For `Json` / `Gemma4Strict`
+        //    this is a borrow-only passthrough; for `Gemma4Native` it rewrites
+        //    `<|tool_call>...<tool_call|>` envelopes into the JSON contract.
+        let cooked = preprocess_response(&text, dialect);
+
+        // 3) Parse the reply. § C.M-A: recover from common failure modes
         //    instead of burning the step budget on identical re-prompts.
-        let reply = match parse_reply(&text) {
+        let reply = match parse_reply(&cooked) {
             Ok(r) => r,
             Err(e) => {
                 if let Some(coerced) = recover_from_parse_failure(&text) {
