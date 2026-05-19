@@ -705,3 +705,80 @@ kbd {
   line-height: 1.5;
   color: var(--body);
 }
+
+/* --- Command palette --------------------------------------------- */
+
+.cmdp-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  z-index: 1100;
+}
+
+.cmdp-modal {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 520px;
+  max-width: 90vw;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+
+.cmdp-input {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--body);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.cmdp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.cmdp-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.cmdp-item > span {
+  flex: 1;
+}
+
+.cmdp-item kbd {
+  margin-left: auto;
+}
+
+.cmdp-active {
+  background: rgba(212, 180, 120, 0.12);
+  color: var(--accent);
+}
+
+.cmdp-empty {
+  padding: 0.6rem 1rem;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.cmdp-arg-header {
+  padding: 0.7rem 1rem 0.2rem 1rem;
+  font-size: 12px;
+  display: flex;
+  gap: 0.4rem;
+}

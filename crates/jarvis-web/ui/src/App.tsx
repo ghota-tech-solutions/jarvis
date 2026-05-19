@@ -4,6 +4,7 @@ import { getToken } from '~/lib/env';
 import SidebarLeft from '~/components/SidebarLeft';
 import SidebarRight from '~/components/SidebarRight';
 import HelpOverlay from '~/components/HelpOverlay';
+import CommandPalette from '~/components/CommandPalette';
 import CostHud from '~/features/hud/CostHud';
 import { bindThemeToDom, toggleTheme, useTheme } from '~/lib/stores/theme';
 import { useGlobalShortcuts, setHelpOpenSig } from '~/lib/stores/shortcuts';
@@ -64,6 +65,7 @@ const App: ParentComponent = (props) => {
       </aside>
       <CostHud />
       <HelpOverlay />
+      <CommandPalette />
     </div>
   );
 };
