@@ -1,0 +1,137 @@
+name: release
+
+# Builds installable bundles for Windows / macOS / Linux on every tag
+# vX.Y.Z and uploads them as assets on a DRAFT GitHub release. The user
+# reviews + publishes manually. Bundles are UNSIGNED — Windows
+# SmartScreen / macOS Gatekeeper will warn; documented in README §Install.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  # Lets us trigger a dry-run release build from the Actions tab without
+  # cutting a tag. Doesn't publish anything when run this way.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bundle_args: --bundles deb,appimage,rpm
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bundle_args: --bundles dmg,app
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundle_args: --bundles dmg,app
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundle_args: --bundles msi,nsis
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Linux: tauri AppImage + deb + rpm need a few system libs.
+      - name: Install Linux Tauri deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
+            patchelf libxdo-dev
+
+      - name: Install protoc (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get install -y protobuf-compiler
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0" --locked
+
+      - name: Build SPA frontend
+        working-directory: crates/jarvis-web/ui
+        run: |
+          bun install --frozen-lockfile
+          bun run gen
+          bun run build
+
+      - name: Build Tauri bundle
+        working-directory: crates/jarvis-desktop
+        run: cargo tauri build --target ${{ matrix.target }} ${{ matrix.bundle_args }}
+
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          # Hoover up whatever Tauri produced for this target.
+          # `target/{TARGET}/release/bundle/{type}/...` is the canonical layout.
+          find target/${{ matrix.target }}/release/bundle -type f \
+            \( -name '*.msi' -o -name '*.exe' \
+            -o -name '*.dmg' -o -name '*.app.tar.gz' \
+            -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) \
+            -exec cp {} dist/ \;
+          ls -la dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    # Only publish a draft release on tags. workflow_dispatch builds the
+    # artifacts (above) but stops here.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Compute changelog
+        id: changelog
+        run: |
+          echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          # Grab git log since the previous tag (or initial commit if none).
+          PREV=$(git describe --tags --abbrev=0 --exclude="${GITHUB_REF#refs/tags/}" 2>/dev/null || echo "")
+          if [ -z "$PREV" ]; then
+            git log --pretty=format:'- %s' > changelog.md
+          else
+            git log "$PREV..HEAD" --pretty=format:'- %s' > changelog.md
+          fi
+          echo "--- changelog ---"
+          cat changelog.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: ${{ steps.changelog.outputs.tag }}
+          body_path: changelog.md
+          files: dist/*
+          fail_on_unmatched_files: false
+          generate_release_notes: false

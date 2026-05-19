@@ -33,11 +33,15 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "targets": "all",
     "icon": ["icons/icon.ico", "icons/icon.png"],
     "category": "DeveloperTool",
     "shortDescription": "Autonomous coding agent",
-    "longDescription": "Jarvis is a continuous autonomous coding agent with an event-sourced ledger, multi-model routing, and Docker/native sandboxes."
+    "longDescription": "Jarvis is a continuous autonomous coding agent with an event-sourced ledger, multi-model routing, and Docker/native sandboxes.",
+    "publisher": "Ghota Tech Solutions",
+    "homepage": "https://github.com/ghotatech/jarvis",
+    "copyright": "© 2026 Ghota Tech Solutions",
+    "license": "MIT OR Apache-2.0"
   }
 }

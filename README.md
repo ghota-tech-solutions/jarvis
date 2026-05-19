@@ -136,10 +136,27 @@ bun run dev
 cd crates/jarvis-desktop
 cargo tauri dev    # spawn vite + sidecar daemon, ouvre l'app
 # ou
-cargo tauri build  # build natif (Windows .msi, Mac .dmg, Linux .AppImage)
+cargo tauri build  # build natif (Windows .msi/.exe, Mac .dmg, Linux .AppImage/.deb/.rpm)
 # Note: les icônes shipped sont placeholders 64x64. Remplacer avant ship
 #       prod via `cargo tauri icon path/to/icon.png`.
 ```
+
+### Installation (binaires distribués)
+
+Les releases publient des **bundles non-signés** pour les trois OS via
+`.github/workflows/release.yml`. Tagger `vX.Y.Z` déclenche le workflow ;
+les bundles atterrissent dans une **draft release** que l'utilisateur
+review puis publie manuellement.
+
+| OS | Format | Avertissement | Bypass |
+|---|---|---|---|
+| Windows | `.msi` / `.nsis` (NSIS .exe) | SmartScreen "Unknown publisher" | "More info" → "Run anyway" |
+| macOS | `.dmg` + `.app.tar.gz` | Gatekeeper "cannot be opened" | Préf. Système → Sécurité → "Open Anyway" ; ou `xattr -dr com.apple.quarantine /Applications/Jarvis.app` |
+| Linux | `.AppImage` / `.deb` / `.rpm` | aucun | `chmod +x Jarvis-*.AppImage && ./Jarvis-*.AppImage` |
+
+> Signature code reportée à M13 (Apple Developer ID + Windows EV cert).
+> Pour l'instant, builds reproductibles depuis tag git → checksums dispo
+> dans les artefacts de la draft release.
 
 ### Accès LAN / mobile
 
@@ -379,9 +396,8 @@ cd crates/jarvis-web/ui && bun run typecheck && bun run build
 - [x] **M9** — **Memory promotion** (extractor LLM post-verdict + injection system prompt + UI curation)
 - [x] **M10** — Auth gRPC bearer-token + CI workflows + WSL2 sandbox + loop detector + resume_from
 - [x] **M11.S2/S3/S5/S6/S7** — Cmd+K palette · web_search · spawn_subagent (explorer/worker/reviewer) · cost per-turn streaming · multi-model verdict validator
-- [x] **M12.S1/S2/S3/S4** — Cron/scheduling (`/schedules`) · GitHub PR via `gh` · audit replay UI (▶/2×/4×/8×) · auto reviewer sub-agent
+- [x] **M12.S1/S2/S3/S4/S5** — Cron/scheduling (`/schedules`) · GitHub PR via `gh` · audit replay UI (▶/2×/4×/8×) · auto reviewer sub-agent · GitHub Actions release matrix (Win `.msi`/`.nsis`, macOS `.dmg`, Linux `.AppImage`/`.deb`/`.rpm`, unsigned, draft release on `vX.Y.Z`)
 - [ ] **M11.rest** — image read+gen · browser sidecar (chromiumoxide)
-- [ ] **M12.S5** — Tauri release workflow (unsigned + AppImage)
 
 Plan complet, décisions, risques : `~/.claude/plans/analyse-le-projet-l-ui-drifting-valley.md`.
 
