@@ -1,4 +1,10 @@
-import { Show, createSignal, type ParentComponent } from 'solid-js';
+import {
+  Show,
+  createEffect,
+  createSignal,
+  on,
+  type ParentComponent,
+} from 'solid-js';
 import { useLocation } from '@solidjs/router';
 import { getToken } from '~/lib/env';
 import SidebarLeft from '~/components/SidebarLeft';
@@ -24,9 +30,23 @@ const App: ParentComponent = (props) => {
   const [hasToken, setHasToken] = createSignal(!!getToken());
   setInterval(() => setHasToken(!!getToken()), 1000);
 
+  // Mobile: the left nav is an off-canvas drawer. Close it on any route
+  // change so tapping a nav link doesn't leave the drawer covering the
+  // page the user just navigated to.
+  const [navOpen, setNavOpen] = createSignal(false);
+  createEffect(on(() => loc.pathname, () => setNavOpen(false)));
+
   return (
     <div class="app">
       <header class="app-header">
+        <button
+          type="button"
+          class="hamburger"
+          onClick={() => setNavOpen((v) => !v)}
+          aria-label="Toggle navigation"
+        >
+          ☰
+        </button>
         <a href="/" class="brand">jarvis</a>
         <span class="fade">·</span>
         <span class="dim">web</span>
@@ -56,9 +76,16 @@ const App: ParentComponent = (props) => {
           </button>
         </div>
       </header>
-      <aside class="sidebar-left">
+      <aside class={`sidebar-left ${navOpen() ? 'drawer-open' : ''}`}>
         <SidebarLeft />
       </aside>
+      <Show when={navOpen()}>
+        <div
+          class="drawer-backdrop"
+          onClick={() => setNavOpen(false)}
+          aria-hidden="true"
+        />
+      </Show>
       <main class="app-main">{props.children}</main>
       <aside class="sidebar-right">
         <SidebarRight expanded={isTaskRoute()} />

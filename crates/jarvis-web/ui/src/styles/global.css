@@ -112,6 +112,19 @@ pre {
   letter-spacing: 0.04em;
 }
 
+/* Hamburger — hidden on desktop, shown on narrow viewports. */
+.hamburger {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--body);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  margin-right: 0.2rem;
+}
+
 .sidebar-left,
 .sidebar-right {
   padding: 0.9rem 0.75rem;
@@ -1047,4 +1060,100 @@ kbd {
   font-size: 12px;
   display: flex;
   gap: 0.4rem;
+}
+
+/* --- Mobile / narrow viewports ------------------------------------- */
+/* The desktop shell is a 3-column grid (nav | content | status). On a
+   phone that leaves no room for content, so below 860px we collapse to
+   a single column: the left nav becomes an off-canvas drawer, the right
+   status panel is dropped (its essentials live in the bottom HUD). */
+@media (max-width: 860px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .hamburger {
+    display: inline-block;
+  }
+
+  /* Left nav → off-canvas drawer, slides in from the left. */
+  .sidebar-left {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 78vw;
+    max-width: 300px;
+    z-index: 60;
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    transform: translateX(-100%);
+    transition: transform 0.18s ease;
+  }
+  .sidebar-left.drawer-open {
+    transform: translateX(0);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  /* Right status panel: redundant with the bottom HUD on mobile. */
+  .sidebar-right {
+    display: none;
+  }
+
+  .app-main {
+    grid-column: 1;
+    padding: 0.8rem 0.9rem;
+  }
+
+  /* The cost HUD has many slots — let it scroll horizontally rather
+     than wrap into a tall multi-row strip. */
+  .hud {
+    gap: 1rem;
+    overflow-x: auto;
+    padding: 0.4rem 0.7rem;
+  }
+  .hud-sandbox {
+    padding-left: 0.7rem;
+  }
+
+  /* Modals / palette — full-width with breathing room. */
+  .cmdp,
+  .modal {
+    width: 94vw;
+    max-width: 94vw;
+  }
+
+  /* Task page view-toggle + filter bar wrap instead of overflowing. */
+  .view-toggle,
+  .filter-bar {
+    flex-wrap: wrap;
+  }
+
+  /* Tighten heavy paddings so content isn't squeezed. */
+  .form {
+    padding: 0.7rem 0.8rem;
+  }
+}
+
+/* Extra-narrow: drop the transcript's left indentation budget. */
+@media (max-width: 480px) {
+  .app-header {
+    font-size: 12px;
+    padding: 0.5rem 0.7rem;
+  }
+  .evt-thought,
+  .evt-answer {
+    padding-left: 0.45rem;
+  }
+  .turn-header {
+    padding: 0.35rem 0.45rem;
+  }
 }
