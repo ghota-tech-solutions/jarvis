@@ -26,6 +26,10 @@ pub struct ToolCtx {
     pub sandbox: Arc<dyn Sandbox>,
     /// Network policy passed to the sandbox on shell calls.
     pub net_policy: NetPolicy,
+    /// M11.S3: id (as UUID string) of the task whose agent loop is invoking
+    /// this tool. Used by `SpawnSubagentTool` to attribute children to the
+    /// right parent in the FleetDag. Empty for unit-test contexts.
+    pub current_task_id: String,
 }
 
 impl std::fmt::Debug for ToolCtx {
@@ -47,6 +51,7 @@ impl ToolCtx {
             cancel: Arc::new(tokio_util::sync::CancellationToken::new()),
             sandbox: Arc::new(NativeSandbox),
             net_policy: NetPolicy::Full,
+            current_task_id: String::new(),
         }
     }
 

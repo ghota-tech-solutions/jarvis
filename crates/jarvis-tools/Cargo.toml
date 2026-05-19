@@ -8,6 +8,8 @@ description = "Jarvis: Tool trait + built-in tools (fs, shell)."
 [dependencies]
 jarvis-core.workspace = true
 jarvis-sandbox.workspace = true
+jarvis-api.workspace = true
+tonic.workspace = true
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true

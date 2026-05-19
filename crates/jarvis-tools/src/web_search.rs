@@ -68,10 +68,7 @@ impl Tool for WebSearchTool {
         }
         let count = a.count.unwrap_or(5).clamp(1, MAX_RESULTS as u32) as usize;
         let backend = select_backend()?;
-        let hits = backend
-            .search(q, count)
-            .await
-            .map_err(ToolError::Other)?;
+        let hits = backend.search(q, count).await.map_err(ToolError::Other)?;
         let summary = format!("{} result(s) for `{}`", hits.len(), q);
         let data = json!({
             "backend": backend.name(),

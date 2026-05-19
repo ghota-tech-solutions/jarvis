@@ -6,12 +6,14 @@
 pub mod apply_patch;
 mod registry;
 mod search;
+mod spawn_subagent;
 mod tool;
 mod tools;
 mod web_search;
 
 pub use registry::ToolRegistry;
 pub use search::{GlobTool, GrepTool};
+pub use spawn_subagent::SpawnSubagentTool;
 pub use tool::{Tool, ToolCtx, ToolError, ToolOutput, ToolSchema};
 pub use tools::{ApplyPatchTool, FsReadTool, FsWriteTool, ShellTool, UpdatePlanTool};
 pub use web_search::WebSearchTool;

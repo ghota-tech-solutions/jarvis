@@ -299,6 +299,10 @@ async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerSt
     // with a clear error if neither BRAVE_API_KEY nor TAVILY_API_KEY is set,
     // so the agent learns immediately to skip it instead of mid-task.
     r.register(jarvis_tools::WebSearchTool);
+    // M11.S3: sub-agents primitive. The tool opens a tonic client back to
+    // this daemon (loopback gRPC), so it works without any wiring beyond
+    // the standard bearer-token discovery.
+    r.register(jarvis_tools::SpawnSubagentTool);
 
     let mut statuses: Vec<McpServerStatus> = Vec::new();
     for (name, spec) in &cfg.mcp.servers {
@@ -691,6 +695,7 @@ impl Jarvis for JarvisService {
             cancel: Arc::new(cancel.clone()),
             sandbox: sandbox.clone(),
             net_policy: net.clone(),
+            current_task_id: task.id.to_string(),
         };
         // Routing policy / required caps for this run.
         let routing = self.parse_routing(&spec.routing_policy)?;
