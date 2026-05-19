@@ -6,6 +6,7 @@ mod ids;
 mod provider;
 mod routing;
 mod text;
+mod tool_dialect;
 
 pub use capabilities::{Capabilities, RequiredCapabilities};
 pub use error::{Error, Result};
@@ -15,3 +16,4 @@ pub use provider::{
 };
 pub use routing::{RoutingPolicy, SandboxMode, TaskKind};
 pub use text::{clip, clip_chars};
+pub use tool_dialect::ToolDialect;

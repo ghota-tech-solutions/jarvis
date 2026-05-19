@@ -201,7 +201,7 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
 fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
     let mut r = ModelRegistry::new();
     for (name, lp) in &cfg.providers.local {
-        let entry = make_openai_compat_entry(
+        let mut entry = make_openai_compat_entry(
             name,
             ModelKind::Local,
             lp.url.clone(),
@@ -212,11 +212,18 @@ fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
             0.0,
             0.0,
         );
-        info!(model = %entry.name, model_id = %entry.model_id, "registered local model");
+        // § C.M-B — propagate per-model dialect from config.
+        entry.tool_dialect = lp.tool_dialect;
+        info!(
+            model = %entry.name,
+            model_id = %entry.model_id,
+            tool_dialect = %entry.tool_dialect,
+            "registered local model"
+        );
         r.insert(entry);
     }
     for (name, rp) in &cfg.providers.remote {
-        let entry = make_openai_compat_entry(
+        let mut entry = make_openai_compat_entry(
             name,
             ModelKind::Remote,
             rp.url.clone(),
@@ -227,7 +234,13 @@ fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
             rp.cost_per_mtok_in,
             rp.cost_per_mtok_out,
         );
-        info!(model = %entry.name, model_id = %entry.model_id, "registered remote model");
+        entry.tool_dialect = rp.tool_dialect;
+        info!(
+            model = %entry.name,
+            model_id = %entry.model_id,
+            tool_dialect = %entry.tool_dialect,
+            "registered remote model"
+        );
         r.insert(entry);
     }
     Ok(r)

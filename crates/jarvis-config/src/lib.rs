@@ -231,6 +231,11 @@ pub struct LocalProvider {
     pub priority: i32,
     #[serde(default)]
     pub capabilities: CapabilitiesDecl,
+    /// § C.M-B — tool-call dialect for this model. Defaults to `Json`.
+    /// Set to `"gemma4_strict"` for any Gemma family model to get the
+    /// tighter system prompt with explicit anti-drift recovery clause.
+    #[serde(default)]
+    pub tool_dialect: jarvis_core::ToolDialect,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -247,6 +252,9 @@ pub struct RemoteProvider {
     pub priority: i32,
     #[serde(default)]
     pub capabilities: CapabilitiesDecl,
+    /// § C.M-B — tool-call dialect for this model. Defaults to `Json`.
+    #[serde(default)]
+    pub tool_dialect: jarvis_core::ToolDialect,
 }
 
 fn default_priority() -> i32 {

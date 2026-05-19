@@ -108,6 +108,9 @@ pub struct PickedModel {
     pub kind: ModelKind,
     pub provider: Arc<dyn LlmProvider>,
     pub model_id: String,
+    /// § C.M-B — propagated from `ModelEntry::tool_dialect` so the agent
+    /// loop knows which system prompt + response preprocessing to apply.
+    pub tool_dialect: jarvis_core::ToolDialect,
 }
 
 impl std::fmt::Debug for PickedModel {
@@ -116,6 +119,7 @@ impl std::fmt::Debug for PickedModel {
             .field("name", &self.name)
             .field("kind", &self.kind)
             .field("model_id", &self.model_id)
+            .field("tool_dialect", &self.tool_dialect)
             .finish_non_exhaustive()
     }
 }
@@ -362,6 +366,7 @@ fn picked(entry: &ModelEntry) -> PickedModel {
         kind: entry.kind,
         provider: entry.provider.clone(),
         model_id: entry.model_id.clone(),
+        tool_dialect: entry.tool_dialect,
     }
 }
 

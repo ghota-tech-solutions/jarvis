@@ -3,7 +3,7 @@
 //! The pool layers mutable quarantine state on top of this catalogue.
 
 use crate::OpenAiCompatProvider;
-use jarvis_core::{Capabilities, LlmProvider, ProviderName};
+use jarvis_core::{Capabilities, LlmProvider, ProviderName, ToolDialect};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -33,6 +33,10 @@ pub struct ModelEntry {
     pub cost_per_mtok_in: f64,
     pub cost_per_mtok_out: f64,
     pub provider: Arc<dyn LlmProvider>,
+    /// § C.M-B — which tool-call contract the agent loop should use for
+    /// this model. Defaults to `Json` (universal). Configure per-model in
+    /// `jarvis.toml` via the `tool_dialect = "gemma4_strict"` field.
+    pub tool_dialect: ToolDialect,
 }
 
 impl std::fmt::Debug for ModelEntry {
@@ -45,6 +49,7 @@ impl std::fmt::Debug for ModelEntry {
             .field("capabilities", &self.capabilities)
             .field("cost_per_mtok_in", &self.cost_per_mtok_in)
             .field("cost_per_mtok_out", &self.cost_per_mtok_out)
+            .field("tool_dialect", &self.tool_dialect)
             .finish_non_exhaustive()
     }
 }
@@ -118,5 +123,6 @@ pub fn make_openai_compat_entry(
         cost_per_mtok_in,
         cost_per_mtok_out,
         provider,
+        tool_dialect: ToolDialect::default(),
     }
 }

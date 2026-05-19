@@ -12,6 +12,13 @@ model = "${HERMES_LOCAL_MODEL}"
 api_key = "${HERMES_LOCAL_API_KEY}"
 priority = 10
 capabilities = { ctx_len = 128000, tool_calls = true, json_schema = true, vision = false }
+# § C.M-B — tool-call dialect. Defaults to "json" (universal contract).
+# Set to "gemma4_strict" for any Gemma family model — uses a tighter
+# system prompt with explicit "JSON only, no markdown" framing + an
+# anti-drift recovery clause that prevents the long-context "finalize
+# in prose" failure mode observed in task c867ee5d.
+# Possible values: "json" | "gemma4_strict" | "gemma4_native"
+tool_dialect = "gemma4_strict"
 
 # --- Remote providers (enabled in M5) --------------------------------
 # [providers.remote.deepseek_pro]
@@ -19,6 +26,7 @@ capabilities = { ctx_len = 128000, tool_calls = true, json_schema = true, vision
 # model = "deepseek-v4-pro"
 # api_key = "${DEEPSEEK_API_KEY}"
 # capabilities = { ctx_len = 200000, tool_calls = true, json_schema = true, vision = false }
+# tool_dialect = "json"   # DeepSeek follows the universal contract
 
 [routing]
 default_policy = "auto"

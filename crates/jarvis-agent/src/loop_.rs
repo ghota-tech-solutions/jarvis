@@ -152,14 +152,6 @@ pub async fn run_agent(
         for m in &memories {
             let _ = ledger.increment_memory_usage(m.id).await;
         }
-        let messages = prompt::build_messages(
-            &task.goal,
-            &task.workdir,
-            &tool_schemas,
-            &history,
-            &memories,
-        );
-
         log_event(
             &ledger,
             &run,
@@ -191,6 +183,19 @@ pub async fn run_agent(
                     return finish_failed(&ledger, run.task_id, &format!("router: {e}")).await;
                 }
             };
+            // § C.M-B — build messages with the dialect of the picked model.
+            // This sits inside the pick loop because each quarantine retry may
+            // route to a model with a different dialect; we want the system
+            // prompt to match. History/memories are cheap to re-render — the
+            // expensive bits (tool catalog) are static per task.
+            let messages = prompt::build_messages(
+                &task.goal,
+                &task.workdir,
+                &tool_schemas,
+                &history,
+                &memories,
+                picked.tool_dialect,
+            );
             log_event(
                 &ledger,
                 &run,
@@ -200,6 +205,7 @@ pub async fn run_agent(
                     "model": picked.name.as_str(),
                     "model_id": picked.model_id,
                     "kind": picked.kind.as_str(),
+                    "tool_dialect": picked.tool_dialect.as_str(),
                 }),
             )
             .await?;
