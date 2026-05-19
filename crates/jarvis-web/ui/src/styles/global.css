@@ -379,6 +379,42 @@ pre {
   padding: 0.3rem 0;
 }
 
+/* § C UX — self-audit cycle folded into one collapsed row. The agent's
+   real answer stays prominent; the verification machinery (continuation
+   + re-confirmation + verdict) is one click away. */
+.audit-group {
+  margin: 0.5rem 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--good);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.015);
+}
+.audit-group.audit-fail {
+  border-left-color: var(--error);
+}
+.audit-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+}
+.audit-summary::-webkit-details-marker {
+  display: none;
+}
+.audit-summary .evt-icon {
+  color: var(--good);
+}
+.audit-group.audit-fail .audit-summary .evt-icon {
+  color: var(--error);
+}
+.audit-body {
+  padding: 0.3rem 0.7rem 0.5rem 0.7rem;
+  border-top: 1px dashed var(--border);
+}
+
 /* § C front-fix — render LLM-emitted markdown without rotting layout.
    Italics live INSIDE the markdown now (via `*text*`) so we drop the
    container-level font-style. */

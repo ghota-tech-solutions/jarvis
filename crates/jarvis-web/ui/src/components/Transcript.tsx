@@ -10,11 +10,13 @@ type Props = {
   taskGoals?: Record<string, string>;
 };
 
-// A render item is either an event block or a conversation-turn header
-// inserted when the task_id changes between consecutive events.
+// A render item is either an event block, a conversation-turn header
+// inserted when the task_id changes, or a collapsed self-audit group
+// (continuation → re-confirmation steps → verdict) folded into one row.
 type Row =
   | { kind: 'event'; evt: TimelineEvent }
-  | { kind: 'turn'; taskId: string; goal: string; index: number };
+  | { kind: 'turn'; taskId: string; goal: string; index: number }
+  | { kind: 'audit'; events: TimelineEvent[]; passed: boolean };
 
 const kindIcon = (kind: string): string => {
   switch (kind) {
@@ -229,10 +231,22 @@ const EventBlock: Component<{ evt: TimelineEvent; selected?: boolean }> = (p) =>
       </Show>
 
       <Show when={p.evt.kind === 'continuation'}>
-        <div class="evt-continuation">
-          <span class="evt-icon">{kindIcon(p.evt.kind)}</span>
-          <span class="warn">continuation: {String(payload().reason ?? '?')}</span>
-        </div>
+        {(() => {
+          const pl = payload();
+          const attempt = typeof pl.attempt === 'number' ? pl.attempt : undefined;
+          const budget = typeof pl.budget === 'number' ? pl.budget : undefined;
+          return (
+            <div class="evt-continuation">
+              <span class="evt-icon">{kindIcon(p.evt.kind)}</span>
+              <span class="warn">
+                self-audit requested
+                <Show when={attempt !== undefined && budget !== undefined}>
+                  <span class="dim"> · attempt {attempt}/{budget}</span>
+                </Show>
+              </span>
+            </div>
+          );
+        })()}
       </Show>
     </div>
   );
@@ -273,14 +287,38 @@ const Transcript: Component<Props> = (p) => {
     return out;
   });
 
-  // Interleave conversation-turn headers: every time the task_id changes
-  // from one event to the next, the user started a new follow-up turn.
+  // Build the render rows:
+  //  - a "turn" header whenever the task_id changes (follow-up chain)
+  //  - a collapsed "audit" group folding the self-audit cycle
+  //    (continuation → re-confirmation step(s) → verdict) into one row,
+  //    so the agent's real answer isn't drowned by verification noise
+  //  - plain "event" rows otherwise
   const rows = createMemo<Row[]>(() => {
     const evs = filtered();
     const out: Row[] = [];
     let lastTaskId: string | undefined;
     let turnIndex = 0;
+    let auditBuf: TimelineEvent[] | null = null;
+
     for (const e of evs) {
+      // While collecting an audit cycle, swallow events until the verdict.
+      if (auditBuf !== null) {
+        auditBuf.push(e);
+        if (e.kind === 'verdict') {
+          let passed = true;
+          try {
+            const v = (JSON.parse(e.payloadJson) as Record<string, unknown>)
+              .verdict;
+            passed = v === 'pass' || v === 'done';
+          } catch {
+            /* default passed */
+          }
+          out.push({ kind: 'audit', events: auditBuf, passed });
+          auditBuf = null;
+        }
+        continue;
+      }
+
       if (e.taskId !== lastTaskId) {
         turnIndex += 1;
         out.push({
@@ -291,7 +329,20 @@ const Transcript: Component<Props> = (p) => {
         });
         lastTaskId = e.taskId;
       }
+
+      // A continuation opens an audit cycle — start buffering.
+      if (e.kind === 'continuation') {
+        auditBuf = [e];
+        continue;
+      }
+
       out.push({ kind: 'event', evt: e });
+    }
+
+    // Audit cycle that never reached a verdict (task still running /
+    // cancelled mid-audit): flush it so its events aren't lost.
+    if (auditBuf !== null) {
+      out.push({ kind: 'audit', events: auditBuf, passed: false });
     }
     return out;
   });
@@ -299,21 +350,49 @@ const Transcript: Component<Props> = (p) => {
   return (
     <div class="transcript">
       <For each={rows()}>
-        {(row) =>
-          row.kind === 'turn' ? (
-            <div class="turn-header">
-              <span class="turn-badge">turn {row.index}</span>
-              <Show when={row.goal} fallback={<span class="dim">follow-up</span>}>
-                <span class="turn-goal">{row.goal}</span>
-              </Show>
-            </div>
-          ) : (
+        {(row) => {
+          if (row.kind === 'turn') {
+            return (
+              <div class="turn-header">
+                <span class="turn-badge">turn {row.index}</span>
+                <Show when={row.goal} fallback={<span class="dim">follow-up</span>}>
+                  <span class="turn-goal">{row.goal}</span>
+                </Show>
+              </div>
+            );
+          }
+          if (row.kind === 'audit') {
+            return (
+              <details class={`audit-group ${row.passed ? 'audit-ok' : 'audit-fail'}`}>
+                <summary class="audit-summary">
+                  <span class="evt-icon">↻</span>
+                  <span class={`pill ${row.passed ? 'good' : 'error'}`}>
+                    {row.passed ? 'verified' : 'audit failed'}
+                  </span>
+                  <span class="dim">
+                    self-audit · {row.events.length} event(s) — click to expand
+                  </span>
+                </summary>
+                <div class="audit-body">
+                  <For each={row.events}>
+                    {(evt) => (
+                      <EventBlock
+                        evt={evt}
+                        selected={Number(evt.id) === p.selectedEvtId}
+                      />
+                    )}
+                  </For>
+                </div>
+              </details>
+            );
+          }
+          return (
             <EventBlock
               evt={row.evt}
               selected={Number(row.evt.id) === p.selectedEvtId}
             />
-          )
-        }
+          );
+        }}
       </For>
     </div>
   );
