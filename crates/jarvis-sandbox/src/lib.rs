@@ -10,11 +10,13 @@ mod docker;
 mod native;
 mod spec;
 pub mod worktree;
+pub mod wsl2;
 
 pub use docker::{DockerConfig, DockerSandbox};
 pub use native::NativeSandbox;
 pub use spec::{NetPolicy, Sandbox, SandboxError, SandboxKind, SandboxOutput, SandboxSpec};
 pub use worktree::{Worktree, WorktreeManager};
+pub use wsl2::WslSandbox;
 
 /// Helper that turns config strings into a typed `DockerConfig`.
 /// Lives here so the daemon doesn't need to depend on the bollard types directly.

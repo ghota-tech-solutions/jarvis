@@ -82,6 +82,15 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
             "config requests docker backend but daemon could not connect — tasks will fall back to native"
         );
     }
+    // M10.S5: WSL2 sandbox is only meaningful on Windows hosts. We register
+    // it unconditionally as long as we're on Windows so `--sandbox wsl2`
+    // works without extra config; non-Windows hosts will see
+    // `failed_precondition` if a task requests it.
+    let wsl2: Option<Arc<dyn Sandbox>> = if cfg!(windows) {
+        Some(Arc::new(jarvis_sandbox::WslSandbox::new()) as Arc<dyn Sandbox>)
+    } else {
+        None
+    };
 
     let worktrees = Arc::new(WorktreeManager::new(cfg.daemon.data_dir.join("worktrees")));
 
@@ -95,6 +104,7 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         tools: tools.clone(),
         native: native.clone(),
         docker: docker.clone(),
+        wsl2: wsl2.clone(),
         worktrees: worktrees.clone(),
         cfg: cfg.clone(),
         started,
@@ -366,6 +376,7 @@ pub(crate) struct JarvisService {
     pub tools: ToolRegistry,
     pub native: Arc<dyn Sandbox>,
     pub docker: Option<Arc<dyn Sandbox>>,
+    pub wsl2: Option<Arc<dyn Sandbox>>,
     pub worktrees: Arc<WorktreeManager>,
     pub cfg: Config,
     pub started: Instant,
@@ -406,6 +417,12 @@ impl JarvisService {
                 Some(d) => Ok((d.clone(), SandboxKind::Docker)),
                 None => Err(Status::failed_precondition(
                     "docker sandbox requested but Docker is not available",
+                )),
+            },
+            Ok(SandboxKind::Wsl2) => match &self.wsl2 {
+                Some(w) => Ok((w.clone(), SandboxKind::Wsl2)),
+                None => Err(Status::failed_precondition(
+                    "wsl2 sandbox requested but WSL is not available on this host",
                 )),
             },
             Err(e) => Err(Status::invalid_argument(e)),

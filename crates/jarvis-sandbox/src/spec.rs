@@ -11,6 +11,10 @@ pub enum SandboxKind {
     #[default]
     Native,
     Docker,
+    /// M10.S5: run commands inside WSL2 from a Windows host. Maps the host
+    /// workdir to `/mnt/<drive>/...` automatically. Falls back to `Native`
+    /// behavior on non-Windows hosts.
+    Wsl2,
 }
 
 impl SandboxKind {
@@ -18,6 +22,7 @@ impl SandboxKind {
         match self {
             Self::Native => "native",
             Self::Docker => "docker",
+            Self::Wsl2 => "wsl2",
         }
     }
 }
@@ -28,6 +33,7 @@ impl std::str::FromStr for SandboxKind {
         match s.to_ascii_lowercase().as_str() {
             "native" | "" => Ok(Self::Native),
             "docker" => Ok(Self::Docker),
+            "wsl2" | "wsl" => Ok(Self::Wsl2),
             other => Err(format!("unknown sandbox kind: {other}")),
         }
     }
