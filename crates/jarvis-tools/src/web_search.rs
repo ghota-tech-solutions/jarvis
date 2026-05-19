@@ -5,7 +5,7 @@
 //! we normalise to `[{title, url, snippet}]` and cap at 10 results.
 //!
 //! Backend selection: env-driven so the user can set it once.
-//!   - `JARVIS_SEARCH_BACKEND` = `brave` | `tavily` (default: brave if
+//!   - `WEB_SEARCH_BACKEND` = `brave` | `tavily` (default: brave if
 //!     `BRAVE_API_KEY` is present, else tavily if `TAVILY_API_KEY` is
 //!     present, else the tool fails with a helpful message).
 //!   - `BRAVE_API_KEY` / `TAVILY_API_KEY`: API credentials.
@@ -44,7 +44,7 @@ impl Tool for WebSearchTool {
         ToolSchema {
             name: "web_search".to_string(),
             description: "Web search — returns up to 10 results [{title, url, snippet}]. \
-                Backend selected via JARVIS_SEARCH_BACKEND (brave|tavily); \
+                Backend selected via WEB_SEARCH_BACKEND (brave|tavily); \
                 falls back to whichever API key is available."
                 .to_string(),
             args_schema: json!({
@@ -89,16 +89,22 @@ trait SearchBackend: Send + Sync {
 }
 
 fn select_backend() -> Result<Box<dyn SearchBackend>, ToolError> {
-    let chosen = std::env::var("JARVIS_SEARCH_BACKEND").ok();
-    let has_brave = std::env::var("BRAVE_API_KEY").is_ok();
-    let has_tavily = std::env::var("TAVILY_API_KEY").is_ok();
+    let chosen = std::env::var("WEB_SEARCH_BACKEND").ok();
+    let has_brave = std::env::var("BRAVE_API_KEY")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .is_some();
+    let has_tavily = std::env::var("TAVILY_API_KEY")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .is_some();
     match chosen.as_deref() {
         Some("brave") => Ok(Box::new(BraveBackend)),
         Some("tavily") => Ok(Box::new(TavilyBackend)),
         _ if has_brave => Ok(Box::new(BraveBackend)),
         _ if has_tavily => Ok(Box::new(TavilyBackend)),
         _ => Err(ToolError::Other(
-            "no search backend configured: set BRAVE_API_KEY or TAVILY_API_KEY (and optionally JARVIS_SEARCH_BACKEND)".into(),
+            "no search backend configured: set BRAVE_API_KEY or TAVILY_API_KEY (and optionally WEB_SEARCH_BACKEND)".into(),
         )),
     }
 }
@@ -271,7 +277,7 @@ mod tests {
         unsafe {
             std::env::remove_var("BRAVE_API_KEY");
             std::env::remove_var("TAVILY_API_KEY");
-            std::env::remove_var("JARVIS_SEARCH_BACKEND");
+            std::env::remove_var("WEB_SEARCH_BACKEND");
         }
         match select_backend() {
             Ok(_) => panic!("expected error when no keys are set"),
