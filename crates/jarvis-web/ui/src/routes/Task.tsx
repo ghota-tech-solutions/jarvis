@@ -90,36 +90,49 @@ const Task: Component = () => {
   // looking at the BOTTOM where the new turn is unfolding, not scrolled
   // back to the top of the chain.
   //
+  // The actual scroll container is `<main class="app-main">` (the layout
+  // shell), NOT the window — so we target it explicitly.
+  //
   // `autoFollow` stays true while the user is near the bottom; if they
   // scroll up to read earlier turns we stop yanking them back down.
   let autoFollow = true;
-  const nearBottom = () =>
-    window.innerHeight + window.scrollY >= document.body.scrollHeight - 200;
+  const scroller = (): HTMLElement | null =>
+    document.querySelector('main.app-main');
+  const nearBottom = () => {
+    const el = scroller();
+    if (!el) return true;
+    return el.scrollTop + el.clientHeight >= el.scrollHeight - 200;
+  };
   const onScroll = () => {
     autoFollow = nearBottom();
   };
-  onMount(() => window.addEventListener('scroll', onScroll, { passive: true }));
-  onCleanup(() => window.removeEventListener('scroll', onScroll));
+  onMount(() => {
+    const el = scroller();
+    el?.addEventListener('scroll', onScroll, { passive: true });
+    onCleanup(() => el?.removeEventListener('scroll', onScroll));
+  });
 
   const scrollToBottom = (smooth: boolean) =>
-    queueMicrotask(() =>
-      window.scrollTo({
-        top: document.body.scrollHeight,
+    queueMicrotask(() => {
+      const el = scroller();
+      if (!el) return;
+      el.scrollTo({
+        top: el.scrollHeight,
         behavior: smooth ? 'smooth' : 'auto',
-      }),
-    );
+      });
+    });
 
-  // On task load: if the task is active (running/pending), jump to the
-  // bottom so the user sees the live turn. Completed tasks opened from
-  // the dashboard keep their natural top position for reading.
+  // On task load: jump to the bottom. The Task page is a conversation —
+  // opening it (from a follow-up submit or a dashboard card) should land
+  // on the newest turn, the way any chat UI behaves. A double rAF lets
+  // the transcript + timeline finish laying out before we measure.
   createEffect(
     on([() => stream.loaded(), () => params.id], ([loaded]) => {
       if (!loaded) return;
-      const st = taskQ.data?.status;
-      if (st === 'running' || st === 'pending') {
-        autoFollow = true;
-        scrollToBottom(false);
-      }
+      autoFollow = true;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => scrollToBottom(false)),
+      );
     }),
   );
 
