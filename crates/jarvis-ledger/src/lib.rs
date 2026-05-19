@@ -7,8 +7,10 @@
 
 pub mod memory;
 mod model;
+pub mod schedule;
 mod store;
 
 pub use memory::{MemoryKind, MemoryRecord, MemoryScope, MemoryStatus, NewMemory};
 pub use model::{EventKind, EventRecord, NewEvent, TaskRecord, TaskRuntimeInfo, TaskStatus};
+pub use schedule::{NewSchedule, ScheduleRecord};
 pub use store::{Ledger, LedgerError};

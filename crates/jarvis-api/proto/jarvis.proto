@@ -48,6 +48,13 @@ service Jarvis {
   rpc PromoteMemory(PromoteMemoryRequest) returns (Memory);
   rpc ForgetMemory(MemoryHandle) returns (Empty);
   rpc EditMemory(EditMemoryRequest) returns (Memory);
+
+  // M12.S1: scheduled tasks — cron-style runs. Drives overnight workflows
+  // ("review PRs every 2h", "lint and commit format fixes nightly").
+  rpc CreateSchedule(ScheduleSpec) returns (Schedule);
+  rpc ListSchedules(Empty) returns (ScheduleList);
+  rpc DeleteSchedule(ScheduleHandle) returns (Empty);
+  rpc RunScheduleNow(ScheduleHandle) returns (TaskHandle);
 }
 
 // ---------- M1 ----------
@@ -392,4 +399,45 @@ message EditMemoryRequest {
   string scope = 3;
   string scope_value = 4;
   string kind = 5;
+}
+
+// ---------- M12.S1: Scheduling ----------
+
+message ScheduleSpec {
+  // Empty when creating; populated on response. Allows ListSchedules to
+  // return ScheduleSpec via a wrapper.
+  string id = 1;
+  // Cron expression — 5- or 6-field (`* * * * *` or with seconds prefix).
+  // Validated server-side via the same parser the scheduler uses.
+  string cron = 2;
+  string goal = 3;
+  string workdir = 4;
+  // Optional sandbox/net/routing overrides, same semantics as TaskSpec.
+  string sandbox = 5;
+  string net_policy = 6;
+  string routing_policy = 7;
+  // Cap on the child task's agent loop iterations (0 = default).
+  uint32 max_steps = 8;
+  // Human label shown in the UI ("nightly cargo update", etc.).
+  string label = 9;
+  // When true, the schedule is paused — it won't fire until set false.
+  bool paused = 10;
+}
+
+message Schedule {
+  ScheduleSpec spec = 1;
+  // Unix micros of the last successful enqueue + the next planned run.
+  // next_run_micros is 0 when paused or the cron expression has no future.
+  int64 last_run_micros = 2;
+  int64 next_run_micros = 3;
+  // ID of the last task this schedule enqueued (empty if never run).
+  string last_task_id = 4;
+}
+
+message ScheduleHandle {
+  string id = 1;
+}
+
+message ScheduleList {
+  repeated Schedule schedules = 1;
 }

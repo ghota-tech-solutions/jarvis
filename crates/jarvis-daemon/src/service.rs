@@ -9,9 +9,9 @@ use jarvis_api::{
     DiffGroupList, EditMemoryRequest, Empty, Event as ApiEvent, FileDiff, FleetEdge, FleetNode,
     FleetUpdate, ListMemoriesRequest, ListTasksRequest, Memory as ApiMemory, MemoryHandle,
     MemoryList, ModelSpend, ModelStatus as ApiModelStatus, PingRequest, PingResponse,
-    PromoteMemoryRequest, StatusRequest, StreamEventsRequest, Task as ApiTask, TaskHandle,
-    TaskList, TaskSpec, TimelineEvent as ApiTimelineEvent, TimelineSnapshot, TimelineSpan,
-    UsageStats,
+    PromoteMemoryRequest, Schedule as ApiSchedule, ScheduleHandle, ScheduleList, ScheduleSpec,
+    StatusRequest, StreamEventsRequest, Task as ApiTask, TaskHandle, TaskList, TaskSpec,
+    TimelineEvent as ApiTimelineEvent, TimelineSnapshot, TimelineSpan, UsageStats,
     jarvis_server::{Jarvis, JarvisServer},
 };
 use jarvis_config::Config;
@@ -97,6 +97,8 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
     let running: Arc<Mutex<HashMap<TaskId, RuntimeHandle>>> = Arc::new(Mutex::new(HashMap::new()));
     let started = Instant::now();
 
+    let scheduler_handles: crate::scheduler::SchedulerHandles =
+        Arc::new(Mutex::new(HashMap::new()));
     let svc = JarvisService {
         pool: pool.clone(),
         ask_provider,
@@ -110,7 +112,21 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         started,
         running: running.clone(),
         mcp_status: mcp_status.clone(),
+        scheduler_handles: scheduler_handles.clone(),
     };
+
+    // M12.S1: boot any existing non-paused schedules into live cron loops.
+    // Done after svc is built so the loops can call back via gRPC.
+    match ledger.list_schedules().await {
+        Ok(rows) => {
+            for row in rows {
+                if !row.paused {
+                    svc.spawn_schedule_loop(row).await;
+                }
+            }
+        }
+        Err(e) => warn!(error = %e, "could not load schedules at boot"),
+    }
 
     let addr: std::net::SocketAddr = bind.parse().context("parse daemon.addr")?;
     info!(%addr, ledger = %ledger_path.display(), "jarvis-daemon listening");
@@ -391,6 +407,54 @@ pub(crate) struct JarvisService {
     pub running: Arc<Mutex<HashMap<TaskId, RuntimeHandle>>>,
     #[allow(dead_code)]
     pub mcp_status: Arc<Vec<McpServerStatus>>,
+    /// M12.S1: per-schedule cancellation tokens for live cron loops.
+    pub scheduler_handles: crate::scheduler::SchedulerHandles,
+}
+
+impl JarvisService {
+    /// Wraps `crate::scheduler::spawn_loop` with a closure that calls back
+    /// into `submit_task` so the scheduler can fire tasks through the
+    /// normal dispatch path (sandbox pick, worktree, agent spawn).
+    pub async fn spawn_schedule_loop(&self, record: jarvis_ledger::ScheduleRecord) {
+        let id = record.id.clone();
+        // Build an `Arc<Self>`-equivalent by cloning the bits we need.
+        // We can't Arc<JarvisService> here without restructuring, so the
+        // closure captures the gRPC self-call path via Arc<Mutex<...>>
+        // bookkeeping and a fresh tonic client. Simpler: capture the daemon
+        // URL + auth token and call back over loopback gRPC, same trick
+        // as SpawnSubagentTool.
+        let daemon_url = std::env::var("JARVIS_DAEMON_URL")
+            .unwrap_or_else(|_| format!("http://{}", self.cfg.daemon.addr));
+        let token = jarvis_api::auth::discover_token().unwrap_or_default();
+        let ledger = self.ledger.clone();
+        let submit_fn = move |rec: jarvis_ledger::ScheduleRecord| {
+            let url = daemon_url.clone();
+            let tok = token.clone();
+            tokio::spawn(async move {
+                let auth = match jarvis_api::auth::ClientAuth::new(&tok) {
+                    Ok(a) => a,
+                    Err(e) => return Err(format!("invalid token: {e}")),
+                };
+                let ep = match tonic::transport::Endpoint::from_shared(url.clone()) {
+                    Ok(e) => e,
+                    Err(e) => return Err(format!("endpoint: {e}")),
+                };
+                let channel = match ep.connect().await {
+                    Ok(c) => c,
+                    Err(e) => return Err(format!("connect: {e}")),
+                };
+                let mut client =
+                    jarvis_api::jarvis_client::JarvisClient::with_interceptor(channel, auth);
+                let spec = schedule_to_task_spec(&rec);
+                match client.submit_task(spec).await {
+                    Ok(r) => Ok(r.into_inner().id),
+                    Err(s) => Err(format!("submit_task: {s}")),
+                }
+            })
+        };
+        let cancel = crate::scheduler::spawn_loop(record, ledger, submit_fn);
+        self.scheduler_handles.lock().await.insert(id, cancel);
+    }
 }
 
 pub struct RuntimeHandle {
@@ -1314,6 +1378,140 @@ impl Jarvis for JarvisService {
             min_ts_micros: min_ts,
             max_ts_micros: max_ts,
         }))
+    }
+
+    async fn create_schedule(
+        &self,
+        request: Request<ScheduleSpec>,
+    ) -> std::result::Result<Response<ApiSchedule>, Status> {
+        let spec = request.into_inner();
+        if spec.goal.trim().is_empty() {
+            return Err(Status::invalid_argument("goal is empty"));
+        }
+        crate::scheduler::validate_cron(&spec.cron)
+            .map_err(|e| Status::invalid_argument(format!("{e}")))?;
+        let id = if spec.id.is_empty() {
+            uuid::Uuid::new_v4().to_string()
+        } else {
+            spec.id.clone()
+        };
+        let next_us = crate::scheduler::next_run_micros(&spec.cron);
+        let new = crate::scheduler::new_record_from_spec(
+            id.clone(),
+            spec.cron,
+            spec.goal,
+            spec.workdir,
+            spec.sandbox,
+            spec.net_policy,
+            spec.routing_policy,
+            spec.max_steps,
+            spec.label,
+            spec.paused,
+        );
+        let mut record = self
+            .ledger
+            .create_schedule(new)
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+        record.next_run_micros = next_us;
+        let _ = self.ledger.set_schedule_next_run(&id, next_us).await;
+        // Spawn the cron loop if not paused.
+        if !record.paused {
+            self.spawn_schedule_loop(record.clone()).await;
+        }
+        Ok(Response::new(schedule_to_api(&record)))
+    }
+
+    async fn list_schedules(
+        &self,
+        _req: Request<Empty>,
+    ) -> std::result::Result<Response<ScheduleList>, Status> {
+        let rows = self
+            .ledger
+            .list_schedules()
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+        Ok(Response::new(ScheduleList {
+            schedules: rows.iter().map(schedule_to_api).collect(),
+        }))
+    }
+
+    async fn delete_schedule(
+        &self,
+        req: Request<ScheduleHandle>,
+    ) -> std::result::Result<Response<Empty>, Status> {
+        let id = req.into_inner().id;
+        if id.is_empty() {
+            return Err(Status::invalid_argument("id is empty"));
+        }
+        // Cancel any live loop FIRST so the deleted row can't be re-fired.
+        if let Some(handle) = self.scheduler_handles.lock().await.remove(&id) {
+            handle.cancel();
+        }
+        self.ledger
+            .delete_schedule(&id)
+            .await
+            .map_err(|e| Status::internal(format!("ledger: {e}")))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn run_schedule_now(
+        &self,
+        req: Request<ScheduleHandle>,
+    ) -> std::result::Result<Response<TaskHandle>, Status> {
+        let id = req.into_inner().id;
+        let record = self
+            .ledger
+            .get_schedule(&id)
+            .await
+            .map_err(|_| Status::not_found("schedule not found"))?;
+        let spec = schedule_to_task_spec(&record);
+        // Reuse submit_task's full machinery (sandbox pick, worktree, ledger row,
+        // agent loop spawn). Returning the resulting TaskHandle to the caller.
+        let inner_resp = self.submit_task(Request::new(spec)).await?;
+        let handle = inner_resp.into_inner();
+        let next_us = crate::scheduler::next_run_micros(&record.cron);
+        let _ = self
+            .ledger
+            .record_schedule_fire(&id, &handle.id, next_us)
+            .await;
+        Ok(Response::new(handle))
+    }
+}
+
+fn schedule_to_api(r: &jarvis_ledger::ScheduleRecord) -> ApiSchedule {
+    ApiSchedule {
+        spec: Some(ScheduleSpec {
+            id: r.id.clone(),
+            cron: r.cron.clone(),
+            goal: r.goal.clone(),
+            workdir: r.workdir.clone(),
+            sandbox: r.sandbox.clone(),
+            net_policy: r.net_policy.clone(),
+            routing_policy: r.routing_policy.clone(),
+            max_steps: r.max_steps,
+            label: r.label.clone(),
+            paused: r.paused,
+        }),
+        last_run_micros: r.last_run_micros,
+        next_run_micros: r.next_run_micros,
+        last_task_id: r.last_task_id.clone(),
+    }
+}
+
+fn schedule_to_task_spec(r: &jarvis_ledger::ScheduleRecord) -> TaskSpec {
+    TaskSpec {
+        goal: r.goal.clone(),
+        workdir: r.workdir.clone(),
+        max_steps: r.max_steps,
+        sandbox: r.sandbox.clone(),
+        net_policy: r.net_policy.clone(),
+        use_worktree: false,
+        base_ref: String::new(),
+        routing_policy: r.routing_policy.clone(),
+        require_caps: Vec::new(),
+        parent_task_id: String::new(),
+        resume_from: String::new(),
     }
 }
 

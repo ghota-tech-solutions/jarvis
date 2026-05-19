@@ -27,6 +27,7 @@ tonic.workspace = true
 tonic-web.workspace = true
 git2.workspace = true
 similar.workspace = true
+cron.workspace = true
 prost.workspace = true
 async-trait.workspace = true
 futures.workspace = true

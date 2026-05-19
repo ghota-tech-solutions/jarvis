@@ -63,6 +63,7 @@ async-openai = "0.27"
 # gRPC
 tonic = "0.13"
 tonic-web = "0.13"
+cron = "0.13"
 prost = "0.13"
 tonic-build = "0.13"
 protoc-bin-vendored = "3"

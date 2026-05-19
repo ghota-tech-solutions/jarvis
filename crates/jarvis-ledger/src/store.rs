@@ -509,6 +509,110 @@ impl Ledger {
         Ok(())
     }
 
+    // ---------- M12.S1: schedules ----------
+
+    pub async fn create_schedule(
+        &self,
+        s: crate::schedule::NewSchedule,
+    ) -> Result<crate::schedule::ScheduleRecord, LedgerError> {
+        let now = now_micros();
+        sqlx::query(
+            "INSERT INTO schedules \
+             (id, cron, goal, workdir, sandbox, net_policy, routing_policy, \
+              max_steps, label, paused, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&s.id)
+        .bind(&s.cron)
+        .bind(&s.goal)
+        .bind(&s.workdir)
+        .bind(&s.sandbox)
+        .bind(&s.net_policy)
+        .bind(&s.routing_policy)
+        .bind(s.max_steps as i64)
+        .bind(&s.label)
+        .bind(if s.paused { 1_i64 } else { 0_i64 })
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+        self.get_schedule(&s.id).await
+    }
+
+    pub async fn get_schedule(
+        &self,
+        id: &str,
+    ) -> Result<crate::schedule::ScheduleRecord, LedgerError> {
+        let row = sqlx::query(
+            "SELECT id, cron, goal, workdir, sandbox, net_policy, routing_policy, \
+                    max_steps, label, paused, last_run_micros, next_run_micros, \
+                    last_task_id, created_at \
+             FROM schedules WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(LedgerError::NotFound)?;
+        row_to_schedule(&row)
+    }
+
+    pub async fn list_schedules(
+        &self,
+    ) -> Result<Vec<crate::schedule::ScheduleRecord>, LedgerError> {
+        let rows = sqlx::query(
+            "SELECT id, cron, goal, workdir, sandbox, net_policy, routing_policy, \
+                    max_steps, label, paused, last_run_micros, next_run_micros, \
+                    last_task_id, created_at \
+             FROM schedules ORDER BY paused ASC, next_run_micros ASC, created_at ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter().map(row_to_schedule).collect()
+    }
+
+    pub async fn delete_schedule(&self, id: &str) -> Result<(), LedgerError> {
+        sqlx::query("DELETE FROM schedules WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Update bookkeeping fields after a successful enqueue.
+    pub async fn record_schedule_fire(
+        &self,
+        id: &str,
+        last_task_id: &str,
+        next_run_micros: i64,
+    ) -> Result<(), LedgerError> {
+        let now = now_micros();
+        sqlx::query(
+            "UPDATE schedules SET last_run_micros = ?, last_task_id = ?, \
+                                  next_run_micros = ? WHERE id = ?",
+        )
+        .bind(now)
+        .bind(last_task_id)
+        .bind(next_run_micros)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Update only the cached next_run_micros without firing — used by the
+    /// scheduler on boot to publish accurate "upcoming" times.
+    pub async fn set_schedule_next_run(
+        &self,
+        id: &str,
+        next_run_micros: i64,
+    ) -> Result<(), LedgerError> {
+        sqlx::query("UPDATE schedules SET next_run_micros = ? WHERE id = ?")
+            .bind(next_run_micros)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Like `recent_events` but pre-filtered to the event kinds the agent's
     /// prompt builder actually consumes. Critical for context economy: a
     /// streamed LLM turn produces 20-30 `llm_chunk` rows plus a few
@@ -611,6 +715,33 @@ fn row_to_event(row: &sqlx::sqlite::SqliteRow) -> Result<EventRecord, LedgerErro
         subject,
         payload,
         parent_evt: parent_evt.map(EventId),
+    })
+}
+
+fn row_to_schedule(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<crate::schedule::ScheduleRecord, LedgerError> {
+    Ok(crate::schedule::ScheduleRecord {
+        id: row.try_get("id")?,
+        cron: row.try_get("cron")?,
+        goal: row.try_get("goal")?,
+        workdir: row.try_get("workdir")?,
+        sandbox: row.try_get("sandbox")?,
+        net_policy: row.try_get("net_policy")?,
+        routing_policy: row.try_get("routing_policy")?,
+        max_steps: {
+            let n: i64 = row.try_get("max_steps")?;
+            n.max(0) as u32
+        },
+        label: row.try_get("label")?,
+        paused: {
+            let n: i64 = row.try_get("paused")?;
+            n != 0
+        },
+        last_run_micros: row.try_get("last_run_micros")?,
+        next_run_micros: row.try_get("next_run_micros")?,
+        last_task_id: row.try_get("last_task_id")?,
+        created_at: row.try_get("created_at")?,
     })
 }
 
@@ -724,6 +855,30 @@ CREATE TABLE IF NOT EXISTS memories (
 
 CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, scope_value, status);
 CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status, updated_at);
+
+-- M12.S1: scheduled tasks. Cron string is validated server-side before
+-- insert. last_task_id is the most recent enqueued child for UI display;
+-- next_run_micros is cached for ordering ("upcoming runs" panel) but
+-- recomputed each tick to survive cron-spec changes.
+CREATE TABLE IF NOT EXISTS schedules (
+    id TEXT PRIMARY KEY NOT NULL,        -- UUID v4 string
+    cron TEXT NOT NULL,
+    goal TEXT NOT NULL,
+    workdir TEXT NOT NULL DEFAULT '',
+    sandbox TEXT NOT NULL DEFAULT '',
+    net_policy TEXT NOT NULL DEFAULT '',
+    routing_policy TEXT NOT NULL DEFAULT '',
+    max_steps INTEGER NOT NULL DEFAULT 0,
+    label TEXT NOT NULL DEFAULT '',
+    paused INTEGER NOT NULL DEFAULT 0,    -- 0=active, 1=paused
+    last_run_micros INTEGER NOT NULL DEFAULT 0,
+    next_run_micros INTEGER NOT NULL DEFAULT 0,
+    last_task_id TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_schedules_active
+    ON schedules(paused, next_run_micros);
 "#;
 
 #[cfg(test)]
