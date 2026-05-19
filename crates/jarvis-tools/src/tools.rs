@@ -4,7 +4,7 @@ use crate::tool::{Tool, ToolCtx, ToolError, ToolOutput, ToolSchema};
 use async_trait::async_trait;
 use jarvis_sandbox::SandboxSpec;
 use serde::Deserialize;
-use serde_json::{json, Value as Json};
+use serde_json::{Value as Json, json};
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 
@@ -36,14 +36,13 @@ impl Tool for FsReadTool {
     fn schema(&self) -> ToolSchema {
         ToolSchema {
             name: "fs_read".to_string(),
-            description:
-                "Read a UTF-8 text file (relative to the task workdir). For files over \
+            description: "Read a UTF-8 text file (relative to the task workdir). For files over \
                  ~200 lines, ALWAYS pass `start_line`/`end_line` instead of reading the whole \
                  file — full reads bloat the conversation context and slow the model down. \
                  If you only need to edit something, prefer `apply_patch` with an `@@ anchor` \
                  (a unique substring of the target line); apply_patch does NOT require a \
                  prior fs_read."
-                    .to_string(),
+                .to_string(),
             args_schema: json!({
                 "type": "object",
                 "properties": {
@@ -204,10 +203,7 @@ impl Tool for FsWriteTool {
                     display_path, diff.lines_added, diff.lines_removed
                 )
             } else {
-                format!(
-                    "created {} (+{} lines)",
-                    display_path, diff.lines_added
-                )
+                format!("created {} (+{} lines)", display_path, diff.lines_added)
             },
             json!({
                 "path": display_path,
@@ -405,11 +401,7 @@ impl Tool for UpdatePlanTool {
         let a: UpdatePlanArgs =
             serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
         let n = a.plan.len();
-        let in_progress = a
-            .plan
-            .iter()
-            .filter(|s| s.status == "in_progress")
-            .count();
+        let in_progress = a.plan.iter().filter(|s| s.status == "in_progress").count();
         if in_progress > 1 {
             return Ok(ToolOutput::err(
                 format!("invalid plan: {in_progress} steps in_progress (max 1)"),
@@ -482,25 +474,24 @@ impl Tool for ApplyPatchTool {
                 return Ok(ToolOutput::err(
                     format!("parse error: {e}"),
                     json!({ "error": e.to_string() }),
-                ))
+                ));
             }
         };
         let workdir = ctx.workdir.clone();
         // The applicator does blocking std::fs work — keep it off the async runtime.
-        let report = match tokio::task::spawn_blocking(move || {
-            crate::apply_patch::apply(&ops, &workdir)
-        })
-        .await
-        {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => {
-                return Ok(ToolOutput::err(
-                    format!("apply error: {e}"),
-                    json!({ "error": e.to_string() }),
-                ))
-            }
-            Err(e) => return Err(ToolError::Other(format!("join: {e}"))),
-        };
+        let report =
+            match tokio::task::spawn_blocking(move || crate::apply_patch::apply(&ops, &workdir))
+                .await
+            {
+                Ok(Ok(r)) => r,
+                Ok(Err(e)) => {
+                    return Ok(ToolOutput::err(
+                        format!("apply error: {e}"),
+                        json!({ "error": e.to_string() }),
+                    ));
+                }
+                Err(e) => return Err(ToolError::Other(format!("join: {e}"))),
+            };
 
         let total_add: usize = report.files.iter().map(|f| f.lines_added).sum();
         let total_rem: usize = report.files.iter().map(|f| f.lines_removed).sum();
@@ -545,7 +536,6 @@ impl Tool for ApplyPatchTool {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,11 +561,17 @@ mod tests {
         let dir = tempdir().unwrap();
         let ctx = ToolCtx::new(dir.path());
         let w = FsWriteTool;
-        w.invoke(json!({"path":"f.txt","content":"line1\nline2\nline3\n"}), &ctx)
-            .await
-            .unwrap();
+        w.invoke(
+            json!({"path":"f.txt","content":"line1\nline2\nline3\n"}),
+            &ctx,
+        )
+        .await
+        .unwrap();
         let out = w
-            .invoke(json!({"path":"f.txt","content":"line1\nLINE-TWO\nline3\nextra\n"}), &ctx)
+            .invoke(
+                json!({"path":"f.txt","content":"line1\nLINE-TWO\nline3\nextra\n"}),
+                &ctx,
+            )
             .await
             .unwrap();
         assert_eq!(out.data["is_new"], false);
@@ -626,7 +622,10 @@ mod tests {
         let body: String = (1..=50).map(|i| format!("L{i}\n")).collect();
         std::fs::write(dir.path().join("file.txt"), &body).unwrap();
         let out = FsReadTool
-            .invoke(json!({"path": "file.txt", "start_line": 10, "end_line": 12}), &ctx)
+            .invoke(
+                json!({"path": "file.txt", "start_line": 10, "end_line": 12}),
+                &ctx,
+            )
             .await
             .unwrap();
         let content = out.data["content"].as_str().unwrap();

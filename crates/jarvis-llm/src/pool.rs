@@ -159,9 +159,10 @@ impl LlmPool {
     pub async fn probe_all(&self) {
         for entry in self.registry.iter() {
             let req = ChatRequest {
-                messages: vec![ChatMessage::system(
-                    "Reply with exactly the single word: ok",
-                ), ChatMessage::user("ping")],
+                messages: vec![
+                    ChatMessage::system("Reply with exactly the single word: ok"),
+                    ChatMessage::user("ping"),
+                ],
                 temperature: Some(0.0),
                 max_tokens: Some(8),
                 stream: false,
@@ -227,9 +228,7 @@ impl LlmPool {
         let mut out = Vec::with_capacity(self.registry.len());
         for entry in self.registry.iter() {
             let fw = s.failures.get(&entry.name);
-            let quarantined_until = fw
-                .and_then(|w| w.quarantined_until)
-                .filter(|t| *t > now);
+            let quarantined_until = fw.and_then(|w| w.quarantined_until).filter(|t| *t > now);
             out.push(ModelStatus {
                 name: entry.name.clone(),
                 kind: entry.kind,
@@ -242,11 +241,16 @@ impl LlmPool {
             });
         }
         out.sort_by(|a, b| {
-            (a.kind as u8, std::cmp::Reverse(a.priority), a.name.as_str().to_string()).cmp(&(
-                b.kind as u8,
-                std::cmp::Reverse(b.priority),
-                b.name.as_str().to_string(),
-            ))
+            (
+                a.kind as u8,
+                std::cmp::Reverse(a.priority),
+                a.name.as_str().to_string(),
+            )
+                .cmp(&(
+                    b.kind as u8,
+                    std::cmp::Reverse(b.priority),
+                    b.name.as_str().to_string(),
+                ))
         });
         out
     }
@@ -286,7 +290,11 @@ impl LlmPool {
             // restart) flips them back. Unset (never probed) is treated as online.
             .filter(|e| state.online.get(&e.name).copied().unwrap_or(true))
             .filter(|e| {
-                let caps = state.observed.get(&e.name).copied().unwrap_or(e.capabilities);
+                let caps = state
+                    .observed
+                    .get(&e.name)
+                    .copied()
+                    .unwrap_or(e.capabilities);
                 caps.satisfies(&req.required)
             })
             .filter(|e| {
@@ -336,7 +344,11 @@ impl LlmPool {
         candidates.sort_by(|a, b| {
             b.priority
                 .cmp(&a.priority)
-                .then_with(|| a.cost_per_mtok_in.partial_cmp(&b.cost_per_mtok_in).unwrap_or(std::cmp::Ordering::Equal))
+                .then_with(|| {
+                    a.cost_per_mtok_in
+                        .partial_cmp(&b.cost_per_mtok_in)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
                 .then_with(|| a.name.as_str().cmp(b.name.as_str()))
         });
 
@@ -362,7 +374,7 @@ fn is_quarantined(w: Option<&FailureWindow>, now: DateTime<Utc>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::{make_openai_compat_entry, ModelKind};
+    use crate::registry::{ModelKind, make_openai_compat_entry};
     use jarvis_core::Capabilities;
 
     fn registry_two_local() -> ModelRegistry {
@@ -530,7 +542,10 @@ mod tests {
             routing_override: Some(RoutingPolicy::Model(ProviderName::new("local:nope"))),
             ..PickRequest::for_planning()
         };
-        assert!(matches!(pool.pick(&req).await, Err(PoolError::ForcedNotFound(_))));
+        assert!(matches!(
+            pool.pick(&req).await,
+            Err(PoolError::ForcedNotFound(_))
+        ));
     }
 
     #[tokio::test]
@@ -551,7 +566,8 @@ mod tests {
         // Mark deepseek offline manually.
         {
             let mut s = pool.state.write().await;
-            s.online.insert(ProviderName::new("remote:deepseek_pro"), false);
+            s.online
+                .insert(ProviderName::new("remote:deepseek_pro"), false);
         }
         let req = PickRequest {
             kind: TaskKind::Planning,

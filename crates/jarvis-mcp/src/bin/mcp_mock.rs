@@ -5,7 +5,7 @@
 //!
 //! That's enough to exercise initialize → tools/list → tools/call.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, Write};
 
 fn main() {

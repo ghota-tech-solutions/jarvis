@@ -80,8 +80,7 @@ pub struct CompletionChunk {
     pub finish_reason: Option<String>,
 }
 
-pub type CompletionStream =
-    Pin<Box<dyn Stream<Item = Result<CompletionChunk>> + Send + 'static>>;
+pub type CompletionStream = Pin<Box<dyn Stream<Item = Result<CompletionChunk>> + Send + 'static>>;
 
 #[async_trait]
 pub trait LlmProvider: Send + Sync {

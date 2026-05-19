@@ -4,13 +4,13 @@
 //! MLX-LM, llama.cpp, vLLM, OpenAI itself, DeepSeek, etc.
 
 use async_openai::{
+    Client,
     config::OpenAIConfig,
     types::{
         ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
         CreateChatCompletionRequestArgs,
     },
-    Client,
 };
 use async_trait::async_trait;
 use futures_util::StreamExt;
@@ -45,9 +45,7 @@ impl OpenAiCompatProvider {
         Self { cfg, client }
     }
 
-    fn convert_messages(
-        msgs: &[ChatMessage],
-    ) -> Result<Vec<ChatCompletionRequestMessage>> {
+    fn convert_messages(msgs: &[ChatMessage]) -> Result<Vec<ChatCompletionRequestMessage>> {
         msgs.iter()
             .map(|m| -> Result<ChatCompletionRequestMessage> {
                 match m.role {
@@ -61,13 +59,11 @@ impl OpenAiCompatProvider {
                         .build()
                         .map_err(|e| Error::Provider(format!("user msg: {e}")))?
                         .into()),
-                    ChatRole::Assistant => {
-                        Ok(ChatCompletionRequestAssistantMessageArgs::default()
-                            .content(m.content.clone())
-                            .build()
-                            .map_err(|e| Error::Provider(format!("assistant msg: {e}")))?
-                            .into())
-                    }
+                    ChatRole::Assistant => Ok(ChatCompletionRequestAssistantMessageArgs::default()
+                        .content(m.content.clone())
+                        .build()
+                        .map_err(|e| Error::Provider(format!("assistant msg: {e}")))?
+                        .into()),
                     ChatRole::Tool => Err(Error::Invalid(
                         "tool messages not supported in M1".to_string(),
                     )),
@@ -117,15 +113,20 @@ impl LlmProvider for OpenAiCompatProvider {
             .next()
             .ok_or_else(|| Error::Provider("empty choices".to_string()))?;
         let content = choice.message.content.unwrap_or_default();
-        let usage = resp.usage.map(|u| Usage {
-            prompt_tokens: u.prompt_tokens,
-            completion_tokens: u.completion_tokens,
-            total_tokens: u.total_tokens,
-        }).unwrap_or_default();
+        let usage = resp
+            .usage
+            .map(|u| Usage {
+                prompt_tokens: u.prompt_tokens,
+                completion_tokens: u.completion_tokens,
+                total_tokens: u.total_tokens,
+            })
+            .unwrap_or_default();
         Ok(ChatResponse {
             content,
             usage,
-            finish_reason: choice.finish_reason.map(|fr| format!("{fr:?}").to_lowercase()),
+            finish_reason: choice
+                .finish_reason
+                .map(|fr| format!("{fr:?}").to_lowercase()),
         })
     }
 

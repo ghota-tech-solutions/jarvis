@@ -11,7 +11,11 @@ async fn main() -> anyhow::Result<()> {
     // Locate the mcp-mock binary that cargo just built next to us.
     let exe = std::env::current_exe()?;
     let dir = exe.parent().unwrap();
-    let mock = dir.join(if cfg!(windows) { "mcp-mock.exe" } else { "mcp-mock" });
+    let mock = dir.join(if cfg!(windows) {
+        "mcp-mock.exe"
+    } else {
+        "mcp-mock"
+    });
 
     let client = McpClient::connect(McpServerSpec {
         name: "mock".to_string(),
@@ -32,12 +36,20 @@ async fn main() -> anyhow::Result<()> {
     let echo = client
         .call_tool("echo", serde_json::json!({ "text": "salut Jarvis" }))
         .await?;
-    println!("echo → is_error={} content={:?}", echo.is_error, echo.flatten_text());
+    println!(
+        "echo → is_error={} content={:?}",
+        echo.is_error,
+        echo.flatten_text()
+    );
 
     let add = client
         .call_tool("add", serde_json::json!({ "a": 40, "b": 2 }))
         .await?;
-    println!("add  → is_error={} content={:?}", add.is_error, add.flatten_text());
+    println!(
+        "add  → is_error={} content={:?}",
+        add.is_error,
+        add.flatten_text()
+    );
 
     client.ping().await?;
     println!("ping ok");

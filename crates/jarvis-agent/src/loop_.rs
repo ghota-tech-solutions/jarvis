@@ -1,7 +1,7 @@
 //! The actual agent loop.
 
 use crate::prompt;
-use crate::protocol::{parse_reply, ActionKind, AgentError, AgentReply, Outcome};
+use crate::protocol::{ActionKind, AgentError, AgentReply, Outcome, parse_reply};
 use futures_util::StreamExt;
 use jarvis_core::{
     AgentId, ChatRequest, ProviderName, RequiredCapabilities, RoutingPolicy, SandboxMode, TaskId,
@@ -102,7 +102,11 @@ pub async fn run_agent(
     for step in 1..=run.max_steps {
         if run.cancel.is_cancelled() {
             ledger
-                .set_task_status(run.task_id, TaskStatus::Cancelled, Some("cancelled by user"))
+                .set_task_status(
+                    run.task_id,
+                    TaskStatus::Cancelled,
+                    Some("cancelled by user"),
+                )
                 .await?;
             return Ok(Outcome::Aborted);
         }
@@ -435,8 +439,8 @@ async fn run_tool_step(
             },
             "is_error": true,
         });
-        let mut ev = NewEvent::new(run.task_id, EventKind::ToolResult, payload)
-            .with_agent(run.agent_id);
+        let mut ev =
+            NewEvent::new(run.task_id, EventKind::ToolResult, payload).with_agent(run.agent_id);
         if let Some(s) = subject {
             ev = ev.with_subject(s);
         }
@@ -503,10 +507,7 @@ async fn run_one_hook(
     hook: &HookSpec,
 ) -> Result<(), AgentError> {
     use jarvis_sandbox::SandboxSpec;
-    let workdir = hook
-        .workdir
-        .clone()
-        .unwrap_or_else(|| ctx.workdir.clone());
+    let workdir = hook.workdir.clone().unwrap_or_else(|| ctx.workdir.clone());
     let spec = SandboxSpec {
         cmd: hook.cmd.clone(),
         workdir,
@@ -554,9 +555,7 @@ async fn run_one_hook(
             }),
         ),
     };
-    ledger
-        .append(event.with_agent(run.agent_id))
-        .await?;
+    ledger.append(event.with_agent(run.agent_id)).await?;
     Ok(())
 }
 
@@ -565,17 +564,18 @@ fn subject_from_args(tool: &str, args: &serde_json::Value) -> Option<String> {
         "fs_read" | "fs_write" => args.get("path").and_then(|v| v.as_str()).map(String::from),
         "shell" => args.get("cmd").and_then(|v| v.as_str()).map(|s| {
             // First word of the command, capped.
-            s.split_whitespace().next().unwrap_or("").chars().take(64).collect()
+            s.split_whitespace()
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(64)
+                .collect()
         }),
         _ => None,
     }
 }
 
-async fn finish_failed(
-    ledger: &Ledger,
-    task_id: TaskId,
-    msg: &str,
-) -> Result<Outcome, AgentError> {
+async fn finish_failed(ledger: &Ledger, task_id: TaskId, msg: &str) -> Result<Outcome, AgentError> {
     ledger
         .append(NewEvent::new(
             task_id,
@@ -583,7 +583,9 @@ async fn finish_failed(
             json!({ "verdict": "fail", "message": msg }),
         ))
         .await?;
-    ledger.set_task_status(task_id, TaskStatus::Failed, Some(msg)).await?;
+    ledger
+        .set_task_status(task_id, TaskStatus::Failed, Some(msg))
+        .await?;
     Ok(Outcome::Failed)
 }
 
@@ -600,7 +602,9 @@ async fn finish_aborted(
             json!({ "verdict": "aborted", "message": msg.clone() }),
         ))
         .await?;
-    ledger.set_task_status(task_id, TaskStatus::Failed, Some(&msg)).await?;
+    ledger
+        .set_task_status(task_id, TaskStatus::Failed, Some(&msg))
+        .await?;
     Err(AgentError::BudgetExhausted(max_steps))
 }
 

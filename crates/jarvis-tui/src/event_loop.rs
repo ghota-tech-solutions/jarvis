@@ -11,7 +11,9 @@ use crate::app::{App, AppState, AuthedClient, Focus, POLL_INTERVAL};
 use crate::theme::Theme;
 use crate::ui;
 use anyhow::{Context, Result};
-use crossterm::event::{Event as CtEvent, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event as CtEvent, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
+};
 use futures::StreamExt;
 use jarvis_api::{
     ListTasksRequest, PingRequest, StatusRequest, StreamEventsRequest, TaskHandle, TaskSpec,
@@ -24,8 +26,8 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
-use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 
 pub async fn run(app: App) -> Result<()> {
     let mut terminal = setup_terminal().context("setup terminal")?;
@@ -92,7 +94,10 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
 
 fn restore_terminal(mut terminal: Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
     crossterm::terminal::disable_raw_mode()?;
-    crossterm::execute!(terminal.backend_mut(), crossterm::terminal::LeaveAlternateScreen)?;
+    crossterm::execute!(
+        terminal.backend_mut(),
+        crossterm::terminal::LeaveAlternateScreen
+    )?;
     terminal.show_cursor()?;
     Ok(())
 }
@@ -182,7 +187,11 @@ async fn handle_normal_key(
             let mut s = app.state.lock().await;
             let prev_sel = s.selected_task_id();
             for _ in 0..10 {
-                if down { s.next(); } else { s.prev(); }
+                if down {
+                    s.next();
+                } else {
+                    s.prev();
+                }
             }
             if s.selected_task_id() != prev_sel {
                 s.clear_events();
@@ -199,11 +208,7 @@ async fn handle_normal_key(
     Ok(())
 }
 
-async fn run_slash_command(
-    cmd: &str,
-    app: &App,
-    events_cancel: &Arc<Mutex<CancellationToken>>,
-) {
+async fn run_slash_command(cmd: &str, app: &App, events_cancel: &Arc<Mutex<CancellationToken>>) {
     let (head, rest) = match cmd.split_once(' ') {
         Some((h, r)) => (h, r.trim()),
         None => (cmd, ""),
@@ -228,14 +233,22 @@ async fn run_slash_command(
         "all" => {
             let mut s = app.state.lock().await;
             s.show_all = !s.show_all;
-            let msg = if s.show_all { "showing all tasks" } else { "showing active only" };
+            let msg = if s.show_all {
+                "showing all tasks"
+            } else {
+                "showing active only"
+            };
             s.set_status(msg);
         }
         "diffs" | "diff" => {
             let mut s = app.state.lock().await;
             s.diffs_open = !s.diffs_open;
             s.expanded_diffs.clear();
-            let msg = if s.diffs_open { "diffs expanded by default" } else { "diffs collapsed by default" };
+            let msg = if s.diffs_open {
+                "diffs expanded by default"
+            } else {
+                "diffs collapsed by default"
+            };
             s.set_status(msg);
         }
         "help" | "?" => app.state.lock().await.focus = Focus::Help,
@@ -277,8 +290,14 @@ async fn handle_confirm_key(k: KeyEvent, app: &App) -> Result<()> {
                 let state = app.state.clone();
                 tokio::spawn(async move {
                     match client.cancel_task(TaskHandle { id: id.clone() }).await {
-                        Ok(_) => state.lock().await.set_status(format!("cancelled {}", short(&id))),
-                        Err(e) => state.lock().await.set_error(format!("cancel: {}", e.message())),
+                        Ok(_) => state
+                            .lock()
+                            .await
+                            .set_status(format!("cancelled {}", short(&id))),
+                        Err(e) => state
+                            .lock()
+                            .await
+                            .set_error(format!("cancel: {}", e.message())),
                     }
                 });
             }
@@ -324,7 +343,10 @@ async fn submit_task(
         match client.submit_task(spec).await {
             Ok(h) => {
                 let id = h.into_inner().id;
-                state.lock().await.set_status(format!("submitted {}", short(&id)));
+                state
+                    .lock()
+                    .await
+                    .set_status(format!("submitted {}", short(&id)));
                 refresh_tasks(&mut client, &state).await;
                 {
                     let mut s = state.lock().await;
@@ -335,7 +357,10 @@ async fn submit_task(
                 }
                 rotate_event_stream(&events_cancel).await;
             }
-            Err(e) => state.lock().await.set_error(format!("submit: {}", e.message())),
+            Err(e) => state
+                .lock()
+                .await
+                .set_error(format!("submit: {}", e.message())),
         }
     });
 }
@@ -412,7 +437,10 @@ fn spawn_event_streamer(
             let mut stream = match stream_res {
                 Ok(r) => r.into_inner(),
                 Err(e) => {
-                    state.lock().await.set_error(format!("stream: {}", e.message()));
+                    state
+                        .lock()
+                        .await
+                        .set_error(format!("stream: {}", e.message()));
                     tokio::time::sleep(Duration::from_millis(500)).await;
                     continue;
                 }

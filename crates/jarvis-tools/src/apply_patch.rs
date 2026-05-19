@@ -26,9 +26,18 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileOp {
-    Add { path: String, content: String },
-    Delete { path: String },
-    Update { path: String, move_to: Option<String>, hunks: Vec<Hunk> },
+    Add {
+        path: String,
+        content: String,
+    },
+    Delete {
+        path: String,
+    },
+    Update {
+        path: String,
+        move_to: Option<String>,
+        hunks: Vec<Hunk>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -221,7 +230,11 @@ impl PendingOp {
                 if let Some(h) = current {
                     hunks.push(h);
                 }
-                FileOp::Update { path, move_to, hunks }
+                FileOp::Update {
+                    path,
+                    move_to,
+                    hunks,
+                }
             }
         }
     }
@@ -282,7 +295,16 @@ pub fn apply(ops: &[FileOp], workdir: &Path) -> Result<ApplyReport, PatchError> 
                 std::fs::remove_file(&p)?;
                 let removed = existing.lines().count();
                 let (diff, truncated) = build_diff(&existing, "");
-                bump(&mut report, &mut idx, path.clone(), ChangeStatus::Deleted, 0, removed, diff, truncated);
+                bump(
+                    &mut report,
+                    &mut idx,
+                    path.clone(),
+                    ChangeStatus::Deleted,
+                    0,
+                    removed,
+                    diff,
+                    truncated,
+                );
             }
             FileOp::Add { path, content } => {
                 let p = resolve_inside(workdir, path)?;
@@ -295,9 +317,22 @@ pub fn apply(ops: &[FileOp], workdir: &Path) -> Result<ApplyReport, PatchError> 
                 std::fs::write(&p, content)?;
                 let added = content.lines().count();
                 let (diff, truncated) = build_diff("", content);
-                bump(&mut report, &mut idx, path.clone(), ChangeStatus::Added, added, 0, diff, truncated);
+                bump(
+                    &mut report,
+                    &mut idx,
+                    path.clone(),
+                    ChangeStatus::Added,
+                    added,
+                    0,
+                    diff,
+                    truncated,
+                );
             }
-            FileOp::Update { path, move_to, hunks } => {
+            FileOp::Update {
+                path,
+                move_to,
+                hunks,
+            } => {
                 let p = resolve_inside(workdir, path)?;
                 let existing = std::fs::read_to_string(&p)
                     .map_err(|_| PatchError::FileMissing { path: path.clone() })?;
@@ -313,10 +348,28 @@ pub fn apply(ops: &[FileOp], workdir: &Path) -> Result<ApplyReport, PatchError> 
                     }
                     std::fs::write(&dest, &new_content)?;
                     std::fs::remove_file(&p)?;
-                    bump(&mut report, &mut idx, move_to.clone().unwrap_or_else(|| path.clone()), ChangeStatus::Moved, adds, removes, diff, truncated);
+                    bump(
+                        &mut report,
+                        &mut idx,
+                        move_to.clone().unwrap_or_else(|| path.clone()),
+                        ChangeStatus::Moved,
+                        adds,
+                        removes,
+                        diff,
+                        truncated,
+                    );
                 } else {
                     std::fs::write(&p, &new_content)?;
-                    bump(&mut report, &mut idx, path.clone(), ChangeStatus::Modified, adds, removes, diff, truncated);
+                    bump(
+                        &mut report,
+                        &mut idx,
+                        path.clone(),
+                        ChangeStatus::Modified,
+                        adds,
+                        removes,
+                        diff,
+                        truncated,
+                    );
                 }
             }
         }
@@ -436,7 +489,13 @@ fn apply_hunks(
 
         let max_drift = 32; // be tolerant if the hunk starts a few blank lines off
         let mut matched_at: Option<usize> = None;
-        for start in cursor..original_lines.len().saturating_sub(expected.len()).min(cursor + max_drift) + 1 {
+        for start in cursor
+            ..original_lines
+                .len()
+                .saturating_sub(expected.len())
+                .min(cursor + max_drift)
+                + 1
+        {
             if start + expected.len() > original_lines.len() {
                 break;
             }
@@ -487,7 +546,11 @@ fn apply_hunks(
 
 fn resolve_inside(workdir: &Path, rel: &str) -> Result<PathBuf, PatchError> {
     let p = Path::new(rel);
-    let joined = if p.is_absolute() { p.to_path_buf() } else { workdir.join(p) };
+    let joined = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        workdir.join(p)
+    };
     // Lexical confinement — same rule as ToolCtx::resolve.
     let mut depth: i32 = 0;
     for comp in joined.strip_prefix(workdir).unwrap_or(&joined).components() {
@@ -590,7 +653,11 @@ mod tests {
     fn applies_update_round_trip() {
         let tmp = tempdir();
         let path = tmp.path().join("foo.rs");
-        std::fs::write(&path, "fn main() {\n    println!(\"hi\");\n    let y = 2;\n}\n").unwrap();
+        std::fs::write(
+            &path,
+            "fn main() {\n    println!(\"hi\");\n    let y = 2;\n}\n",
+        )
+        .unwrap();
         let src = concat!(
             "*** Begin Patch\n",
             "*** Update File: foo.rs\n",

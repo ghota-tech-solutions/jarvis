@@ -28,7 +28,7 @@ const RELEVANT_EVENT_BUDGET: u32 = 12;
 
 #[derive(Debug, Deserialize)]
 struct LlmCandidate {
-    kind: String,      // "pattern" | "preference" | "fact"
+    kind: String, // "pattern" | "preference" | "fact"
     text: String,
     scope: Option<String>, // "workdir" | "global"; defaults to workdir
 }
@@ -138,7 +138,10 @@ pub async fn extract_for_task(
     workdir: &str,
     goal: &str,
 ) -> Vec<i64> {
-    let events = match ledger.recent_relevant_events(task_id, RELEVANT_EVENT_BUDGET).await {
+    let events = match ledger
+        .recent_relevant_events(task_id, RELEVANT_EVENT_BUDGET)
+        .await
+    {
         Ok(e) => e,
         Err(e) => {
             warn!(error = %e, "memory extractor: cannot load events");
@@ -238,7 +241,13 @@ mod tests {
 
     #[test]
     fn similar_text_is_whitespace_insensitive() {
-        assert!(similar_text("Always run cargo check", "Always   run\tcargo check"));
-        assert!(!similar_text("Always run cargo check", "Never run cargo check"));
+        assert!(similar_text(
+            "Always run cargo check",
+            "Always   run\tcargo check"
+        ));
+        assert!(!similar_text(
+            "Always run cargo check",
+            "Never run cargo check"
+        ));
     }
 }

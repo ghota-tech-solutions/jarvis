@@ -5,7 +5,7 @@ use crate::client::McpClient;
 use crate::protocol::McpTool;
 use async_trait::async_trait;
 use jarvis_tools::{Tool, ToolCtx, ToolError, ToolOutput, ToolSchema};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub struct McpToolAdapter {
     /// Fully-qualified name shown in the tool catalog, e.g. `filesystem.read_file`.

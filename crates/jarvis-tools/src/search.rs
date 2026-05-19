@@ -308,15 +308,16 @@ mod tests {
         std::fs::write(dir.path().join("a.rs"), "fn main() {}\nfn helper() {}\n").unwrap();
         std::fs::write(dir.path().join("b.txt"), "fn this_is_text\n").unwrap();
         let out = GrepTool
-            .invoke(
-                json!({ "pattern": "fn ", "glob": "*.rs" }),
-                &ctx,
-            )
+            .invoke(json!({ "pattern": "fn ", "glob": "*.rs" }), &ctx)
             .await
             .unwrap();
         let matches = out.data["matches"].as_array().unwrap();
         assert_eq!(matches.len(), 2);
-        assert!(matches.iter().all(|m| m["path"].as_str().unwrap().ends_with("a.rs")));
+        assert!(
+            matches
+                .iter()
+                .all(|m| m["path"].as_str().unwrap().ends_with("a.rs"))
+        );
     }
 
     #[tokio::test]
@@ -325,10 +326,7 @@ mod tests {
         let ctx = ToolCtx::new(dir.path());
         std::fs::write(dir.path().join("a.txt"), "Hello\nHELLO\nworld\n").unwrap();
         let out = GrepTool
-            .invoke(
-                json!({ "pattern": "hello", "ignore_case": true }),
-                &ctx,
-            )
+            .invoke(json!({ "pattern": "hello", "ignore_case": true }), &ctx)
             .await
             .unwrap();
         assert_eq!(out.data["total"].as_u64().unwrap(), 2);
@@ -362,7 +360,11 @@ mod tests {
         let dir = tempdir().unwrap();
         let ctx = ToolCtx::new(dir.path());
         std::fs::write(dir.path().join("text.txt"), "needle\n").unwrap();
-        std::fs::write(dir.path().join("blob.bin"), [b'a', 0, b'n', b'e', b'e', b'd', b'l', b'e']).unwrap();
+        std::fs::write(
+            dir.path().join("blob.bin"),
+            [b'a', 0, b'n', b'e', b'e', b'd', b'l', b'e'],
+        )
+        .unwrap();
         let out = GrepTool
             .invoke(json!({ "pattern": "needle" }), &ctx)
             .await

@@ -8,13 +8,13 @@
 //! Every route except `/v1/ping` requires a Bearer token (see `auth.rs`).
 
 use anyhow::Context as _;
-use axum::{middleware, routing::get, Json, Router};
+use axum::{Json, Router, middleware, routing::get};
 use serde::Serialize;
 use std::path::Path;
 use tracing::info;
 
-use crate::auth::{self, AuthToken};
 use crate::VERSION;
+use crate::auth::{self, AuthToken};
 
 /// Default bind address when `JARVIS_SPA_ADDR` is unset. Binds on all
 /// interfaces so the SPA is reachable from other devices on the LAN — the
@@ -59,8 +59,7 @@ async fn ping() -> Json<PingResponse> {
 ///
 /// `data_dir` is where the bearer token is persisted (`<data_dir>/web.token`).
 pub async fn serve(addr: String, data_dir: &Path) -> anyhow::Result<()> {
-    let token = AuthToken::load_or_create(data_dir)
-        .context("load or create web auth token")?;
+    let token = AuthToken::load_or_create(data_dir).context("load or create web auth token")?;
     let app = router(token);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await

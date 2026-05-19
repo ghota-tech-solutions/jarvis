@@ -13,7 +13,7 @@ use anyhow::{Context as _, Result};
 use axum::{
     body::Body,
     extract::State,
-    http::{header::AUTHORIZATION, Request, StatusCode},
+    http::{Request, StatusCode, header::AUTHORIZATION},
     middleware::Next,
     response::Response,
 };
@@ -54,8 +54,7 @@ impl AuthToken {
         let token = generate();
         std::fs::create_dir_all(data_dir)
             .with_context(|| format!("create data_dir {}", data_dir.display()))?;
-        write_secure(&path, &token)
-            .with_context(|| format!("write {}", path.display()))?;
+        write_secure(&path, &token).with_context(|| format!("write {}", path.display()))?;
         info!(path = %path.display(), "generated new web.token");
         Ok(Self(Arc::new(token)))
     }
@@ -104,7 +103,7 @@ pub async fn require_token(
     next: Next,
 ) -> Result<Response, StatusCode> {
     let path = req.uri().path();
-    if PUBLIC_ROUTES.iter().any(|p| *p == path) {
+    if PUBLIC_ROUTES.contains(&path) {
         return Ok(next.run(req).await);
     }
     let header = req
@@ -113,10 +112,10 @@ pub async fn require_token(
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
     let expected_prefix = "Bearer ";
-    if let Some(supplied) = header.strip_prefix(expected_prefix) {
-        if constant_time_eq(supplied.as_bytes(), token.as_str().as_bytes()) {
-            return Ok(next.run(req).await);
-        }
+    if let Some(supplied) = header.strip_prefix(expected_prefix)
+        && constant_time_eq(supplied.as_bytes(), token.as_str().as_bytes())
+    {
+        return Ok(next.run(req).await);
     }
     Err(StatusCode::UNAUTHORIZED)
 }

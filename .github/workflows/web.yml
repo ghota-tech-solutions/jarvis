@@ -1,0 +1,42 @@
+name: web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/jarvis-web/ui/**'
+      - 'crates/jarvis-api/proto/**'
+      - '.github/workflows/web.yml'
+  pull_request:
+    paths:
+      - 'crates/jarvis-web/ui/**'
+      - 'crates/jarvis-api/proto/**'
+      - '.github/workflows/web.yml'
+
+jobs:
+  typecheck-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/jarvis-web/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: regenerate proto client
+        run: bun run gen
+      - name: typecheck
+        run: bun run typecheck
+      - name: build
+        run: bun run build
+      - name: bundle size budget
+        run: |
+          size=$(du -sb dist | cut -f1)
+          echo "dist size: ${size} bytes"
+          # Hard cap at 2 MB until we know better. Adjust as the bundle grows.
+          if [ "$size" -gt 2097152 ]; then
+            echo "::error::SPA bundle exceeds 2 MB ($size bytes)"
+            exit 1
+          fi

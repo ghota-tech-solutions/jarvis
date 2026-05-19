@@ -195,11 +195,7 @@ fn is_update_plan_event(ev: &EventRecord) -> bool {
     matches!(
         ev.kind,
         EventKind::Decision | EventKind::ToolCall | EventKind::ToolResult | EventKind::Error
-    ) && ev
-        .payload
-        .get("tool")
-        .and_then(|v| v.as_str())
-        == Some("update_plan")
+    ) && ev.payload.get("tool").and_then(|v| v.as_str()) == Some("update_plan")
 }
 
 /// Walk history newest-first, locate the most recent `update_plan` tool_result,
@@ -208,7 +204,11 @@ fn render_latest_plan(history: &[EventRecord]) -> Option<String> {
     let ev = history.iter().rev().find(|e| {
         matches!(e.kind, EventKind::ToolResult)
             && e.payload.get("tool").and_then(|v| v.as_str()) == Some("update_plan")
-            && !e.payload.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false)
+            && !e
+                .payload
+                .get("is_error")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
     })?;
     let plan = ev
         .payload
@@ -221,7 +221,10 @@ fn render_latest_plan(history: &[EventRecord]) -> Option<String> {
     let mut s = String::from("# Current plan (rendered out-of-band — do NOT restate)\n");
     for (i, step) in plan.iter().enumerate() {
         let text = step.get("step").and_then(|v| v.as_str()).unwrap_or("?");
-        let status = step.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
+        let status = step
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("pending");
         let marker = match status {
             "completed" => "[x]",
             "in_progress" => "[>]",

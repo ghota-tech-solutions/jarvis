@@ -1,0 +1,26 @@
+name: proto
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/jarvis-api/proto/**'
+      - '.github/workflows/proto.yml'
+  pull_request:
+    paths:
+      - 'crates/jarvis-api/proto/**'
+      - '.github/workflows/proto.yml'
+
+jobs:
+  buf-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-action@v1
+        with:
+          input: crates/jarvis-api/proto
+          lint: true
+          # Breaking-change detection vs main — non-blocking comment until
+          # we publish a stable v1.
+          breaking: false
+          format: false

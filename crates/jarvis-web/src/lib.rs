@@ -16,7 +16,7 @@ pub mod auth;
 pub mod server;
 
 pub use auth::{AuthToken, TOKEN_FILE};
-pub use server::{resolve_addr, router, serve, DEFAULT_SPA_ADDR};
+pub use server::{DEFAULT_SPA_ADDR, resolve_addr, router, serve};
 
 /// Crate version, mirrors workspace.package.version. Surfaced over the web API so
 /// the SPA can detect a backend upgrade and prompt a reload.

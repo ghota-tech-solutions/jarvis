@@ -4,15 +4,15 @@
 use crate::protocol::{
     JsonRpcMessage, JsonRpcRequest, JsonRpcResponse, McpTool, McpToolCallResult, McpToolList,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{Mutex, oneshot};
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
@@ -77,13 +77,15 @@ impl McpClient {
             cmd.current_dir(wd);
         }
         let mut child = cmd.spawn()?;
-        let stdout = child.stdout.take().ok_or_else(|| {
-            McpClientError::Transport("child stdout already taken".to_string())
-        })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| McpClientError::Transport("child stdout already taken".to_string()))?;
         let stderr = child.stderr.take();
-        let stdin = child.stdin.take().ok_or_else(|| {
-            McpClientError::Transport("child stdin already taken".to_string())
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| McpClientError::Transport("child stdin already taken".to_string()))?;
 
         let inner = Arc::new(Inner {
             name: spec.name.clone(),
@@ -179,11 +181,7 @@ impl McpClient {
             )
             .await?;
         // MCP spec: client SHOULD send `notifications/initialized` after init.
-        self.notify(
-            "notifications/initialized",
-            json!({}),
-        )
-        .await?;
+        self.notify("notifications/initialized", json!({})).await?;
         Ok(())
     }
 
@@ -229,9 +227,10 @@ impl McpClient {
 
         {
             let mut stdin = self.inner.stdin.lock().await;
-            stdin.write_all(line.as_bytes()).await.map_err(|e| {
-                McpClientError::Transport(format!("write: {e}"))
-            })?;
+            stdin
+                .write_all(line.as_bytes())
+                .await
+                .map_err(|e| McpClientError::Transport(format!("write: {e}")))?;
             stdin.flush().await.ok();
         }
 
@@ -249,7 +248,8 @@ impl McpClient {
                 message: err.message,
             });
         }
-        resp.result.ok_or_else(|| McpClientError::Transport("empty result".to_string()))
+        resp.result
+            .ok_or_else(|| McpClientError::Transport("empty result".to_string()))
     }
 
     async fn notify(&self, method: &str, params: Value) -> Result<(), McpClientError> {

@@ -168,9 +168,15 @@ impl Ledger {
     ) -> Result<Vec<TaskRecord>, LedgerError> {
         let limit = if limit == 0 { 100 } else { limit as i64 };
         let rows = if include_finished {
-            sqlx::query(TASK_SELECT_ALL).bind(limit).fetch_all(&self.pool).await?
+            sqlx::query(TASK_SELECT_ALL)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await?
         } else {
-            sqlx::query(TASK_SELECT_ACTIVE).bind(limit).fetch_all(&self.pool).await?
+            sqlx::query(TASK_SELECT_ACTIVE)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await?
         };
         rows.iter().map(row_to_task).collect()
     }
@@ -336,13 +342,6 @@ impl Ledger {
         Ok(rows)
     }
 
-    /// Like `recent_events` but pre-filtered to the event kinds the agent's
-    /// prompt builder actually consumes. Critical for context economy: a
-    /// streamed LLM turn produces 20-30 `llm_chunk` rows plus a few
-    /// heartbeat/attempt rows; a naive `recent_events(40)` therefore carries
-    /// less than two real turns of history. This variant returns the last N
-    /// `decision` / `tool_result` / `error` / `continuation` / `verdict`
-    /// events so N maps to roughly N agent moves.
     // ---------- M9: memories ----------
 
     pub async fn create_memory(
@@ -419,10 +418,7 @@ impl Ledger {
         rows.iter().map(row_to_memory).collect()
     }
 
-    pub async fn get_memory(
-        &self,
-        id: i64,
-    ) -> Result<crate::memory::MemoryRecord, LedgerError> {
+    pub async fn get_memory(&self, id: i64) -> Result<crate::memory::MemoryRecord, LedgerError> {
         let row = sqlx::query(
             "SELECT id, scope, scope_value, kind, text, status, source_task_id, \
                     created_at, updated_at, usage_count \
@@ -443,15 +439,13 @@ impl Ledger {
     ) -> Result<crate::memory::MemoryRecord, LedgerError> {
         let now = now_micros();
         if let Some(t) = new_text {
-            sqlx::query(
-                "UPDATE memories SET status = ?, text = ?, updated_at = ? WHERE id = ?",
-            )
-            .bind(status.as_str())
-            .bind(t)
-            .bind(now)
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("UPDATE memories SET status = ?, text = ?, updated_at = ? WHERE id = ?")
+                .bind(status.as_str())
+                .bind(t)
+                .bind(now)
+                .bind(id)
+                .execute(&self.pool)
+                .await?;
         } else {
             sqlx::query("UPDATE memories SET status = ?, updated_at = ? WHERE id = ?")
                 .bind(status.as_str())
@@ -515,6 +509,13 @@ impl Ledger {
         Ok(())
     }
 
+    /// Like `recent_events` but pre-filtered to the event kinds the agent's
+    /// prompt builder actually consumes. Critical for context economy: a
+    /// streamed LLM turn produces 20-30 `llm_chunk` rows plus a few
+    /// heartbeat/attempt rows; a naive `recent_events(40)` therefore carries
+    /// less than two real turns of history. This variant returns the last N
+    /// `decision` / `tool_result` / `error` / `continuation` / `verdict`
+    /// events so N maps to roughly N agent moves.
     pub async fn recent_relevant_events(
         &self,
         task_id: TaskId,
@@ -571,21 +572,17 @@ fn row_to_task(row: &sqlx::sqlite::SqliteRow) -> Result<TaskRecord, LedgerError>
     })
 }
 
-const TASK_COLUMNS: &str =
-    "id, parent, goal, status, workdir, created_at, completed_at, error, sandbox, net_policy, worktree_path, worktree_branch";
+const TASK_COLUMNS: &str = "id, parent, goal, status, workdir, created_at, completed_at, error, sandbox, net_policy, worktree_path, worktree_branch";
 
-const TASK_SELECT_BY_ID: &str =
-    "SELECT id, parent, goal, status, workdir, created_at, completed_at, error, \
+const TASK_SELECT_BY_ID: &str = "SELECT id, parent, goal, status, workdir, created_at, completed_at, error, \
             sandbox, net_policy, worktree_path, worktree_branch \
      FROM tasks WHERE id = ?";
 
-const TASK_SELECT_ALL: &str =
-    "SELECT id, parent, goal, status, workdir, created_at, completed_at, error, \
+const TASK_SELECT_ALL: &str = "SELECT id, parent, goal, status, workdir, created_at, completed_at, error, \
             sandbox, net_policy, worktree_path, worktree_branch \
      FROM tasks ORDER BY created_at DESC LIMIT ?";
 
-const TASK_SELECT_ACTIVE: &str =
-    "SELECT id, parent, goal, status, workdir, created_at, completed_at, error, \
+const TASK_SELECT_ACTIVE: &str = "SELECT id, parent, goal, status, workdir, created_at, completed_at, error, \
             sandbox, net_policy, worktree_path, worktree_branch \
      FROM tasks WHERE status IN ('pending','running') ORDER BY created_at DESC LIMIT ?";
 
@@ -617,7 +614,9 @@ fn row_to_event(row: &sqlx::sqlite::SqliteRow) -> Result<EventRecord, LedgerErro
     })
 }
 
-fn row_to_memory(row: &sqlx::sqlite::SqliteRow) -> Result<crate::memory::MemoryRecord, LedgerError> {
+fn row_to_memory(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<crate::memory::MemoryRecord, LedgerError> {
     use std::str::FromStr;
     let id: i64 = row.try_get("id")?;
     let scope_s: String = row.try_get("scope")?;
@@ -746,7 +745,11 @@ mod tests {
         let l = open_temp().await;
         let t = l.create_task("test goal", ".", None).await.unwrap();
         let ev = l
-            .append(NewEvent::new(t.id, EventKind::Decision, json!({"thought": "hi"})))
+            .append(NewEvent::new(
+                t.id,
+                EventKind::Decision,
+                json!({"thought": "hi"}),
+            ))
             .await
             .unwrap();
         assert_eq!(ev.task_id, t.id);
@@ -779,7 +782,11 @@ mod tests {
         let t = l.create_task("g", ".", None).await.unwrap();
         let mut rx = l.subscribe();
         let ev = l
-            .append(NewEvent::new(t.id, EventKind::ToolCall, json!({"tool":"shell"})))
+            .append(NewEvent::new(
+                t.id,
+                EventKind::ToolCall,
+                json!({"tool":"shell"}),
+            ))
             .await
             .unwrap();
         let received = tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv())
@@ -793,7 +800,9 @@ mod tests {
     async fn set_status_to_completed_marks_completed_at() {
         let l = open_temp().await;
         let t = l.create_task("g", ".", None).await.unwrap();
-        l.set_task_status(t.id, TaskStatus::Completed, None).await.unwrap();
+        l.set_task_status(t.id, TaskStatus::Completed, None)
+            .await
+            .unwrap();
         let after = l.get_task(t.id).await.unwrap();
         assert_eq!(after.status, TaskStatus::Completed);
         assert!(after.completed_at.is_some());
@@ -804,20 +813,49 @@ mod tests {
         let l = open_temp().await;
         let root = l.create_task("root", ".", None).await.unwrap();
         let child = l.create_task("child", ".", Some(root.id)).await.unwrap();
-        let grandchild = l.create_task("grandchild", ".", Some(child.id)).await.unwrap();
+        let grandchild = l
+            .create_task("grandchild", ".", Some(child.id))
+            .await
+            .unwrap();
         let sibling_orphan = l.create_task("orphan", ".", None).await.unwrap();
 
         // Mix of events across the three connected tasks + the orphan.
-        l.append(NewEvent::new(root.id, EventKind::Decision, json!({"r": 1}))).await.unwrap();
-        l.append(NewEvent::new(child.id, EventKind::ToolCall, json!({"tool": "shell"}))).await.unwrap();
-        l.append(NewEvent::new(grandchild.id, EventKind::Verdict, json!({"v": "pass"}))).await.unwrap();
-        l.append(NewEvent::new(sibling_orphan.id, EventKind::Decision, json!({"o": 1}))).await.unwrap();
+        l.append(NewEvent::new(root.id, EventKind::Decision, json!({"r": 1})))
+            .await
+            .unwrap();
+        l.append(NewEvent::new(
+            child.id,
+            EventKind::ToolCall,
+            json!({"tool": "shell"}),
+        ))
+        .await
+        .unwrap();
+        l.append(NewEvent::new(
+            grandchild.id,
+            EventKind::Verdict,
+            json!({"v": "pass"}),
+        ))
+        .await
+        .unwrap();
+        l.append(NewEvent::new(
+            sibling_orphan.id,
+            EventKind::Decision,
+            json!({"o": 1}),
+        ))
+        .await
+        .unwrap();
 
         let timeline = l.timeline_events(root.id).await.unwrap();
         assert_eq!(timeline.len(), 3, "orphan task's event must not appear");
-        assert!(timeline.windows(2).all(|w| w[0].id.0 < w[1].id.0), "must be id-ascending");
+        assert!(
+            timeline.windows(2).all(|w| w[0].id.0 < w[1].id.0),
+            "must be id-ascending"
+        );
         let kinds: Vec<EventKind> = timeline.iter().map(|e| e.kind).collect();
-        assert_eq!(kinds, vec![EventKind::Decision, EventKind::ToolCall, EventKind::Verdict]);
+        assert_eq!(
+            kinds,
+            vec![EventKind::Decision, EventKind::ToolCall, EventKind::Verdict]
+        );
     }
 
     #[tokio::test]
@@ -828,4 +866,3 @@ mod tests {
         assert!(timeline.is_empty());
     }
 }
-

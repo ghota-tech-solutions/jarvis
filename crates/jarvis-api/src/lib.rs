@@ -4,7 +4,6 @@
 
 tonic::include_proto!("jarvis.v1");
 
-pub const FILE_DESCRIPTOR_SET: &[u8] =
-    tonic::include_file_descriptor_set!("jarvis_descriptor");
+pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("jarvis_descriptor");
 
 pub mod auth;

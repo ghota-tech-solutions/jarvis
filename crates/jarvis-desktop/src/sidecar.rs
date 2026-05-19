@@ -35,11 +35,8 @@ pub async fn ensure_daemon_running(app: &AppHandle) -> Result<()> {
 
 async fn is_daemon_up() -> bool {
     tokio::task::spawn_blocking(|| {
-        TcpStream::connect_timeout(
-            &DAEMON_ADDR.parse().unwrap(),
-            Duration::from_millis(300),
-        )
-        .is_ok()
+        TcpStream::connect_timeout(&DAEMON_ADDR.parse().unwrap(), Duration::from_millis(300))
+            .is_ok()
     })
     .await
     .unwrap_or(false)

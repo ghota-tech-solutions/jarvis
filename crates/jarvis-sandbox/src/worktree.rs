@@ -140,9 +140,7 @@ mod tests {
     fn no_git_repo_returns_unmanaged() {
         let dir = tempdir().unwrap();
         let mgr = WorktreeManager::new(dir.path().join("worktrees"));
-        let wt = mgr
-            .create(TaskId::new(), dir.path(), None)
-            .expect("create");
+        let wt = mgr.create(TaskId::new(), dir.path(), None).expect("create");
         assert!(!wt.managed);
         assert_eq!(wt.path, dir.path());
     }
@@ -159,7 +157,8 @@ mod tests {
                 idx.write_tree().unwrap()
             };
             let tree = repo.find_tree(tree_id).unwrap();
-            repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
+            repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
+                .unwrap();
         }
         let mgr = WorktreeManager::new(dir.path().join(".jarvis").join("worktrees"));
         let id = TaskId::new();

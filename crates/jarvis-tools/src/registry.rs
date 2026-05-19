@@ -1,5 +1,5 @@
-use crate::{Tool, ToolCtx, ToolOutput};
 use crate::tool::ToolError;
+use crate::{Tool, ToolCtx, ToolOutput};
 use serde_json::Value as Json;
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -2,10 +2,10 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use futures::StreamExt;
 use jarvis_api::{
-    auth::{discover_token, ClientAuth},
-    jarvis_client::JarvisClient,
     AskRequest, ListTasksRequest, PingRequest, StatusRequest, StreamEventsRequest, TaskHandle,
     TaskSpec,
+    auth::{ClientAuth, discover_token},
+    jarvis_client::JarvisClient,
 };
 use std::io::{self, Write};
 use std::time::Duration;
@@ -21,7 +21,11 @@ type AuthedClient = JarvisClient<InterceptedService<Channel, ClientAuth>>;
 #[command(name = "jarvis", version, about = "Jarvis CLI client")]
 struct Cli {
     /// Daemon endpoint. `http://host:port` (UDS/named-pipe TBD).
-    #[arg(long, env = "JARVIS_DAEMON_URL", default_value = "http://127.0.0.1:7777")]
+    #[arg(
+        long,
+        env = "JARVIS_DAEMON_URL",
+        default_value = "http://127.0.0.1:7777"
+    )]
     daemon: String,
 
     /// Connect timeout in seconds.
@@ -174,9 +178,15 @@ async fn main() -> Result<()> {
         }
         Cmd::Status => {
             let s = client.get_status(StatusRequest {}).await?.into_inner();
-            println!("daemon: v{}  ·  up {}s  ·  {} running tasks", s.version, s.uptime_seconds, s.running_tasks);
+            println!(
+                "daemon: v{}  ·  up {}s  ·  {} running tasks",
+                s.version, s.uptime_seconds, s.running_tasks
+            );
             println!();
-            println!("  {:<26} {:<7} {:<3} {:<7} model_id", "model", "kind", "pri", "status");
+            println!(
+                "  {:<26} {:<7} {:<3} {:<7} model_id",
+                "model", "kind", "pri", "status"
+            );
             for m in s.models {
                 let status = if !m.online {
                     "offline"
@@ -185,7 +195,10 @@ async fn main() -> Result<()> {
                 } else {
                     "ok"
                 };
-                println!("  {:<26} {:<7} {:<3} {:<7} {}", m.name, m.kind, m.priority, status, m.model_id);
+                println!(
+                    "  {:<26} {:<7} {:<3} {:<7} {}",
+                    m.name, m.kind, m.priority, status, m.model_id
+                );
             }
         }
         Cmd::Task { cmd } => task_cmd(&mut client, cmd).await?,
@@ -205,7 +218,11 @@ async fn task_cmd(client: &mut AuthedClient, cmd: TaskCmd) -> Result<()> {
                     .unwrap_or_default()
             });
             // --model is shorthand for --routing model:<name>; --routing wins if both given.
-            let routing_policy = a.routing.clone().or_else(|| a.model.as_ref().map(|m| format!("model:{m}"))).unwrap_or_default();
+            let routing_policy = a
+                .routing
+                .clone()
+                .or_else(|| a.model.as_ref().map(|m| format!("model:{m}")))
+                .unwrap_or_default();
             let spec = TaskSpec {
                 goal: a.goal.join(" "),
                 workdir,
@@ -263,8 +280,22 @@ async fn task_cmd(client: &mut AuthedClient, cmd: TaskCmd) -> Result<()> {
             println!("status:          {}", t.status);
             println!("goal:            {}", t.goal);
             println!("workdir:         {}", t.workdir);
-            println!("sandbox:         {}", if t.sandbox.is_empty() { "-" } else { &t.sandbox });
-            println!("net_policy:      {}", if t.net_policy.is_empty() { "-" } else { &t.net_policy });
+            println!(
+                "sandbox:         {}",
+                if t.sandbox.is_empty() {
+                    "-"
+                } else {
+                    &t.sandbox
+                }
+            );
+            println!(
+                "net_policy:      {}",
+                if t.net_policy.is_empty() {
+                    "-"
+                } else {
+                    &t.net_policy
+                }
+            );
             if !t.worktree_path.is_empty() {
                 println!("worktree_path:   {}", t.worktree_path);
                 println!("worktree_branch: {}", t.worktree_branch);
@@ -332,7 +363,10 @@ fn pretty_payload(kind: &str, json: &str) -> String {
         "tool_call" => Some(format!(
             "{}({})",
             v.get("tool").and_then(|s| s.as_str()).unwrap_or("?"),
-            truncate(&v.get("args").map(|a| a.to_string()).unwrap_or_default(), 120)
+            truncate(
+                &v.get("args").map(|a| a.to_string()).unwrap_or_default(),
+                120
+            )
         )),
         "tool_result" => v.get("summary").and_then(|s| s.as_str()).map(String::from),
         "error" => v
@@ -365,8 +399,8 @@ fn short_id(id: &str) -> String {
 
 fn build_client(channel: Channel) -> Result<AuthedClient> {
     let token = discover_token().unwrap_or_default();
-    let auth = ClientAuth::new(&token)
-        .map_err(|e| anyhow::anyhow!("invalid token in env/file: {e}"))?;
+    let auth =
+        ClientAuth::new(&token).map_err(|e| anyhow::anyhow!("invalid token in env/file: {e}"))?;
     Ok(JarvisClient::with_interceptor(channel, auth))
 }
 

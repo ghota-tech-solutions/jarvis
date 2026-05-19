@@ -1,11 +1,10 @@
 //! gRPC service implementation. M1: Ping, Ask. M2: SubmitTask, GetTask, ListTasks,
 //! CancelTask, StreamEvents. M3: sandbox + worktree per task.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use futures::StreamExt;
-use jarvis_agent::{run_agent, AgentRun, HookSpec};
+use jarvis_agent::{AgentRun, HookSpec, run_agent};
 use jarvis_api::{
-    jarvis_server::{Jarvis, JarvisServer},
     AskChunk, AskRequest, CommitInfo, CommitPhaseRequest, CostReport, DaemonStatus, DiffGroup,
     DiffGroupList, EditMemoryRequest, Empty, Event as ApiEvent, FileDiff, FleetEdge, FleetNode,
     FleetUpdate, ListMemoriesRequest, ListTasksRequest, Memory as ApiMemory, MemoryHandle,
@@ -13,16 +12,17 @@ use jarvis_api::{
     PromoteMemoryRequest, StatusRequest, StreamEventsRequest, Task as ApiTask, TaskHandle,
     TaskList, TaskSpec, TimelineEvent as ApiTimelineEvent, TimelineSnapshot, TimelineSpan,
     UsageStats,
+    jarvis_server::{Jarvis, JarvisServer},
 };
 use jarvis_config::Config;
 use jarvis_core::{
-    AgentId, Capabilities, ChatMessage, ChatRequest, LlmProvider, ProviderName, RequiredCapabilities,
-    RoutingPolicy, TaskId, TaskKind,
+    AgentId, Capabilities, ChatMessage, ChatRequest, LlmProvider, ProviderName,
+    RequiredCapabilities, RoutingPolicy, TaskId, TaskKind,
 };
 use jarvis_ledger::{EventRecord, Ledger, TaskRecord, TaskRuntimeInfo};
 use jarvis_llm::{
-    make_openai_compat_entry, LlmPool, ModelKind, ModelRegistry, OpenAiCompatConfig,
-    OpenAiCompatProvider, QuarantineConfig,
+    LlmPool, ModelKind, ModelRegistry, OpenAiCompatConfig, OpenAiCompatProvider, QuarantineConfig,
+    make_openai_compat_entry,
 };
 use jarvis_mcp::{McpClient, McpServerSpec, McpToolAdapter};
 use jarvis_sandbox::{
@@ -38,24 +38,29 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{mpsc, Mutex};
-use tokio_stream::{wrappers::ReceiverStream, Stream};
+use tokio::sync::{Mutex, mpsc};
+use tokio_stream::{Stream, wrappers::ReceiverStream};
 use tokio_util::sync::CancellationToken;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 use tracing::{error, info, instrument, warn};
 
 pub async fn run(cfg: Config, bind: String) -> Result<()> {
     let registry = build_registry(&cfg)?;
     if registry.is_empty() {
-        return Err(anyhow!("no providers configured — add at least one [providers.local.*]"));
+        return Err(anyhow!(
+            "no providers configured — add at least one [providers.local.*]"
+        ));
     }
     info!(models = registry.len(), "model registry built");
 
-    let pool = Arc::new(LlmPool::new(registry, QuarantineConfig {
-        threshold: cfg.routing.quarantine_after_failures,
-        window: chrono::Duration::minutes(cfg.routing.quarantine_window_minutes as i64),
-        duration: chrono::Duration::minutes(cfg.routing.quarantine_duration_minutes as i64),
-    }));
+    let pool = Arc::new(LlmPool::new(
+        registry,
+        QuarantineConfig {
+            threshold: cfg.routing.quarantine_after_failures,
+            window: chrono::Duration::minutes(cfg.routing.quarantine_window_minutes as i64),
+            duration: chrono::Duration::minutes(cfg.routing.quarantine_duration_minutes as i64),
+        },
+    ));
     // Boot probe in the background — don't block daemon startup.
     {
         let pool = pool.clone();
@@ -73,7 +78,9 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
     let native: Arc<dyn Sandbox> = Arc::new(NativeSandbox);
     let docker = build_docker_sandbox(&cfg.sandbox).await;
     if docker.is_none() && cfg.sandbox.default_backend == "docker" {
-        warn!("config requests docker backend but daemon could not connect — tasks will fall back to native");
+        warn!(
+            "config requests docker backend but daemon could not connect — tasks will fall back to native"
+        );
     }
 
     let worktrees = Arc::new(WorktreeManager::new(cfg.daemon.data_dir.join("worktrees")));
@@ -144,8 +151,7 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
             }
         }
     };
-    let auth_interceptor =
-        jarvis_api::auth::ServerAuth::new(auth_token, cfg.daemon.disable_auth);
+    let auth_interceptor = jarvis_api::auth::ServerAuth::new(auth_token, cfg.daemon.disable_auth);
 
     // The same port speaks two protocols:
     //   - binary gRPC over HTTP/2 (for TUI/CLI tonic clients)
@@ -379,10 +385,12 @@ impl JarvisService {
     fn parse_routing(&self, raw: &str) -> Result<RoutingPolicy, Status> {
         let raw = raw.trim();
         if raw.is_empty() {
-            return Ok(parse_routing_str(&self.cfg.routing.default_policy)
-                .unwrap_or(RoutingPolicy::Auto));
+            return Ok(
+                parse_routing_str(&self.cfg.routing.default_policy).unwrap_or(RoutingPolicy::Auto)
+            );
         }
-        parse_routing_str(raw).ok_or_else(|| Status::invalid_argument(format!("invalid routing: {raw}")))
+        parse_routing_str(raw)
+            .ok_or_else(|| Status::invalid_argument(format!("invalid routing: {raw}")))
     }
 
     #[allow(clippy::result_large_err)]
@@ -450,7 +458,10 @@ impl Jarvis for JarvisService {
     // ---------- M1 ----------
 
     #[instrument(skip_all)]
-    async fn ping(&self, _req: Request<PingRequest>) -> std::result::Result<Response<PingResponse>, Status> {
+    async fn ping(
+        &self,
+        _req: Request<PingRequest>,
+    ) -> std::result::Result<Response<PingResponse>, Status> {
         Ok(Response::new(PingResponse {
             version: env!("CARGO_PKG_VERSION").to_string(),
             uptime_seconds: self.started.elapsed().as_secs() as i64,
@@ -543,12 +554,18 @@ impl Jarvis for JarvisService {
         let sandbox_pref = if !spec.sandbox.is_empty() {
             spec.sandbox.clone()
         } else {
-            parent_record.as_ref().map(|p| p.sandbox.clone()).unwrap_or_default()
+            parent_record
+                .as_ref()
+                .map(|p| p.sandbox.clone())
+                .unwrap_or_default()
         };
         let net_pref = if !spec.net_policy.is_empty() {
             spec.net_policy.clone()
         } else {
-            parent_record.as_ref().map(|p| p.net_policy.clone()).unwrap_or_default()
+            parent_record
+                .as_ref()
+                .map(|p| p.net_policy.clone())
+                .unwrap_or_default()
         };
 
         // Pick sandbox + net policy (fail fast on bad inputs).
@@ -573,10 +590,8 @@ impl Jarvis for JarvisService {
             } else {
                 Some(spec.base_ref.clone())
             };
-            match tokio::task::spawn_blocking(move || {
-                mgr.create(task_id, &source, base.as_deref())
-            })
-            .await
+            match tokio::task::spawn_blocking(move || mgr.create(task_id, &source, base.as_deref()))
+                .await
             {
                 Ok(Ok(wt)) => wt,
                 Ok(Err(e)) => {
@@ -630,16 +645,15 @@ impl Jarvis for JarvisService {
         let routing = self.parse_routing(&spec.routing_policy)?;
         let required = parse_required_caps(&spec.require_caps);
 
-        let sandbox_mode = self
-            .cfg
-            .sandbox
-            .default_mode
-            .parse()
-            .unwrap_or_default();
+        let sandbox_mode = self.cfg.sandbox.default_mode.parse().unwrap_or_default();
         let run = AgentRun {
             task_id: task.id,
             workdir: worktree.path.clone(),
-            max_steps: if spec.max_steps == 0 { 20 } else { spec.max_steps },
+            max_steps: if spec.max_steps == 0 {
+                20
+            } else {
+                spec.max_steps
+            },
             agent_id: AgentId::new(),
             cancel,
             routing,
@@ -674,7 +688,9 @@ impl Jarvis for JarvisService {
             }
         });
 
-        Ok(Response::new(TaskHandle { id: task.id.to_string() }))
+        Ok(Response::new(TaskHandle {
+            id: task.id.to_string(),
+        }))
     }
 
     #[instrument(skip_all)]
@@ -713,12 +729,7 @@ impl Jarvis for JarvisService {
         req: Request<TaskHandle>,
     ) -> std::result::Result<Response<jarvis_api::Empty>, Status> {
         let id = parse_task_id(&req.into_inner().id)?;
-        let maybe = self
-            .running
-            .lock()
-            .await
-            .get(&id)
-            .map(|h| h.cancel.clone());
+        let maybe = self.running.lock().await.get(&id).map(|h| h.cancel.clone());
         match maybe {
             Some(tok) => {
                 tok.cancel();
@@ -856,8 +867,7 @@ impl Jarvis for JarvisService {
             let _ = send_fleet_snapshot(&ledger, &tx).await;
             // Re-snapshot when something changes, but cap the rate at 4 Hz so
             // a flood of llm_chunk events doesn't melt the client.
-            let mut last_send = std::time::Instant::now()
-                - std::time::Duration::from_millis(250);
+            let mut last_send = std::time::Instant::now() - std::time::Duration::from_millis(250);
             loop {
                 match live.recv().await {
                     Ok(_rec) => {
@@ -918,10 +928,11 @@ impl Jarvis for JarvisService {
             }
         }
 
-        let (total_in, total_out, total_usd) = by_model.values().fold(
-            (0u64, 0u64, 0.0_f64),
-            |(ai, ao, ac), s| (ai + s.tokens_in, ao + s.tokens_out, ac + s.cost_usd),
-        );
+        let (total_in, total_out, total_usd) = by_model
+            .values()
+            .fold((0u64, 0u64, 0.0_f64), |(ai, ao, ac), s| {
+                (ai + s.tokens_in, ao + s.tokens_out, ac + s.cost_usd)
+            });
 
         Ok(Response::new(CostReport {
             task_id: task_id_str,
@@ -1111,8 +1122,7 @@ impl Jarvis for JarvisService {
             std::path::PathBuf::from(&task.workdir)
         };
         let paths: Vec<String> = group.files.iter().map(|f| f.path.clone()).collect();
-        revert_paths(&workdir, &paths)
-            .map_err(|e| Status::internal(format!("git: {e}")))?;
+        revert_paths(&workdir, &paths).map_err(|e| Status::internal(format!("git: {e}")))?;
         Ok(Response::new(Empty {}))
     }
 
@@ -1123,25 +1133,27 @@ impl Jarvis for JarvisService {
         use jarvis_ledger::{MemoryScope, MemoryStatus};
         use std::str::FromStr;
         let req = request.into_inner();
-        let scope = if req.scope.is_empty() {
-            None
-        } else {
-            Some(MemoryScope::from_str(&req.scope).map_err(|_| {
-                Status::invalid_argument(format!("invalid scope: {}", req.scope))
-            })?)
-        };
+        let scope =
+            if req.scope.is_empty() {
+                None
+            } else {
+                Some(MemoryScope::from_str(&req.scope).map_err(|_| {
+                    Status::invalid_argument(format!("invalid scope: {}", req.scope))
+                })?)
+            };
         let scope_value = if req.scope_value.is_empty() {
             None
         } else {
             Some(req.scope_value.as_str())
         };
-        let status = if req.status.is_empty() {
-            None
-        } else {
-            Some(MemoryStatus::from_str(&req.status).map_err(|_| {
-                Status::invalid_argument(format!("invalid status: {}", req.status))
-            })?)
-        };
+        let status =
+            if req.status.is_empty() {
+                None
+            } else {
+                Some(MemoryStatus::from_str(&req.status).map_err(|_| {
+                    Status::invalid_argument(format!("invalid status: {}", req.status))
+                })?)
+            };
         let records = self
             .ledger
             .list_memories(scope, scope_value, status, req.limit)
@@ -1269,7 +1281,11 @@ fn pair_timeline_spans(events: &[EventRecord]) -> Vec<TimelineSpan> {
                 }
                 let (tool, args_summary) = parse_tool_call_payload(&opener.payload);
                 let label = format_tool_label(&tool, &args_summary);
-                let lane = if tool == "update_plan" { "plan" } else { "tools" };
+                let lane = if tool == "update_plan" {
+                    "plan"
+                } else {
+                    "tools"
+                };
                 match matched {
                     Some(closer) => {
                         let outcome = if matches!(closer.kind, EventKind::Error)
@@ -1318,8 +1334,7 @@ fn pair_timeline_spans(events: &[EventRecord]) -> Vec<TimelineSpan> {
                 let label = format!("step {step}");
                 match matched {
                     Some(closer) => {
-                        let outcome = match closer.payload.get("verdict").and_then(|v| v.as_str())
-                        {
+                        let outcome = match closer.payload.get("verdict").and_then(|v| v.as_str()) {
                             Some("pass") | Some("done") => "ok",
                             Some("fail") => "error",
                             _ => "ok",
@@ -1418,7 +1433,7 @@ async fn send_fleet_snapshot(
             goal: t.goal.clone(),
             workdir: t.workdir.clone(),
             sandbox: t.sandbox.clone(),
-            tokens_in: 0,           // populated by M7.S5 metering
+            tokens_in: 0, // populated by M7.S5 metering
             tokens_out: 0,
             estimated_cost_usd: 0.0,
             created_at_micros: t.created_at,
@@ -1558,9 +1573,9 @@ fn commit_paths(
     index.write()?;
     let tree_oid = index.write_tree()?;
     let tree = repo.find_tree(tree_oid)?;
-    let sig = repo.signature().or_else(|_| {
-        git2::Signature::now("jarvis", "jarvis@localhost")
-    })?;
+    let sig = repo
+        .signature()
+        .or_else(|_| git2::Signature::now("jarvis", "jarvis@localhost"))?;
     let message = if body.trim().is_empty() || body.trim() == subject.trim() {
         subject.to_string()
     } else {
@@ -1609,10 +1624,7 @@ fn revert_paths(workdir: &std::path::Path, paths: &[String]) -> anyhow::Result<(
 }
 
 fn tool_result_has_error(payload: &serde_json::Value) -> bool {
-    payload
-        .get("error")
-        .map(|v| !v.is_null())
-        .unwrap_or(false)
+    payload.get("error").map(|v| !v.is_null()).unwrap_or(false)
         || payload
             .get("exit_code")
             .and_then(|v| v.as_i64())
@@ -1781,14 +1793,7 @@ mod tests {
     fn pair_spans_attempt_to_verdict() {
         let task = TaskId(Uuid::new_v4());
         let events = vec![
-            make_event(
-                1,
-                100,
-                task,
-                EventKind::Attempt,
-                json!({"step": 3}),
-                None,
-            ),
+            make_event(1, 100, task, EventKind::Attempt, json!({"step": 3}), None),
             make_event(
                 2,
                 200,

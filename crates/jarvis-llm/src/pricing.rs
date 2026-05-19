@@ -38,7 +38,7 @@ pub fn rates(registry: &ModelRegistry, model: &ProviderName) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{make_openai_compat_entry, ModelKind, ModelRegistry};
+    use crate::{ModelKind, ModelRegistry, make_openai_compat_entry};
     use jarvis_core::Capabilities;
 
     #[test]

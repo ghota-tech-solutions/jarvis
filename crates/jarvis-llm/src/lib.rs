@@ -9,4 +9,4 @@ mod registry;
 pub use openai_compat::{OpenAiCompatConfig, OpenAiCompatProvider};
 pub use pool::{LlmPool, ModelStatus, PickRequest, PickedModel, PoolError, QuarantineConfig};
 pub use pricing::{estimate_usd, rates};
-pub use registry::{make_openai_compat_entry, ModelEntry, ModelKind, ModelRegistry};
+pub use registry::{ModelEntry, ModelKind, ModelRegistry, make_openai_compat_entry};

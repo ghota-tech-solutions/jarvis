@@ -3,16 +3,16 @@
 //! The TUI keeps a small in-memory mirror of (a) the daemon's task list, refreshed
 //! by polling, and (b) the live event stream for the currently-selected task.
 
-use crate::theme::{Theme, DARK_DEFAULT};
+use crate::theme::{DARK_DEFAULT, Theme};
 use jarvis_api::{
-    auth::{discover_token, ClientAuth},
-    jarvis_client::JarvisClient,
     Event, ModelStatus, Task,
+    auth::{ClientAuth, discover_token},
+    jarvis_client::JarvisClient,
 };
-use tonic::service::interceptor::InterceptedService;
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tonic::service::interceptor::InterceptedService;
 use tonic::transport::Channel;
 
 pub const EVENTS_BUFFER_CAP: usize = 1000;
@@ -154,8 +154,7 @@ impl App {
         let mut s = AppState::new();
         s.daemon_url = daemon_url;
         let token = discover_token().unwrap_or_default();
-        let auth = ClientAuth::new(&token)
-            .map_err(|e| anyhow::anyhow!("invalid token: {e}"))?;
+        let auth = ClientAuth::new(&token).map_err(|e| anyhow::anyhow!("invalid token: {e}"))?;
         Ok(Self {
             state: Arc::new(Mutex::new(s)),
             client: JarvisClient::with_interceptor(channel, auth),

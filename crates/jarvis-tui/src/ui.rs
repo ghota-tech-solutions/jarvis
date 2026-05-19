@@ -3,13 +3,13 @@
 //! always-visible input bar at the bottom.
 
 use crate::app::{AppState, Focus};
-use crate::theme::{status_color, Theme};
+use crate::theme::{Theme, status_color};
 use jarvis_api::{Event, Task};
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Padding, Paragraph, Wrap};
-use ratatui::Frame;
 use tui_input::Input;
 
 pub fn render(f: &mut Frame, state: &AppState, input: &Input) {
@@ -57,19 +57,27 @@ fn render_agent_badge(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
         .map(|t| t.status.as_str())
         .unwrap_or("idle");
     let line = Line::from(vec![
-        Span::styled(" ■ ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " ■ ",
+            Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(
             "Build",
             Style::default().fg(t.heading).add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!(" · {}", short_model(&active_model.0)), Style::default().fg(t.body)),
+        Span::styled(
+            format!(" · {}", short_model(&active_model.0)),
+            Style::default().fg(t.body),
+        ),
         Span::styled(format!(" · {}", task_label), Style::default().fg(t.dim)),
     ]);
     f.render_widget(Paragraph::new(line), area);
 }
 
 fn short_model(name: &str) -> String {
-    name.split_once(':').map(|(_, n)| n.to_string()).unwrap_or_else(|| name.to_string())
+    name.split_once(':')
+        .map(|(_, n)| n.to_string())
+        .unwrap_or_else(|| name.to_string())
 }
 
 // ---------- Main column: conversation-style events ----------
@@ -83,14 +91,10 @@ fn render_events(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
 
     // Header: current task summary or instructions.
     if let Some(task) = state.selected_task() {
-        lines.push(Line::from(vec![
-            Span::styled(
-                task.goal.clone(),
-                Style::default()
-                    .fg(t.heading)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            task.goal.clone(),
+            Style::default().fg(t.heading).add_modifier(Modifier::BOLD),
+        )]));
         lines.push(Line::from(vec![Span::styled(
             format!(
                 "{}  ·  {}  ·  {}",
@@ -149,7 +153,9 @@ fn push_event_lines(
                     out,
                     &txt,
                     t,
-                    Style::default().fg(t.assistant).add_modifier(Modifier::ITALIC),
+                    Style::default()
+                        .fg(t.assistant)
+                        .add_modifier(Modifier::ITALIC),
                 );
             }
         }
@@ -179,7 +185,11 @@ fn push_event_lines(
             out.push(Line::from(vec![
                 Span::styled(glyph, style),
                 Span::styled(summary, Style::default().fg(t.dim)),
-                Span::raw(if exit.is_empty() { String::new() } else { format!(" ({exit})") }),
+                Span::raw(if exit.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({exit})")
+                }),
             ]));
             // If fs_write, append diff lines (collapsed or expanded).
             if let Some(diff) = diff_payload(&ev.payload_json) {
@@ -266,7 +276,11 @@ fn render_sidebar(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
     section(&mut lines, "All tasks", t);
     if state.tasks.is_empty() {
         lines.push(Line::from(vec![Span::styled(
-            if state.show_all { "no tasks yet" } else { "no active tasks" },
+            if state.show_all {
+                "no tasks yet"
+            } else {
+                "no active tasks"
+            },
             Style::default().fg(t.dim),
         )]));
     } else {
@@ -274,7 +288,10 @@ fn render_sidebar(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
             let cursor = if i == state.selected { "▸ " } else { "  " };
             lines.push(Line::from(vec![
                 Span::styled(cursor, Style::default().fg(t.focus)),
-                Span::styled(format!("{} ", short_id(&task.id)), Style::default().fg(t.dim)),
+                Span::styled(
+                    format!("{} ", short_id(&task.id)),
+                    Style::default().fg(t.dim),
+                ),
                 Span::styled(
                     jarvis_core::clip_chars(&task.goal, area.width.saturating_sub(15) as usize),
                     Style::default().fg(status_color(&task.status, t)),
@@ -296,14 +313,8 @@ fn render_sidebar(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
             };
             lines.push(Line::from(vec![
                 Span::styled(format!("{sym} "), Style::default().fg(color)),
-                Span::styled(
-                    short_model_name(&m.name),
-                    Style::default().fg(t.body),
-                ),
-                Span::styled(
-                    format!(" · {}", m.kind),
-                    Style::default().fg(t.dim),
-                ),
+                Span::styled(short_model_name(&m.name), Style::default().fg(t.body)),
+                Span::styled(format!(" · {}", m.kind), Style::default().fg(t.dim)),
             ]));
         }
     }
@@ -327,7 +338,11 @@ fn render_sidebar(f: &mut Frame, area: Rect, state: &AppState, t: &Theme) {
     let conversations = group_tasks_by_root(&state.tasks);
     if conversations.is_empty() {
         lines.push(Line::from(vec![Span::styled(
-            if state.show_all { "no tasks yet" } else { "no active tasks" },
+            if state.show_all {
+                "no tasks yet"
+            } else {
+                "no active tasks"
+            },
             Style::default().fg(t.dim).add_modifier(Modifier::ITALIC),
         )]));
     } else {
@@ -432,7 +447,10 @@ fn section(out: &mut Vec<Line<'static>>, title: &str, t: &Theme) {
 
 fn kv(k: &str, v: &str, color: ratatui::style::Color) -> Line<'static> {
     Line::from(vec![
-        Span::styled(format!("{k:<9}"), Style::default().fg(ratatui::style::Color::Rgb(110, 110, 110))),
+        Span::styled(
+            format!("{k:<9}"),
+            Style::default().fg(ratatui::style::Color::Rgb(110, 110, 110)),
+        ),
         Span::styled(v.to_string(), Style::default().fg(color)),
     ])
 }
@@ -513,12 +531,21 @@ fn render_input(f: &mut Frame, area: Rect, state: &AppState, input: &Input, t: &
 fn render_confirm_modal(f: &mut Frame, state: &AppState, t: &Theme) {
     let area = centered_rect(50, 3, f.area());
     f.render_widget(Clear, area);
-    let id = state.selected_task().map(|t| short_id(&t.id)).unwrap_or_default();
+    let id = state
+        .selected_task()
+        .map(|t| short_id(&t.id))
+        .unwrap_or_default();
     let line = Line::from(vec![
         Span::styled(" Cancel task ", Style::default().fg(t.warn)),
-        Span::styled(id, Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            id,
+            Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
+        ),
         Span::raw("? "),
-        Span::styled("[y]", Style::default().fg(t.error).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "[y]",
+            Style::default().fg(t.error).add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" / "),
         Span::styled("[n]", Style::default().fg(t.good)),
     ]);
@@ -535,7 +562,10 @@ fn render_help_modal(f: &mut Frame, t: &Theme) {
             Style::default().fg(t.heading).add_modifier(Modifier::BOLD),
         )]),
         Line::from(""),
-        Line::from(vec![Span::styled("Navigation (input must be empty)", Style::default().fg(t.accent))]),
+        Line::from(vec![Span::styled(
+            "Navigation (input must be empty)",
+            Style::default().fg(t.accent),
+        )]),
         Line::from("  ↑/↓           previous / next task"),
         Line::from("  PgUp/PgDn     jump 10 tasks"),
         Line::from(""),
@@ -551,7 +581,10 @@ fn render_help_modal(f: &mut Frame, t: &Theme) {
         Line::from("  Esc           clear input  /  quit if empty"),
         Line::from("  Ctrl+C        force quit"),
         Line::from(""),
-        Line::from(vec![Span::styled("Press any key to dismiss.", Style::default().fg(t.dim))]),
+        Line::from(vec![Span::styled(
+            "Press any key to dismiss.",
+            Style::default().fg(t.dim),
+        )]),
     ];
     f.render_widget(Paragraph::new(lines), area);
 }
@@ -594,7 +627,11 @@ fn tool_call_summary(json: &str) -> (String, String) {
         .to_string();
     let args = v.get("args").cloned().unwrap_or(serde_json::Value::Null);
     let args_str = match tool.as_str() {
-        "shell" => args.get("cmd").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+        "shell" => args
+            .get("cmd")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
         "fs_read" | "fs_write" => args
             .get("path")
             .and_then(|s| s.as_str())
@@ -680,18 +717,27 @@ fn push_markdown_lines(out: &mut Vec<Line<'static>>, src: &str, t: &Theme, base:
 
         // Heading: # / ## / ### …
         if let Some(rest) = trimmed.strip_prefix("# ") {
-            out.push(Line::from(parse_inline(rest, t, Style::default()
-                .fg(t.heading).add_modifier(Modifier::BOLD))));
+            out.push(Line::from(parse_inline(
+                rest,
+                t,
+                Style::default().fg(t.heading).add_modifier(Modifier::BOLD),
+            )));
             continue;
         }
         if let Some(rest) = trimmed.strip_prefix("## ") {
-            out.push(Line::from(parse_inline(rest, t, Style::default()
-                .fg(t.heading).add_modifier(Modifier::BOLD))));
+            out.push(Line::from(parse_inline(
+                rest,
+                t,
+                Style::default().fg(t.heading).add_modifier(Modifier::BOLD),
+            )));
             continue;
         }
         if let Some(rest) = trimmed.strip_prefix("### ") {
-            out.push(Line::from(parse_inline(rest, t, Style::default()
-                .fg(t.heading).add_modifier(Modifier::BOLD))));
+            out.push(Line::from(parse_inline(
+                rest,
+                t,
+                Style::default().fg(t.heading).add_modifier(Modifier::BOLD),
+            )));
             continue;
         }
 
@@ -700,7 +746,10 @@ fn push_markdown_lines(out: &mut Vec<Line<'static>>, src: &str, t: &Theme, base:
             .strip_prefix("- ")
             .or_else(|| trimmed.strip_prefix("* "))
         {
-            let mut spans = vec![Span::styled("  • ".to_string(), Style::default().fg(t.accent))];
+            let mut spans = vec![Span::styled(
+                "  • ".to_string(),
+                Style::default().fg(t.accent),
+            )];
             spans.extend(parse_inline(rest, t, base));
             out.push(Line::from(spans));
             continue;
@@ -844,7 +893,10 @@ fn diff_payload(json: &str) -> Option<DiffPayload> {
     let path = data.get("path")?.as_str()?.to_string();
     let lines_added = data.get("lines_added")?.as_u64()?;
     let lines_removed = data.get("lines_removed")?.as_u64()?;
-    let is_new = data.get("is_new").and_then(|v| v.as_bool()).unwrap_or(false);
+    let is_new = data
+        .get("is_new")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let unified = data
         .get("diff_unified")
         .and_then(|v| v.as_str())
@@ -864,12 +916,7 @@ fn diff_payload(json: &str) -> Option<DiffPayload> {
     })
 }
 
-fn push_diff_lines(
-    out: &mut Vec<Line<'static>>,
-    diff: &DiffPayload,
-    t: &Theme,
-    expanded: bool,
-) {
+fn push_diff_lines(out: &mut Vec<Line<'static>>, diff: &DiffPayload, t: &Theme, expanded: bool) {
     // Header chip: edit/new badge + path + +N/-M counts.
     let badge = if diff.is_new { "new" } else { "edit" };
     let badge_style = if diff.is_new {
@@ -887,9 +934,15 @@ fn push_diff_lines(
         Span::styled(format!("⌗ {badge} "), badge_style),
         Span::styled(path, Style::default().fg(t.body)),
         Span::raw("  "),
-        Span::styled(format!("+{}", diff.lines_added), Style::default().fg(t.good)),
+        Span::styled(
+            format!("+{}", diff.lines_added),
+            Style::default().fg(t.good),
+        ),
         Span::raw(" "),
-        Span::styled(format!("-{}", diff.lines_removed), Style::default().fg(t.error)),
+        Span::styled(
+            format!("-{}", diff.lines_removed),
+            Style::default().fg(t.error),
+        ),
         Span::styled(hint.to_string(), Style::default().fg(t.fade)),
     ]));
     if !expanded {
@@ -927,7 +980,9 @@ fn step_of(json: &str) -> Option<i64> {
     v.get("step")?.as_i64()
 }
 
-fn counters_for(events: &std::collections::VecDeque<Event>) -> (String, usize, Vec<(String, usize)>) {
+fn counters_for(
+    events: &std::collections::VecDeque<Event>,
+) -> (String, usize, Vec<(String, usize)>) {
     use std::collections::HashMap;
     let mut step = 0i64;
     let mut counts: HashMap<String, usize> = HashMap::new();
@@ -954,9 +1009,10 @@ fn short_id(id: &str) -> String {
 
 /// "local:gemma" → "gemma"; "remote:deepseek_pro" → "deepseek_pro".
 fn short_model_name(name: &str) -> String {
-    name.split_once(':').map(|(_, n)| n.to_string()).unwrap_or_else(|| name.to_string())
+    name.split_once(':')
+        .map(|(_, n)| n.to_string())
+        .unwrap_or_else(|| name.to_string())
 }
-
 
 #[allow(dead_code)]
 fn _silence_task_warning(_t: &Task) {}

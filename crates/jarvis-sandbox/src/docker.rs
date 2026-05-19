@@ -6,7 +6,10 @@
 use crate::spec::{NetPolicy, Sandbox, SandboxError, SandboxKind, SandboxOutput, SandboxSpec};
 use async_trait::async_trait;
 use bollard::Docker;
-use bollard::container::{Config, CreateContainerOptions, LogOutput, LogsOptions, RemoveContainerOptions, StartContainerOptions, WaitContainerOptions};
+use bollard::container::{
+    Config, CreateContainerOptions, LogOutput, LogsOptions, RemoveContainerOptions,
+    StartContainerOptions, WaitContainerOptions,
+};
 use bollard::models::{HostConfig, Mount, MountTypeEnum};
 use futures_util::StreamExt;
 use std::collections::HashMap;
@@ -24,8 +27,8 @@ pub struct DockerSandbox {
 #[derive(Debug, Clone)]
 pub struct DockerConfig {
     pub image: String,
-    pub memory: Option<String>,   // "2g", "512m"
-    pub cpus: Option<f64>,        // 1.5 = 150% of one CPU
+    pub memory: Option<String>, // "2g", "512m"
+    pub cpus: Option<f64>,      // 1.5 = 150% of one CPU
 }
 
 impl Default for DockerConfig {
@@ -109,22 +112,14 @@ impl Sandbox for DockerSandbox {
             network_mode: net_mode,
             memory: self.memory_bytes,
             nano_cpus: self.cpus.map(|c| (c * 1_000_000_000.0) as i64),
-            auto_remove: Some(false),  // we remove explicitly to avoid race with logs collection
+            auto_remove: Some(false), // we remove explicitly to avoid race with logs collection
             ..Default::default()
         };
 
-        let env_strs: Vec<String> = spec
-            .env
-            .iter()
-            .map(|(k, v)| format!("{k}={v}"))
-            .collect();
+        let env_strs: Vec<String> = spec.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
 
         // Encode the user command via `sh -c "<cmd>"`. Most images ship sh.
-        let cmd_vec = vec![
-            "sh".to_string(),
-            "-c".to_string(),
-            spec.cmd.clone(),
-        ];
+        let cmd_vec = vec!["sh".to_string(), "-c".to_string(), spec.cmd.clone()];
 
         let mut labels = HashMap::new();
         labels.insert("jarvis.task".to_string(), "1".to_string());

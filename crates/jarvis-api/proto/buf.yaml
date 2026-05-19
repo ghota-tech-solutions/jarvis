@@ -1,0 +1,12 @@
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  except:
+    # Generated message names already follow conventions; suppress noise.
+    - PACKAGE_VERSION_SUFFIX
+breaking:
+  use:
+    - FILE

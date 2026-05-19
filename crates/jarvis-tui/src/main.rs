@@ -16,7 +16,11 @@ use app::App;
 #[command(name = "jarvis-tui", version, about = "Jarvis terminal UI")]
 struct Cli {
     /// Daemon endpoint.
-    #[arg(long, env = "JARVIS_DAEMON_URL", default_value = "http://127.0.0.1:7777")]
+    #[arg(
+        long,
+        env = "JARVIS_DAEMON_URL",
+        default_value = "http://127.0.0.1:7777"
+    )]
     daemon: String,
 
     /// Connect timeout in seconds.
@@ -54,7 +58,9 @@ fn init_file_tracing() {
     let path = std::env::var("JARVIS_TUI_LOG").unwrap_or_else(|_| "jarvis-tui.log".to_string());
     if let Ok(file) = std::fs::File::create(&path) {
         let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")))
+            .with_env_filter(
+                EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
+            )
             .with_writer(std::sync::Mutex::new(file))
             .with_ansi(false)
             .try_init();

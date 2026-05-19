@@ -7,7 +7,11 @@ use tracing_subscriber::EnvFilter;
 mod service;
 
 #[derive(Debug, Parser)]
-#[command(name = "jarvis-daemon", version, about = "Jarvis daemon — long-running gRPC server")]
+#[command(
+    name = "jarvis-daemon",
+    version,
+    about = "Jarvis daemon — long-running gRPC server"
+)]
 struct Cli {
     /// Path to jarvis.toml; defaults to ./jarvis.toml if present.
     #[arg(short, long, env = "JARVIS_CONFIG")]
@@ -33,8 +37,7 @@ async fn main() -> Result<()> {
     init_tracing();
 
     let cli = Cli::parse();
-    let cfg = jarvis_config::load(cli.config.as_deref())
-        .context("load config")?;
+    let cfg = jarvis_config::load(cli.config.as_deref()).context("load config")?;
 
     match cli.cmd {
         Cmd::Run { addr } => {

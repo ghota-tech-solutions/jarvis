@@ -3,8 +3,8 @@
 //! Precedence (lowest → highest): defaults → `jarvis.toml` → `.env` → process env.
 //! Env-var interpolation in TOML values (`"${NAME}"`) is resolved against the merged env.
 
-use figment::providers::{Env, Format, Toml};
 use figment::Figment;
+use figment::providers::{Env, Format, Toml};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -297,7 +297,9 @@ pub fn load(path: Option<&Path>) -> Result<Config, ConfigError> {
     // Best-effort .env — never fatal.
     let _ = dotenvy::dotenv();
 
-    let toml_path = path.map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("jarvis.toml"));
+    let toml_path = path
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("jarvis.toml"));
 
     let mut fig = Figment::new();
 
@@ -308,8 +310,8 @@ pub fn load(path: Option<&Path>) -> Result<Config, ConfigError> {
     // Layer 2: jarvis.toml (interpolated). Optional.
     if toml_path.exists() {
         let raw = std::fs::read_to_string(&toml_path)?;
-        let interpolated = interpolate_env(&raw)
-            .map_err(|e| ConfigError::Interpolation(e.to_string()))?;
+        let interpolated =
+            interpolate_env(&raw).map_err(|e| ConfigError::Interpolation(e.to_string()))?;
         fig = fig.merge(Toml::string(&interpolated));
     }
 
