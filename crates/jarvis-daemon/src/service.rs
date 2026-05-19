@@ -295,6 +295,10 @@ async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerSt
     r.register(GrepTool);
     r.register(GlobTool);
     r.register(UpdatePlanTool);
+    // M11.S2: web search — registered unconditionally; the tool fails fast
+    // with a clear error if neither BRAVE_API_KEY nor TAVILY_API_KEY is set,
+    // so the agent learns immediately to skip it instead of mid-task.
+    r.register(jarvis_tools::WebSearchTool);
 
     let mut statuses: Vec<McpServerStatus> = Vec::new();
     for (name, spec) in &cfg.mcp.servers {

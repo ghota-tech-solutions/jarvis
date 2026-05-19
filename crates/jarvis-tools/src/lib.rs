@@ -8,8 +8,10 @@ mod registry;
 mod search;
 mod tool;
 mod tools;
+mod web_search;
 
 pub use registry::ToolRegistry;
 pub use search::{GlobTool, GrepTool};
 pub use tool::{Tool, ToolCtx, ToolError, ToolOutput, ToolSchema};
 pub use tools::{ApplyPatchTool, FsReadTool, FsWriteTool, ShellTool, UpdatePlanTool};
+pub use web_search::WebSearchTool;
