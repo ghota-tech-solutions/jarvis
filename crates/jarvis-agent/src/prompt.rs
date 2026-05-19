@@ -238,6 +238,7 @@ pub fn build_messages(
     history: &[EventRecord],
     memories: &[jarvis_ledger::MemoryRecord],
     dialect: ToolDialect,
+    ancestor_goals: &[String],
 ) -> Vec<ChatMessage> {
     let mut msgs = Vec::with_capacity(history.len() + 7);
     msgs.push(ChatMessage {
@@ -280,9 +281,25 @@ pub fn build_messages(
         });
     }
 
+    // § C follow-up fix — when the task is a follow-up (ancestors_goals
+    // is non-empty), frame the goal explicitly as a continuation. The
+    // model otherwise sees a fresh "Begin" at the TOP of the user turn,
+    // followed by prior decisions/observations BELOW, and gets confused
+    // about what the new goal refers to.
+    let user_turn = if ancestor_goals.is_empty() {
+        format!("Goal: {goal}\nWorkdir: {workdir}\n\nBegin.")
+    } else {
+        let mut prior = String::new();
+        for (i, g) in ancestor_goals.iter().enumerate() {
+            prior.push_str(&format!("  {}. {}\n", i + 1, g));
+        }
+        format!(
+            "Goal: {goal}\nWorkdir: {workdir}\n\nThis is a follow-up turn in a multi-step conversation. Prior turn goals (oldest → newest):\n{prior}\nThe ASSISTANT and USER messages that follow are the recorded conversation history (decisions and tool observations from those prior turns). The goal stated above is the user's NEW request — interpret it as a continuation of that conversation, not as a fresh task. If it would be ambiguous on its own (e.g. \"a Lyon\" after a weather question), resolve the ambiguity using the prior turns.\n\nBegin."
+        )
+    };
     msgs.push(ChatMessage {
         role: ChatRole::User,
-        content: format!("Goal: {goal}\nWorkdir: {workdir}\n\nBegin."),
+        content: user_turn,
     });
 
     for ev in history {

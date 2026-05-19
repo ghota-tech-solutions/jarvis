@@ -138,9 +138,46 @@ pub async fn run_agent(
         }
 
         // 1) Pull recent context from the ledger. We use the relevant-only
-        //    query so 80 here means 80 agent moves (decisions/tool results),
+        //    filter so 80 here means 80 agent moves (decisions/tool results),
         //    not 80 raw rows that would be flooded by streaming chunks.
-        let history = ledger.recent_relevant_events(run.task_id, 80).await?;
+        //
+        //    § C follow-up fix: when the task has a parent (the SPA's
+        //    "Ask for a follow-up" form sets `parent_task_id`), walk the
+        //    ancestor chain and merge their relevant events into the
+        //    history. Otherwise a follow-up like "a Lyon ?" lands in the
+        //    agent prompt with no context — it sees a fresh conversation
+        //    instead of the prior weather goal it's refining.
+        let ancestors = ledger.walk_ancestors(run.task_id).await?;
+        let history = if ancestors.len() <= 1 {
+            ledger.recent_relevant_events(run.task_id, 80).await?
+        } else {
+            let chain_ids: Vec<jarvis_core::TaskId> =
+                ancestors.iter().map(|t| t.id).collect();
+            // Pull a larger raw window (oldest → newest by event id),
+            // filter to relevant kinds, then keep the most-recent 80
+            // globally. Ledger ids are monotonic → most-recent-80-by-id
+            // gives us the right tail across the entire chain.
+            let mut events = ledger
+                .query_events_multi(&chain_ids, 0, 400)
+                .await?
+                .into_iter()
+                .filter(|e| {
+                    matches!(
+                        e.kind,
+                        EventKind::Decision
+                            | EventKind::ToolResult
+                            | EventKind::Error
+                            | EventKind::Continuation
+                            | EventKind::Verdict
+                    )
+                })
+                .collect::<Vec<_>>();
+            if events.len() > 80 {
+                let drop = events.len() - 80;
+                events.drain(..drop);
+            }
+            events
+        };
         // M9: pull active memories for this workdir + globals. Surface as a
         // dedicated system message inside build_messages. Best-effort — if
         // the ledger errors we still proceed with an empty list.
@@ -191,6 +228,19 @@ pub async fn run_agent(
             // route to a model with a different dialect; we want the system
             // prompt to match. History/memories are cheap to re-render — the
             // expensive bits (tool catalog) are static per task.
+            // § C follow-up — only count ancestors EXCEPT the leaf (which
+            // is the current task itself). When the chain has just one
+            // entry, this collapses to an empty slice and build_messages
+            // falls back to the standard fresh-task framing.
+            let ancestor_goals: Vec<String> = if ancestors.len() > 1 {
+                ancestors
+                    .iter()
+                    .take(ancestors.len() - 1)
+                    .map(|t| t.goal.clone())
+                    .collect()
+            } else {
+                Vec::new()
+            };
             let messages = prompt::build_messages(
                 &task.goal,
                 &task.workdir,
@@ -198,6 +248,7 @@ pub async fn run_agent(
                 &history,
                 &memories,
                 picked.tool_dialect,
+                &ancestor_goals,
             );
             log_event(
                 &ledger,
