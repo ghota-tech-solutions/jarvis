@@ -990,6 +990,7 @@ impl Jarvis for JarvisService {
         _request: Request<Empty>,
     ) -> std::result::Result<Response<Self::StreamFleetStream>, Status> {
         let ledger = self.ledger.clone();
+        let pool = self.pool.clone();
         let (tx, rx) = mpsc::channel::<std::result::Result<FleetUpdate, Status>>(8);
         let mut live = ledger.subscribe();
 
@@ -997,7 +998,7 @@ impl Jarvis for JarvisService {
         // broadcasts a new event we resend a fresh snapshot. SQLite reads are
         // cheap; for now we don't bother with delta updates.
         tokio::spawn(async move {
-            let _ = send_fleet_snapshot(&ledger, &tx).await;
+            let _ = send_fleet_snapshot(&ledger, &pool, &tx).await;
             // Re-snapshot when something changes, but cap the rate at 4 Hz so
             // a flood of llm_chunk events doesn't melt the client.
             let mut last_send = std::time::Instant::now() - std::time::Duration::from_millis(250);
@@ -1008,7 +1009,7 @@ impl Jarvis for JarvisService {
                             continue;
                         }
                         last_send = std::time::Instant::now();
-                        if send_fleet_snapshot(&ledger, &tx).await.is_err() {
+                        if send_fleet_snapshot(&ledger, &pool, &tx).await.is_err() {
                             return;
                         }
                     }
@@ -1670,6 +1671,7 @@ fn format_tool_label(tool: &str, args: &str) -> String {
 /// when the channel is closed so the caller can break its loop.
 async fn send_fleet_snapshot(
     ledger: &Ledger,
+    pool: &Arc<LlmPool>,
     tx: &mpsc::Sender<std::result::Result<FleetUpdate, Status>>,
 ) -> std::result::Result<(), ()> {
     let tasks = match ledger.list_tasks(true, 500).await {
@@ -1682,6 +1684,7 @@ async fn send_fleet_snapshot(
     let mut edges = Vec::new();
     let mut nodes = Vec::with_capacity(tasks.len());
     let now = chrono::Utc::now().timestamp_micros();
+    let registry = pool.registry();
     for t in &tasks {
         if let Some(parent) = t.parent {
             edges.push(FleetEdge {
@@ -1693,6 +1696,10 @@ async fn send_fleet_snapshot(
         // state. A future refinement will look at recent verdict/continuation
         // events explicitly.
         let needs_attention = t.status == jarvis_ledger::TaskStatus::Failed;
+        // M11.S5: roll up token + cost from per-task events. Cheap because
+        // we already have the ledger query path; we sum only the events
+        // whose payload carries a `usage` block.
+        let (tokens_in, tokens_out, cost_usd) = sum_task_usage(ledger, registry, t.id).await;
         nodes.push(FleetNode {
             task_id: t.id.to_string(),
             short_id: t.id.to_string().chars().take(8).collect(),
@@ -1700,9 +1707,9 @@ async fn send_fleet_snapshot(
             goal: t.goal.clone(),
             workdir: t.workdir.clone(),
             sandbox: t.sandbox.clone(),
-            tokens_in: 0, // populated by M7.S5 metering
-            tokens_out: 0,
-            estimated_cost_usd: 0.0,
+            tokens_in,
+            tokens_out,
+            estimated_cost_usd: cost_usd,
             created_at_micros: t.created_at,
             updated_at_micros: t.completed_at.unwrap_or(t.created_at),
             needs_attention,
@@ -1717,6 +1724,35 @@ async fn send_fleet_snapshot(
         return Err(());
     }
     Ok(())
+}
+
+/// Sum `(tokens_in, tokens_out, cost_usd)` for a single task by walking its
+/// events through `extract_usage`. Errors return zeros (best-effort).
+async fn sum_task_usage(
+    ledger: &Ledger,
+    registry: &jarvis_llm::ModelRegistry,
+    task_id: jarvis_core::TaskId,
+) -> (u64, u64, f64) {
+    let events = match ledger.query_events(Some(task_id), 0, 0).await {
+        Ok(e) => e,
+        Err(_) => return (0, 0, 0.0),
+    };
+    let mut total_in = 0u64;
+    let mut total_out = 0u64;
+    let mut total_cost = 0.0_f64;
+    for e in &events {
+        let (model, in_t, out_t) = extract_usage(&e.payload);
+        if in_t == 0 && out_t == 0 {
+            continue;
+        }
+        total_in += in_t;
+        total_out += out_t;
+        if let Some(m) = model {
+            let p = ProviderName::new(m);
+            total_cost += jarvis_llm::estimate_usd(registry, &p, in_t, out_t);
+        }
+    }
+    (total_in, total_out, total_cost)
 }
 
 /// Pull `(model_name, tokens_in, tokens_out)` out of an event payload if the

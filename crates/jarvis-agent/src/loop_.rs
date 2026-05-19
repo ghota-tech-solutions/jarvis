@@ -226,11 +226,18 @@ pub async fn run_agent(
             let mut text = String::new();
             let mut chunk_buffer = String::new();
             let mut chunk_seq: u32 = 0;
+            // M11.S5: capture the usage tally from the stream's final chunk
+            // so we can attribute tokens + cost to this task. OpenAI-compat
+            // providers send usage in the very last chunk (empty delta).
+            let mut final_usage: Option<jarvis_core::Usage> = None;
             const CHUNK_FLUSH_BYTES: usize = 80;
             let mut stream_failed = false;
             while let Some(item) = stream.next().await {
                 match item {
                     Ok(c) => {
+                        if c.usage.is_some() {
+                            final_usage = c.usage.clone();
+                        }
                         if !c.delta.is_empty() {
                             text.push_str(&c.delta);
                             chunk_buffer.push_str(&c.delta);
@@ -281,6 +288,29 @@ pub async fn run_agent(
                 continue;
             }
             pool.record_success(&picked.name).await;
+            // M11.S5: emit a dedicated `Observation` carrying the per-turn
+            // usage so the daemon's fleet aggregator + cost RPCs can roll
+            // it up without re-tokenizing the transcript. Payload nests
+            // tokens under `usage` so the existing extract_usage helper
+            // (service.rs) picks it up unchanged.
+            if let Some(u) = final_usage.as_ref() {
+                log_event(
+                    &ledger,
+                    &run,
+                    EventKind::Observation,
+                    json!({
+                        "kind": "turn_usage",
+                        "step": step,
+                        "model": picked.name.as_str(),
+                        "model_id": picked.model_id.clone(),
+                        "usage": {
+                            "tokens_in": u.prompt_tokens,
+                            "tokens_out": u.completion_tokens,
+                        },
+                    }),
+                )
+                .await?;
+            }
             break text;
         };
 
