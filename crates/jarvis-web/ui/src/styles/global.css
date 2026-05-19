@@ -659,3 +659,49 @@ kbd {
   display: flex;
   gap: 0.4rem;
 }
+
+/* --- Quick Ask --------------------------------------------------- */
+
+.quick-ask {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.quick-ask-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.quick-ask-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.quick-ask-form .textarea {
+  flex: 1 1 auto;
+  min-height: 50px;
+  resize: vertical;
+}
+
+.quick-ask-answer {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--bg);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 3px 3px 0;
+}
+
+.quick-ask-answer pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--body);
+}

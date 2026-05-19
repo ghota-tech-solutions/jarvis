@@ -4,6 +4,7 @@ import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { taskListQuery, qkTaskList } from '~/lib/api/queries';
 import { jarvis } from '~/lib/api/client';
 import type { Task } from '~/lib/api/gen/jarvis_pb';
+import QuickAsk from '~/components/QuickAsk';
 
 type Conversation = {
   root: Task;
@@ -194,7 +195,9 @@ const Dashboard: Component = () => {
 
   return (
     <section>
-      <header style="margin-bottom: 1rem">
+      <QuickAsk />
+
+      <header style="margin: 1.5rem 0 1rem 0">
         <h2 class="heading" style="margin: 0 0 0.2rem 0">Tasks</h2>
         <p class="dim" style="margin: 0; font-size: 12px">
           {filtered().length} of {conversations().length} conversation(s)
