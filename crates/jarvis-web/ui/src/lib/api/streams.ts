@@ -2,7 +2,7 @@
 // into a Solid signal. The signal value is the latest snapshot; if the
 // stream drops we expose the error and automatically retry after a delay.
 
-import { createSignal, onCleanup, onMount, type Accessor } from 'solid-js';
+import { createEffect, createSignal, on, onCleanup, onMount, type Accessor } from 'solid-js';
 import type { ConnectError } from '@connectrpc/connect';
 import { jarvis } from './client';
 import type { Event, FleetUpdate, TimelineEvent, TimelineSpan } from './gen/jarvis_pb';
@@ -105,77 +105,117 @@ export function useTaskEventStream(taskIdAccessor: Accessor<string>): TaskStream
   const [connected, setConnected] = createSignal(false);
   const [error, setError] = createSignal<ConnectError | Error | null>(null);
 
-  let cancelled = false;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
-  let lastEventId = 0n;
+  // Mutable session state. Each navigation to a new task id starts a
+  // fresh session and the previous one bails out via `cancelled`.
+  type Session = {
+    cancelled: boolean;
+    retryTimer: ReturnType<typeof setTimeout> | null;
+    lastEventId: bigint;
+    id: string;
+  };
+  let session: Session | null = null;
 
-  const appendEvent = (te: TimelineEvent) => {
+  const appendEvent = (sess: Session, te: TimelineEvent) => {
+    if (sess.cancelled || sess !== session) return;
     // Guard against out-of-order or duplicate ids during reconnect.
-    if (te.id <= lastEventId) return;
-    lastEventId = te.id;
+    if (te.id <= sess.lastEventId) return;
+    sess.lastEventId = te.id;
     setEvents((prev) => [...prev, te]);
     if (te.tsMicros > maxTsMicros()) setMaxTsMicros(te.tsMicros);
     if (minTsMicros() === 0n) setMinTsMicros(te.tsMicros);
   };
 
-  const run = async () => {
-    const id = taskIdAccessor();
-    if (!id) return;
+  const run = async (sess: Session) => {
+    if (!sess.id) return;
 
     // 1) Initial snapshot — backfills events + spans + bounds.
     try {
-      const snap = await jarvis.getTimeline({ id });
-      if (cancelled) return;
+      const snap = await jarvis.getTimeline({ id: sess.id });
+      if (sess.cancelled || sess !== session) return;
       setEvents(snap.events);
       setSpans(snap.spans);
       setMinTsMicros(snap.minTsMicros);
       setMaxTsMicros(snap.maxTsMicros);
-      lastEventId = snap.events.reduce(
+      sess.lastEventId = snap.events.reduce(
         (acc, e) => (e.id > acc ? e.id : acc),
         0n,
       );
       setLoaded(true);
     } catch (e) {
-      if (cancelled) return;
+      if (sess.cancelled || sess !== session) return;
       setError(e as ConnectError);
     }
 
-    // 2) Tail the stream from where the snapshot stopped.
-    while (!cancelled) {
+    // 2) Tail the stream from where the snapshot stopped. The loop ends
+    //    when the session is replaced (navigation) or the component
+    //    unmounts.
+    while (!sess.cancelled && sess === session) {
       try {
         setError(null);
         setConnected(true);
         const it = jarvis.streamEvents({
-          taskId: id,
+          taskId: sess.id,
           follow: true,
-          sinceId: lastEventId,
+          sinceId: sess.lastEventId,
           includeAncestors: true,
         });
         for await (const ev of it) {
-          if (cancelled) return;
-          appendEvent(eventToTimelineEvent(ev));
+          if (sess.cancelled || sess !== session) return;
+          appendEvent(sess, eventToTimelineEvent(ev));
         }
-        // Stream ended cleanly → reconnect after backoff.
         setConnected(false);
       } catch (e) {
-        if (cancelled) return;
+        if (sess.cancelled || sess !== session) return;
         setConnected(false);
         setError(e as ConnectError);
       }
-      if (cancelled) return;
+      if (sess.cancelled || sess !== session) return;
       await new Promise<void>((r) => {
-        retryTimer = setTimeout(r, RETRY_MS);
+        sess.retryTimer = setTimeout(r, RETRY_MS);
       });
     }
   };
 
+  const startSession = (id: string) => {
+    // Cancel the previous session, if any.
+    if (session) {
+      session.cancelled = true;
+      if (session.retryTimer) clearTimeout(session.retryTimer);
+    }
+    // Reset visible state so the user doesn't see stale events from the
+    // previous task during the snapshot fetch.
+    setEvents([]);
+    setSpans([]);
+    setMinTsMicros(0n);
+    setMaxTsMicros(0n);
+    setLoaded(false);
+    setConnected(false);
+    setError(null);
+    const sess: Session = { cancelled: false, retryTimer: null, lastEventId: 0n, id };
+    session = sess;
+    run(sess);
+  };
+
   onMount(() => {
-    run();
+    startSession(taskIdAccessor());
   });
 
+  // React to taskId changes (e.g. navigating to a follow-up task via
+  // the Ask-for-follow-up form, or clicking a child task in the DAG).
+  // Without this, the hook would only ever stream the task that was
+  // mounted first.
+  createEffect(on(taskIdAccessor, (id, prev) => {
+    if (prev === undefined) return; // initial run handled by onMount
+    if (id === prev) return;
+    startSession(id);
+  }));
+
   onCleanup(() => {
-    cancelled = true;
-    if (retryTimer) clearTimeout(retryTimer);
+    if (session) {
+      session.cancelled = true;
+      if (session.retryTimer) clearTimeout(session.retryTimer);
+      session = null;
+    }
   });
 
   return { events, spans, minTsMicros, maxTsMicros, loaded, connected, error };
