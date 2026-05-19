@@ -30,6 +30,36 @@ pub struct Config {
     pub mcp: McpConfig,
     #[serde(default)]
     pub hooks: HooksConfig,
+    #[serde(default)]
+    pub validation: ValidationConfig,
+}
+
+/// M11.S6 — multi-model verdict validation. When the agent emits `done`,
+/// optionally ask a second model "did this actually accomplish the goal?".
+/// If the validator says NO, the agent gets a continuation event and keeps
+/// working instead of declaring success.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ValidationConfig {
+    /// Master switch. Off by default — costs an extra LLM call per `done`.
+    pub enabled: bool,
+    /// Model to use for validation. Empty = pick a different one than the
+    /// task's primary model (best for cross-checking; defaults to the
+    /// highest-priority remote, or fallback to highest local).
+    pub model: String,
+    /// Cap the number of validator-driven continuations per task so a stuck
+    /// validator can't loop forever. Default 1 — one chance to retry.
+    pub max_validations: u32,
+}
+
+impl Default for ValidationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            model: String::new(),
+            max_validations: 1,
+        }
+    }
 }
 
 /// Hooks let the user wire arbitrary verification commands to fire after the

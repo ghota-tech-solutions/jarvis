@@ -13,7 +13,8 @@ mod loop_;
 pub mod memory_extractor;
 mod prompt;
 mod protocol;
+pub mod validator;
 
-pub use loop_::{AgentRun, HookSpec, run_agent};
+pub use loop_::{AgentRun, HookSpec, ValidationSpec, run_agent};
 pub use memory_extractor::extract_for_task;
 pub use protocol::{AgentError, Outcome};

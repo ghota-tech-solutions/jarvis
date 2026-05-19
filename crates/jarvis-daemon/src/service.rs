@@ -702,6 +702,11 @@ impl Jarvis for JarvisService {
         let required = parse_required_caps(&spec.require_caps);
 
         let sandbox_mode = self.cfg.sandbox.default_mode.parse().unwrap_or_default();
+        let validation = jarvis_agent::ValidationSpec {
+            enabled: self.cfg.validation.enabled,
+            model: self.cfg.validation.model.clone(),
+            max_validations: self.cfg.validation.max_validations,
+        };
         let run = AgentRun {
             task_id: task.id,
             workdir: worktree.path.clone(),
@@ -718,6 +723,7 @@ impl Jarvis for JarvisService {
             continuation_budget: 1,
             hooks: compile_hooks(&self.cfg.hooks),
             sandbox_mode,
+            validation,
         };
 
         let pool = self.pool.clone();

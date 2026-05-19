@@ -45,6 +45,21 @@ pub struct AgentRun {
     /// `side_effects = true` is blocked before invocation and the agent gets
     /// a synthetic error observation explaining the policy.
     pub sandbox_mode: SandboxMode,
+    /// M11.S6: optional verdict-gate validator. When set + `enabled`, the
+    /// agent's `done` is double-checked by a second LLM call; NACK injects
+    /// one more Continuation. Capped to avoid loops.
+    pub validation: ValidationSpec,
+}
+
+/// Plain mirror of `jarvis_config::ValidationConfig` so the agent crate
+/// doesn't depend on jarvis-config (clean leaf-ward DAG). The daemon
+/// converts cfg → spec at task dispatch.
+#[derive(Debug, Clone, Default)]
+pub struct ValidationSpec {
+    pub enabled: bool,
+    /// Empty = the daemon picks a sensible default at dispatch.
+    pub model: String,
+    pub max_validations: u32,
 }
 
 /// Compiled post-tool hook. Construct once at task-dispatch time so the regex
@@ -342,6 +357,67 @@ pub async fn run_agent(
                     // continuation event rendered as a user audit prompt.
                     continue;
                 }
+
+                // M11.S6: validator gate. Capped so a flaky validator can't loop.
+                if run.validation.enabled {
+                    let validations_used = history
+                        .iter()
+                        .filter(|e| {
+                            matches!(e.kind, EventKind::Continuation)
+                                && e.payload.get("kind").and_then(|v| v.as_str())
+                                    == Some("validation_nack")
+                        })
+                        .count() as u32;
+                    if validations_used < run.validation.max_validations.max(1) {
+                        // Pick the validator provider: explicit model if set,
+                        // else pick something different from what just ran the
+                        // task (cross-model defense).
+                        let pick_req = if run.validation.model.is_empty() {
+                            jarvis_llm::PickRequest::for_planning()
+                        } else {
+                            let mut req = jarvis_llm::PickRequest::for_planning();
+                            req.routing_override = Some(jarvis_core::RoutingPolicy::Model(
+                                jarvis_core::ProviderName::new(run.validation.model.clone()),
+                            ));
+                            req
+                        };
+                        let validator_provider =
+                            pool.pick(&pick_req).await.ok().map(|p| p.provider);
+                        if let Some(provider) = validator_provider {
+                            let verdict = crate::validator::validate(
+                                provider,
+                                &task.goal,
+                                reply.message.as_deref(),
+                                &history,
+                            )
+                            .await;
+                            match verdict {
+                                crate::validator::Verdict::Nack { reason } => {
+                                    warn!(step, %reason, "validator NACK — injecting continuation");
+                                    log_event(
+                                        &ledger,
+                                        &run,
+                                        EventKind::Continuation,
+                                        json!({
+                                            "kind": "validation_nack",
+                                            "reason": reason,
+                                            "after_message": reply.message,
+                                        }),
+                                    )
+                                    .await?;
+                                    continue;
+                                }
+                                crate::validator::Verdict::Ack => {
+                                    info!(step, "validator ACK");
+                                }
+                                crate::validator::Verdict::Skip { reason } => {
+                                    warn!(step, %reason, "validator skipped");
+                                }
+                            }
+                        }
+                    }
+                }
+
                 log_event(
                     &ledger,
                     &run,
