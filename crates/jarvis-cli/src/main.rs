@@ -2,12 +2,20 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use futures::StreamExt;
 use jarvis_api::{
-    jarvis_client::JarvisClient, AskRequest, ListTasksRequest, PingRequest, StatusRequest,
-    StreamEventsRequest, TaskHandle, TaskSpec,
+    auth::{discover_token, ClientAuth},
+    jarvis_client::JarvisClient,
+    AskRequest, ListTasksRequest, PingRequest, StatusRequest, StreamEventsRequest, TaskHandle,
+    TaskSpec,
 };
 use std::io::{self, Write};
 use std::time::Duration;
+use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, Endpoint};
+
+/// Type of the authenticated client returned by `build_client`. The closure
+/// type from `with_interceptor` is unnameable, so we use the concrete
+/// `ClientAuth` interceptor and a type alias for ergonomics.
+type AuthedClient = JarvisClient<InterceptedService<Channel, ClientAuth>>;
 
 #[derive(Debug, Parser)]
 #[command(name = "jarvis", version, about = "Jarvis CLI client")]
@@ -119,7 +127,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let channel = connect(&cli.daemon, cli.connect_timeout).await?;
-    let mut client = JarvisClient::new(channel);
+    let mut client = build_client(channel)?;
 
     match cli.cmd {
         Cmd::Ping => {
@@ -185,7 +193,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn task_cmd(client: &mut JarvisClient<Channel>, cmd: TaskCmd) -> Result<()> {
+async fn task_cmd(client: &mut AuthedClient, cmd: TaskCmd) -> Result<()> {
     match cmd {
         TaskCmd::Add(a) => {
             if a.goal.is_empty() {
@@ -278,7 +286,7 @@ async fn task_cmd(client: &mut JarvisClient<Channel>, cmd: TaskCmd) -> Result<()
 }
 
 async fn watch_task(
-    client: &mut JarvisClient<Channel>,
+    client: &mut AuthedClient,
     id: Option<String>,
     tail_only: bool,
     no_follow: bool,
@@ -353,6 +361,13 @@ fn truncate(s: &str, max: usize) -> String {
 
 fn short_id(id: &str) -> String {
     id.split('-').next().unwrap_or(id).to_string()
+}
+
+fn build_client(channel: Channel) -> Result<AuthedClient> {
+    let token = discover_token().unwrap_or_default();
+    let auth = ClientAuth::new(&token)
+        .map_err(|e| anyhow::anyhow!("invalid token in env/file: {e}"))?;
+    Ok(JarvisClient::with_interceptor(channel, auth))
 }
 
 async fn connect(endpoint: &str, timeout_secs: u64) -> Result<Channel> {

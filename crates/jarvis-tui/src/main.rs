@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
         .await
         .context("connect to daemon")?;
 
-    let app = App::new(channel, cli.daemon.clone());
+    let app = App::new(channel, cli.daemon.clone())?;
     let result = event_loop::run(app).await;
 
     // event_loop::run is responsible for restoring the terminal on its way out;

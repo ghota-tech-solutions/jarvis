@@ -4,7 +4,12 @@
 //! by polling, and (b) the live event stream for the currently-selected task.
 
 use crate::theme::{Theme, DARK_DEFAULT};
-use jarvis_api::{jarvis_client::JarvisClient, Event, ModelStatus, Task};
+use jarvis_api::{
+    auth::{discover_token, ClientAuth},
+    jarvis_client::JarvisClient,
+    Event, ModelStatus, Task,
+};
+use tonic::service::interceptor::InterceptedService;
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -134,19 +139,26 @@ impl AppState {
     }
 }
 
+/// Authenticated tonic client. Type alias so the rest of the TUI doesn't
+/// have to spell out the `InterceptedService<...>` chain everywhere.
+pub type AuthedClient = JarvisClient<InterceptedService<Channel, ClientAuth>>;
+
 #[derive(Clone)]
 pub struct App {
     pub state: Arc<Mutex<AppState>>,
-    pub client: JarvisClient<Channel>,
+    pub client: AuthedClient,
 }
 
 impl App {
-    pub fn new(channel: Channel, daemon_url: String) -> Self {
+    pub fn new(channel: Channel, daemon_url: String) -> anyhow::Result<Self> {
         let mut s = AppState::new();
         s.daemon_url = daemon_url;
-        Self {
+        let token = discover_token().unwrap_or_default();
+        let auth = ClientAuth::new(&token)
+            .map_err(|e| anyhow::anyhow!("invalid token: {e}"))?;
+        Ok(Self {
             state: Arc::new(Mutex::new(s)),
-            client: JarvisClient::new(channel),
-        }
+            client: JarvisClient::with_interceptor(channel, auth),
+        })
     }
 }

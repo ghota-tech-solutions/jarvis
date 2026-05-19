@@ -113,14 +113,49 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         None
     };
 
+    // M10.S1: refuse LAN binds unless explicitly opted-in via daemon.bind_lan.
+    let bound: std::net::SocketAddr = addr;
+    let is_loopback = bound.ip().is_loopback();
+    if !is_loopback && !cfg.daemon.bind_lan {
+        return Err(anyhow!(
+            "daemon.addr binds non-loopback ({bound}) but daemon.bind_lan=false; \
+             set bind_lan=true in jarvis.toml (and keep a token) to allow this"
+        ));
+    }
+    if cfg.daemon.disable_auth {
+        warn!(
+            "daemon.disable_auth=true — gRPC accepts ANY caller. \
+             Use only on a fully trusted local box."
+        );
+    }
+
+    // M10.S1: load/create the bearer token shared with jarvis-web and inject
+    // the auth interceptor. All RPCs (including Ping) require the token in
+    // production; the token is auto-discovered by CLI/TUI/SPA so users don't
+    // see it.
+    let auth_token = if cfg.daemon.disable_auth {
+        None
+    } else {
+        match jarvis_web::auth::AuthToken::load_or_create(&cfg.daemon.data_dir) {
+            Ok(t) => Some(t.as_str().to_string()),
+            Err(e) => {
+                warn!(error = %e, "failed to load/create web.token — gRPC auth disabled");
+                None
+            }
+        }
+    };
+    let auth_interceptor =
+        jarvis_api::auth::ServerAuth::new(auth_token, cfg.daemon.disable_auth);
+
     // The same port speaks two protocols:
     //   - binary gRPC over HTTP/2 (for TUI/CLI tonic clients)
     //   - gRPC-Web over HTTP/1.1 (for the SolidJS SPA via connect-es)
     // The tonic-web layer transparently translates between the two.
+    let server = JarvisServer::with_interceptor(svc, auth_interceptor);
     let result = Server::builder()
         .accept_http1(true)
         .layer(tonic_web::GrpcWebLayer::new())
-        .add_service(JarvisServer::new(svc))
+        .add_service(server)
         .serve(addr)
         .await
         .context("gRPC server");

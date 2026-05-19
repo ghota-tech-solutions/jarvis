@@ -7,15 +7,14 @@
 //!   * Pressing Enter on a `:cmd` runs a slash command.
 //!   * Pressing Enter on plain text submits it as a new task goal.
 
-use crate::app::{App, AppState, Focus, POLL_INTERVAL};
+use crate::app::{App, AppState, AuthedClient, Focus, POLL_INTERVAL};
 use crate::theme::Theme;
 use crate::ui;
 use anyhow::{Context, Result};
 use crossterm::event::{Event as CtEvent, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
 use jarvis_api::{
-    jarvis_client::JarvisClient, ListTasksRequest, PingRequest, StatusRequest, StreamEventsRequest,
-    TaskHandle, TaskSpec,
+    ListTasksRequest, PingRequest, StatusRequest, StreamEventsRequest, TaskHandle, TaskSpec,
 };
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -24,7 +23,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tonic::transport::Channel;
 use tracing::warn;
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
@@ -442,7 +440,7 @@ fn spawn_event_streamer(
     });
 }
 
-async fn refresh_tasks(client: &mut JarvisClient<Channel>, state: &Arc<Mutex<AppState>>) {
+async fn refresh_tasks(client: &mut AuthedClient, state: &Arc<Mutex<AppState>>) {
     let show_all = { state.lock().await.show_all };
     match client
         .list_tasks(ListTasksRequest {

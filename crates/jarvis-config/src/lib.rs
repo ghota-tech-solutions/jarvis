@@ -151,6 +151,14 @@ impl Default for SandboxConfig {
 pub struct DaemonConfig {
     pub addr: String,
     pub data_dir: PathBuf,
+    /// When false (default) the daemon refuses to start if `addr` is non-loopback.
+    /// Set to true to opt into LAN/wildcard binds (you'd better have auth on).
+    #[serde(default)]
+    pub bind_lan: bool,
+    /// When true, gRPC + jarvis-web accept requests without a bearer token.
+    /// Use only in airtight local-dev situations; logs a warning on boot.
+    #[serde(default)]
+    pub disable_auth: bool,
 }
 
 impl Default for DaemonConfig {
@@ -158,6 +166,8 @@ impl Default for DaemonConfig {
         Self {
             addr: "127.0.0.1:7777".to_string(),
             data_dir: PathBuf::from(".jarvis"),
+            bind_lan: false,
+            disable_auth: false,
         }
     }
 }
