@@ -319,6 +319,13 @@ async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerSt
     // this daemon (loopback gRPC), so it works without any wiring beyond
     // the standard bearer-token discovery.
     r.register(jarvis_tools::SpawnSubagentTool);
+    // M12.S2: GitHub PR integration via the `gh` CLI. Fails gracefully
+    // (is_error: true) if `gh` is not installed or not authenticated;
+    // the agent learns to fall back to plain `shell` git operations.
+    r.register(jarvis_tools::GhPrListTool);
+    r.register(jarvis_tools::GhPrViewTool);
+    r.register(jarvis_tools::GhPrCommentTool);
+    r.register(jarvis_tools::GhPrCreateTool);
 
     let mut statuses: Vec<McpServerStatus> = Vec::new();
     for (name, spec) in &cfg.mcp.servers {
