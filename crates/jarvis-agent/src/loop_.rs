@@ -1,7 +1,9 @@
 //! The actual agent loop.
 
 use crate::prompt;
-use crate::protocol::{ActionKind, AgentError, AgentReply, Outcome, parse_reply};
+use crate::protocol::{
+    ActionKind, AgentError, AgentReply, Outcome, parse_reply, recover_from_parse_failure,
+};
 use futures_util::StreamExt;
 use jarvis_core::{
     AgentId, ChatRequest, ProviderName, RequiredCapabilities, RoutingPolicy, SandboxMode, TaskId,
@@ -317,34 +319,59 @@ pub async fn run_agent(
             break text;
         };
 
-        // 2) Parse the reply.
+        // 2) Parse the reply. § C.M-A: recover from common failure modes
+        //    instead of burning the step budget on identical re-prompts.
         let reply = match parse_reply(&text) {
             Ok(r) => r,
             Err(e) => {
-                warn!(error = %e, step, "could not parse LLM reply; injecting correction");
-                log_event(
-                    &ledger,
-                    &run,
-                    EventKind::Error,
-                    json!({
-                        "step": step,
-                        "kind": "parse_reply",
-                        "raw": text.chars().take(2000).collect::<String>(),
-                        "message": e.to_string(),
-                    }),
-                )
-                .await?;
-                // Push a synthetic observation telling the model how to reply, then loop.
-                log_event(
-                    &ledger,
-                    &run,
-                    EventKind::Observation,
-                    json!({
-                        "system_correction": "Your last reply was not valid JSON. Reply with one JSON object matching the schema in the system prompt."
-                    }),
-                )
-                .await?;
-                continue;
+                if let Some(coerced) = recover_from_parse_failure(&text) {
+                    // No JSON-ish structure at all → the model finalized in
+                    // prose (markdown summary, plain sentence, ...). Respect
+                    // that intent and treat it as an implicit Done.
+                    warn!(error = %e, step, "parse failed; coercing prose reply to Done");
+                    log_event(
+                        &ledger,
+                        &run,
+                        EventKind::Error,
+                        json!({
+                            "step": step,
+                            "kind": "parse_recovered",
+                            "recovered_as": "coerced_to_done",
+                            "raw": text.chars().take(2000).collect::<String>(),
+                            "message": e.to_string(),
+                        }),
+                    )
+                    .await?;
+                    coerced
+                } else {
+                    // Empty reply or malformed JSON attempt — model is still
+                    // trying to follow the contract. Inject a reminder and
+                    // let it retry on the next step.
+                    warn!(error = %e, step, "parse failed; injecting reminder and retrying");
+                    log_event(
+                        &ledger,
+                        &run,
+                        EventKind::Error,
+                        json!({
+                            "step": step,
+                            "kind": "parse_recovered",
+                            "recovered_as": "retried_with_reminder",
+                            "raw": text.chars().take(2000).collect::<String>(),
+                            "message": e.to_string(),
+                        }),
+                    )
+                    .await?;
+                    log_event(
+                        &ledger,
+                        &run,
+                        EventKind::Observation,
+                        json!({
+                            "system_correction": "Your last reply was not valid JSON. Reply with one JSON object matching the schema in the system prompt. No prose, no markdown, no headings outside the JSON."
+                        }),
+                    )
+                    .await?;
+                    continue;
+                }
             }
         };
 

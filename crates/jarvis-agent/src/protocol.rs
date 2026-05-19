@@ -176,6 +176,40 @@ pub fn parse_reply(text: &str) -> Result<AgentReply, AgentError> {
     Ok(raw.normalize())
 }
 
+/// § C.M-A — recovery for parse failures.
+///
+/// Some models (notably Gemma 4 on long contexts) drift out of the JSON
+/// contract after several steps and reply with a freeform markdown summary
+/// instead. The cheapest recovery that respects the model's intent: if the
+/// reply contains no JSON-ish structure at all, treat it as an implicit
+/// `Done` with the prose as the message. This avoids burning the rest of
+/// the step budget on identical re-prompts.
+///
+/// Returns `Some(reply)` when the failure can be silently recovered, and
+/// `None` when the caller should fall back to "inject a reminder and let
+/// the model retry on the next step" (empty reply or malformed JSON
+/// attempt — both signal the model is still trying to follow the contract).
+pub fn recover_from_parse_failure(text: &str) -> Option<AgentReply> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    // Any opening or closing brace = the model was attempting JSON (even
+    // if malformed or truncated). The caller will inject a reminder and
+    // retry on the next step. Only fully brace-free prose gets coerced to
+    // Done.
+    if trimmed.contains('{') || trimmed.contains('}') {
+        return None;
+    }
+    Some(AgentReply {
+        thought: None,
+        action: ActionKind::Done,
+        tool: None,
+        args: None,
+        message: Some(trimmed.to_string()),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,5 +248,40 @@ mod tests {
         let text = r#"{"action":"finish","message":"ok"}"#;
         let r = parse_reply(text).unwrap();
         assert_eq!(r.action, ActionKind::Done);
+    }
+
+    // § C.M-A — recovery tests.
+
+    #[test]
+    fn recovery_empty_text_returns_none() {
+        assert!(recover_from_parse_failure("").is_none());
+        assert!(recover_from_parse_failure("   \n\t  ").is_none());
+    }
+
+    #[test]
+    fn recovery_pure_markdown_coerces_to_done() {
+        // Mirrors the actual step-18 reply from task c867ee5d.
+        let raw = "# Frontend Analysis Report\n\nI have performed a deep dive into the frontend of the Jarvis project, specifically focusing on the `jarvis-web` component.\n\n## Overview\nThe frontend is a modern SPA built with SolidJS.";
+        let r = recover_from_parse_failure(raw).expect("should coerce to Done");
+        assert_eq!(r.action, ActionKind::Done);
+        assert!(r.message.unwrap().starts_with("# Frontend Analysis"));
+        assert!(r.tool.is_none());
+    }
+
+    #[test]
+    fn recovery_text_with_braces_returns_none() {
+        // Looks like a malformed JSON attempt — the caller should reminder + retry.
+        assert!(recover_from_parse_failure(r#"{"action": "tool", "tool":"shell""#).is_none());
+        assert!(recover_from_parse_failure("Here is some text { with braces } in prose").is_none());
+    }
+
+    #[test]
+    fn recovery_plain_sentence_coerces_to_done() {
+        let r = recover_from_parse_failure("All done — no further changes needed.").unwrap();
+        assert_eq!(r.action, ActionKind::Done);
+        assert_eq!(
+            r.message.as_deref(),
+            Some("All done — no further changes needed.")
+        );
     }
 }
