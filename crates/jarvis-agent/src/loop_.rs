@@ -60,6 +60,9 @@ pub struct ValidationSpec {
     /// Empty = the daemon picks a sensible default at dispatch.
     pub model: String,
     pub max_validations: u32,
+    /// M12.S4: fire a full reviewer sub-agent (read-only tools) instead of
+    /// a plain LLM call when the validator runs.
+    pub use_subagent: bool,
 }
 
 /// Compiled post-tool hook. Construct once at task-dispatch time so the regex
@@ -399,28 +402,56 @@ pub async fn run_agent(
                         })
                         .count() as u32;
                     if validations_used < run.validation.max_validations.max(1) {
-                        // Pick the validator provider: explicit model if set,
-                        // else pick something different from what just ran the
-                        // task (cross-model defense).
-                        let pick_req = if run.validation.model.is_empty() {
-                            jarvis_llm::PickRequest::for_planning()
-                        } else {
-                            let mut req = jarvis_llm::PickRequest::for_planning();
-                            req.routing_override = Some(jarvis_core::RoutingPolicy::Model(
-                                jarvis_core::ProviderName::new(run.validation.model.clone()),
-                            ));
-                            req
-                        };
-                        let validator_provider =
-                            pool.pick(&pick_req).await.ok().map(|p| p.provider);
-                        if let Some(provider) = validator_provider {
-                            let verdict = crate::validator::validate(
-                                provider,
-                                &task.goal,
-                                reply.message.as_deref(),
-                                &history,
+                        let verdict_opt: Option<crate::validator::Verdict> = if run
+                            .validation
+                            .use_subagent
+                        {
+                            // M12.S4: full reviewer sub-agent — calls back into
+                            // the daemon via gRPC self-call, reuses standard
+                            // bearer-token discovery.
+                            let token = jarvis_api::auth::discover_token().unwrap_or_default();
+                            let daemon_url = std::env::var("JARVIS_DAEMON_URL")
+                                .unwrap_or_else(|_| "http://127.0.0.1:7777".to_string());
+                            Some(
+                                crate::validator::validate_via_subagent(
+                                    &daemon_url,
+                                    &token,
+                                    &run.task_id.to_string(),
+                                    &task.workdir,
+                                    &task.goal,
+                                    reply.message.as_deref(),
+                                )
+                                .await,
                             )
-                            .await;
+                        } else {
+                            // M11.S6: plain LLM validator. Pick a model: explicit
+                            // override if set, else any sensible planning one.
+                            let pick_req = if run.validation.model.is_empty() {
+                                jarvis_llm::PickRequest::for_planning()
+                            } else {
+                                let mut req = jarvis_llm::PickRequest::for_planning();
+                                req.routing_override = Some(jarvis_core::RoutingPolicy::Model(
+                                    jarvis_core::ProviderName::new(run.validation.model.clone()),
+                                ));
+                                req
+                            };
+                            let validator_provider =
+                                pool.pick(&pick_req).await.ok().map(|p| p.provider);
+                            if let Some(provider) = validator_provider {
+                                Some(
+                                    crate::validator::validate(
+                                        provider,
+                                        &task.goal,
+                                        reply.message.as_deref(),
+                                        &history,
+                                    )
+                                    .await,
+                                )
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(verdict) = verdict_opt {
                             match verdict {
                                 crate::validator::Verdict::Nack { reason } => {
                                     warn!(step, %reason, "validator NACK — injecting continuation");

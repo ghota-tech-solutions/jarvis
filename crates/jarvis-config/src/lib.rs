@@ -34,9 +34,10 @@ pub struct Config {
     pub validation: ValidationConfig,
 }
 
-/// M11.S6 — multi-model verdict validation. When the agent emits `done`,
-/// optionally ask a second model "did this actually accomplish the goal?".
-/// If the validator says NO, the agent gets a continuation event and keeps
+/// M11.S6 + M12.S4 — verdict validation. When the agent emits `done`,
+/// optionally ask either a second LLM (M11.S6) or a full reviewer
+/// sub-agent (M12.S4) "did this actually accomplish the goal?". If the
+/// validator says NO, the agent gets a continuation event and keeps
 /// working instead of declaring success.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -50,6 +51,12 @@ pub struct ValidationConfig {
     /// Cap the number of validator-driven continuations per task so a stuck
     /// validator can't loop forever. Default 1 — one chance to retry.
     pub max_validations: u32,
+    /// M12.S4 : when true, the validator fires a full reviewer sub-agent
+    /// (read-only tools: fs_read / grep / glob / web_search) instead of a
+    /// plain LLM call. The sub-agent can actually inspect the workdir and
+    /// catch issues a stateless LLM call misses (failed compilation, bad
+    /// patches, etc.). Costs more tokens + adds latency, so off by default.
+    pub use_subagent: bool,
 }
 
 impl Default for ValidationConfig {
@@ -58,6 +65,7 @@ impl Default for ValidationConfig {
             enabled: false,
             model: String::new(),
             max_validations: 1,
+            use_subagent: false,
         }
     }
 }

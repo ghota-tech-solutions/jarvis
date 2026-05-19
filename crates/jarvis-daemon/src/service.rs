@@ -777,6 +777,7 @@ impl Jarvis for JarvisService {
             enabled: self.cfg.validation.enabled,
             model: self.cfg.validation.model.clone(),
             max_validations: self.cfg.validation.max_validations,
+            use_subagent: self.cfg.validation.use_subagent,
         };
         let run = AgentRun {
             task_id: task.id,
