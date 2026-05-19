@@ -1,7 +1,8 @@
 import { Show, createMemo, createSignal, type Component } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
-import { taskQuery, timelineQuery, qkTaskList } from '~/lib/api/queries';
+import { taskQuery, qkTaskList } from '~/lib/api/queries';
+import { useTaskEventStream } from '~/lib/api/streams';
 import { jarvis } from '~/lib/api/client';
 import Transcript from '~/components/Transcript';
 import Timeline from '~/features/timeline/Timeline';
@@ -12,7 +13,10 @@ const Task: Component = () => {
   const nav = useNavigate();
   const qc = useQueryClient();
   const taskQ = createQuery(() => taskQuery(params.id));
-  const timelineQ = createQuery(() => timelineQuery(params.id));
+  // § C.M-D — live event stream replaces the 3-second polling. The
+  // shape matches what timelineQuery used to expose; only the source
+  // changed (initial snapshot + Connect server-streaming tail).
+  const stream = useTaskEventStream(() => params.id);
 
   const [followup, setFollowup] = createSignal('');
   const [submitting, setSubmitting] = createSignal(false);
@@ -28,10 +32,10 @@ const Task: Component = () => {
     });
   };
 
-  const events = createMemo(() => timelineQ.data?.events ?? []);
-  const spans = createMemo(() => timelineQ.data?.spans ?? []);
-  const minTs = createMemo(() => timelineQ.data?.minTsMicros ?? 0n);
-  const maxTs = createMemo(() => timelineQ.data?.maxTsMicros ?? 0n);
+  const events = createMemo(() => stream.events());
+  const spans = createMemo(() => stream.spans());
+  const minTs = createMemo(() => stream.minTsMicros());
+  const maxTs = createMemo(() => stream.maxTsMicros());
 
   const onContinue = async (ev: Event) => {
     ev.preventDefault();
@@ -94,7 +98,7 @@ const Task: Component = () => {
               </p>
             </header>
 
-            <Show when={timelineQ.data} fallback={<p class="dim">loading events…</p>}>
+            <Show when={stream.loaded()} fallback={<p class="dim">loading events…</p>}>
               <div class="view-toggle">
                 <button
                   type="button"
