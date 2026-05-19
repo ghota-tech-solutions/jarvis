@@ -1,5 +1,6 @@
 import { For, Show, createMemo, type Component } from 'solid-js';
 import type { TimelineEvent } from '~/lib/api/gen/jarvis_pb';
+import Markdown from './Markdown';
 
 type Props = { events: TimelineEvent[]; selectedEvtId?: number };
 
@@ -85,7 +86,12 @@ const EventBlock: Component<{ evt: TimelineEvent; selected?: boolean }> = (p) =>
       data-evt-id={Number(p.evt.id)}
     >
       <Show when={p.evt.kind === 'decision'}>
-        <div class="evt-prose">{decisionText(payload())}</div>
+        <div class="evt-prose">
+          <Markdown text={decisionText(payload())} />
+          <Show when={typeof payload().message === 'string' && payload().message !== payload().thought}>
+            <Markdown text={String(payload().message)} />
+          </Show>
+        </div>
       </Show>
 
       <Show when={p.evt.kind === 'tool_call'}>
@@ -135,24 +141,33 @@ const EventBlock: Component<{ evt: TimelineEvent; selected?: boolean }> = (p) =>
           const ok = v === 'pass' || v === 'done';
           return (
             <div class={ok ? 'evt-ok' : 'evt-fail'}>
-              <span class="evt-icon">{kindIcon(p.evt.kind)}</span>
-              <span class={`pill ${ok ? 'good' : 'error'}`}>{String(v)}</span>
+              <div>
+                <span class="evt-icon">{kindIcon(p.evt.kind)}</span>
+                <span class={`pill ${ok ? 'good' : 'error'}`}>{String(v)}</span>
+              </div>
               <Show when={typeof payload().message === 'string'}>
-                <span class="dim"> · {String(payload().message)}</span>
+                <div class="dim"><Markdown text={String(payload().message)} /></div>
               </Show>
             </div>
           );
         })()}
       </Show>
 
-      <Show when={p.evt.kind === 'heartbeat' || p.evt.kind === 'attempt'}>
+      <Show when={p.evt.kind === 'heartbeat'}>
         <div class="evt-heartbeat">
           <span class="evt-icon">{kindIcon(p.evt.kind)}</span>
           <span class="fade">
             step {String(payload().step ?? '?')}
+            <Show when={typeof payload().max_steps === 'number'}>
+              <span class="dim">/{String(payload().max_steps)}</span>
+            </Show>
           </span>
         </div>
       </Show>
+      {/* `attempt` events used to render their own "step N" header, which
+          duplicated the heartbeat-driven one. The model metadata they carry
+          (model name, dialect) belongs on the heartbeat row instead — handled
+          by the Transcript-level dedupe below. */}
 
       <Show when={p.evt.kind === 'spawn'}>
         <div class="evt-spawn">
@@ -172,11 +187,39 @@ const EventBlock: Component<{ evt: TimelineEvent; selected?: boolean }> = (p) =>
 };
 
 const Transcript: Component<Props> = (p) => {
-  const filtered = createMemo(() =>
-    // Drop llm_chunk events — those would flood the transcript. They are
-    // collapsed into surrounding decisions by the agent loop already.
-    p.events.filter((e) => e.kind !== 'llm_chunk')
-  );
+  const filtered = createMemo(() => {
+    const out: TimelineEvent[] = [];
+    let lastStep: number | undefined;
+    for (const e of p.events) {
+      // Drop llm_chunk events — those would flood the transcript. They are
+      // collapsed into surrounding decisions by the agent loop already.
+      if (e.kind === 'llm_chunk') continue;
+      // § C front-fix — drop `attempt` events whose step matches the most
+      // recent heartbeat we already rendered. The user sees one "step N"
+      // header per step, not two. We still keep an attempt event if it
+      // arrives before any heartbeat (defensive — shouldn't happen in
+      // practice since loop_.rs logs heartbeat before pick).
+      if (e.kind === 'attempt') {
+        try {
+          const p = JSON.parse(e.payloadJson) as Record<string, unknown>;
+          const step = typeof p.step === 'number' ? p.step : undefined;
+          if (step !== undefined && step === lastStep) continue;
+        } catch {
+          // fall through and render
+        }
+      }
+      if (e.kind === 'heartbeat') {
+        try {
+          const p = JSON.parse(e.payloadJson) as Record<string, unknown>;
+          lastStep = typeof p.step === 'number' ? p.step : lastStep;
+        } catch {
+          // ignore
+        }
+      }
+      out.push(e);
+    }
+    return out;
+  });
 
   return (
     <div class="transcript">
