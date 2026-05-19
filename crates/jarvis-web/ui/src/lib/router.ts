@@ -5,10 +5,12 @@ const Dashboard = lazy(() => import('~/routes/Dashboard'));
 const Task = lazy(() => import('~/routes/Task'));
 const Fleet = lazy(() => import('~/routes/Fleet'));
 const Memory = lazy(() => import('~/routes/Memory'));
+const Schedules = lazy(() => import('~/routes/Schedules'));
 
 export const routes: RouteDefinition[] = [
   { path: '/', component: Dashboard },
   { path: '/fleet', component: Fleet },
   { path: '/memory', component: Memory },
+  { path: '/schedules', component: Schedules },
   { path: '/task/:id', component: Task },
 ];
