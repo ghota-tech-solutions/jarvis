@@ -438,6 +438,20 @@ pre {
   color: var(--accent);
 }
 
+/* --- Timeline replay controls ----------------------------------- */
+
+.timeline-replay {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0;
+}
+
+.timeline-replay .btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* --- Help overlay --------------------------------------------------- */
 
 .help-backdrop {

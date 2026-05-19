@@ -13,12 +13,13 @@
 // most events are off-screen and skipped.
 
 import {
+  For,
+  Show,
   createEffect,
   createMemo,
   createSignal,
   onCleanup,
   onMount,
-  Show,
   type Component,
 } from 'solid-js';
 import type { TimelineEvent, TimelineSpan } from '~/lib/api/gen/jarvis_pb';
@@ -48,6 +49,10 @@ const Timeline: Component<Props> = (p) => {
   const [hoverEvtId, setHoverEvtId] = createSignal(0);
   const [width, setWidth] = createSignal(800);
   const [dragging, setDragging] = createSignal<'playhead' | 'pan' | null>(null);
+  // M12.S3: replay mode — animates the playhead from minTs to maxTs at the
+  // chosen wall-clock speed. `null` = stopped, otherwise the multiplier
+  // (1 = realtime, 2 = 2x faster, 4 = 4x).
+  const [playSpeed, setPlaySpeed] = createSignal<number | null>(null);
 
   // Fit the timeline to the data when it first arrives, OR when followLive
   // is on and new max_ts pushes the right edge past the viewport.
@@ -274,6 +279,72 @@ const Timeline: Component<Props> = (p) => {
     }));
   }
 
+  // M12.S3: replay animation. `playSpeed` is null when stopped, else the
+  // playback rate multiplier. We use rAF deltas so playback stays smooth
+  // even on background tabs (browsers throttle to 1Hz there; pause then).
+  let lastFrameMs = 0;
+  let rafId: number | null = null;
+  const tickReplay = (now: number) => {
+    rafId = null;
+    const speed = playSpeed();
+    if (speed === null) return;
+    const dt = lastFrameMs > 0 ? now - lastFrameMs : 16;
+    lastFrameMs = now;
+    const dtUs = Math.round(dt * 1000 * speed);
+    const max = Number(p.maxTs);
+    setState((s) => {
+      const next = s.playheadUs + dtUs;
+      if (next >= max) {
+        // Reached the end — stop and pin to max.
+        queueMicrotask(() => setPlaySpeed(null));
+        return { ...s, playheadUs: max, followLive: false };
+      }
+      return { ...s, playheadUs: next, followLive: false };
+    });
+    // Fire onSelect with the event closest in time so the transcript
+    // panel scrolls along during replay.
+    const phUs = state().playheadUs;
+    let closest = 0;
+    let bestDelta = Number.POSITIVE_INFINITY;
+    for (const ev of p.events) {
+      const t = Number(ev.tsMicros);
+      if (t > phUs) break; // events are id-ordered which is also ts-ordered
+      const d = phUs - t;
+      if (d < bestDelta) {
+        bestDelta = d;
+        closest = Number(ev.id);
+      }
+    }
+    if (closest !== 0) p.onSelect?.(closest);
+    rafId = requestAnimationFrame(tickReplay);
+  };
+
+  createEffect(() => {
+    const speed = playSpeed();
+    if (speed !== null) {
+      // Starting / restarting playback. If we're at max already, jump back to min.
+      const min = Number(p.minTs);
+      const max = Number(p.maxTs);
+      if (state().playheadUs >= max && min < max) {
+        setState((s) => ({ ...s, playheadUs: min, followLive: false }));
+      }
+      lastFrameMs = 0;
+      if (rafId === null) {
+        rafId = requestAnimationFrame(tickReplay);
+      }
+    } else if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  });
+
+  onCleanup(() => {
+    if (rafId !== null) cancelAnimationFrame(rafId);
+  });
+
+  const togglePlay = () => setPlaySpeed((s) => (s === null ? 1 : null));
+  const setSpeed = (n: number) => setPlaySpeed(n);
+
   return (
     <div class="timeline-root" ref={container} style="width: 100%">
       <Show
@@ -289,6 +360,31 @@ const Timeline: Component<Props> = (p) => {
           onWheel={onWheel}
           style="display: block; width: 100%; touch-action: none; user-select: none"
         />
+        <div class="timeline-replay">
+          <button
+            type="button"
+            class="btn ghost"
+            onClick={togglePlay}
+            title="Toggle replay (animates the playhead from start to end)"
+          >
+            {playSpeed() !== null ? '⏸ pause' : '▶ replay'}
+          </button>
+          <Show when={playSpeed() !== null}>
+            <span class="dim" style="font-size: 11px">speed</span>
+            <For each={[1, 2, 4, 8]}>
+              {(s) => (
+                <button
+                  type="button"
+                  class={`btn ghost ${playSpeed() === s ? 'active' : ''}`}
+                  style="padding: 0.15rem 0.5rem"
+                  onClick={() => setSpeed(s)}
+                >
+                  {s}×
+                </button>
+              )}
+            </For>
+          </Show>
+        </div>
         <div class="timeline-help dim" style="font-size: 11px; padding: 0.3rem 0">
           drag playhead · scroll pan · ctrl+scroll zoom · click span ·
           [ ] prev/next span · j k prev/next event · 1-4 lanes · f fit · l live · esc clear
