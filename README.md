@@ -2,7 +2,7 @@
 
 > Système d'agents de codage autonome et continu, à la qualité institutionnelle, en Rust.
 
-**Statut : `v0.1.0-dev` — M10 livré · daemon + agent + sandbox + multi-modèles + SPA SolidJS + Tauri 2 scaffold · M11 partiel (2/7)**
+**Statut : `v0.1.0-dev` — M12 majoritairement livré · daemon + agent + sandbox + multi-modèles + SPA SolidJS + scheduling + GitHub PR + verdict validator + replay UI · 105 tests verts**
 
 Jarvis est conçu pour **travailler en continu** sur les tâches que tu lui donnes, plutôt
 que de répondre tour par tour comme un chatbot. Il dépasse OpenCode, Claude Code,
@@ -71,7 +71,7 @@ Hermes et Codex sur quatre axes que personne d'autre n'attaque correctement :
 | `jarvis-config` | Loader TOML + env (figment, interpolation `${VAR}` et `$$` escape). | Stable |
 | `jarvis-ledger` | SQLite WAL, event store append-only, **memories table** (mutable), broadcast bus. | Stable |
 | `jarvis-llm` | `LlmProvider` trait, OpenAI-compat client, `ModelRegistry`, `LlmPool`, `pricing`. | Stable |
-| `jarvis-tools` | `Tool` trait + 8 builtins : `fs_read`, `fs_write`, `shell`, `apply_patch`, `grep`, `glob`, `update_plan`, `web_search`. | Stable |
+| `jarvis-tools` | `Tool` trait + 12 builtins : `fs_read`, `fs_write`, `shell`, `apply_patch`, `grep`, `glob`, `update_plan`, `web_search`, `spawn_subagent`, `gh.pr_list`, `gh.pr_view`, `gh.pr_comment`, `gh.pr_create`. | Stable |
 | `jarvis-sandbox` | `NativeSandbox`, `DockerSandbox`, **`WslSandbox`** (Windows), `WorktreeManager`. | Stable |
 | `jarvis-mcp` | MCP client + tool adapter — branche des serveurs MCP externes (stdio). | Stable |
 | `jarvis-agent` | Boucle plan-act-observe, parser JSON tolérant, **loop detector**, **memory extractor**, system-prompt assembly avec memories + AGENTS.md. | Stable |
@@ -292,10 +292,11 @@ jarvis task cancel <id>
 | Route | Composant clef |
 |---|---|
 | `/` | Quick Ask (chat one-shot streamé) + Tasks grid groupé par parent + form New task + filter goal/id/workdir + status selector |
-| `/task/:id` | Header + view toggle (both \| timeline \| transcript \| diff) + transcript markdown + **scrubbable canvas timeline** (4 lanes) + DiffByIntent + Cancel/Continue |
+| `/task/:id` | Header + view toggle (both \| timeline \| transcript \| diff) + transcript markdown + **scrubbable canvas timeline** (4 lanes) avec **mode replay 1×/2×/4×/8×** + DiffByIntent + Cancel/Continue |
 | `/fleet` | DAG SVG hand-rolled, parent → child orienté, auto-bubble des tâches "attention" |
 | `/memory` | Candidates / Active, edit-in-place, promote/forget/dismiss, usage counters |
-| (footer) | HUD permanent : modèle actif · running · tokens · $ vs cap · badge sandbox · live indicator |
+| `/schedules` | Cron-driven autonomous runs. CRUD + run-now + paused state. |
+| (footer) | HUD permanent : modèle actif · running · tokens in/out réels · $ vs cap · badge sandbox · live indicator |
 
 **Cmd/Ctrl+K** ouvre le command palette (fuzzy match sur 8 commandes : navigation, theme, new task, spawn-explorer, quick ask…). `?` ouvre l'overlay des shortcuts (drag playhead, jk navigate events, `[`/`]` jumps spans, 1-4 toggle lanes, etc.).
 
@@ -377,9 +378,10 @@ cd crates/jarvis-web/ui && bun run typecheck && bun run build
 - [x] **M8** — **Diff-by-intent + phase-gating** (commits Git atomiques par décision parent)
 - [x] **M9** — **Memory promotion** (extractor LLM post-verdict + injection system prompt + UI curation)
 - [x] **M10** — Auth gRPC bearer-token + CI workflows + WSL2 sandbox + loop detector + resume_from
-- [x] **M11.partial** — Cmd+K command palette + web_search tool (Brave / Tavily)
-- [ ] **M11.rest** — sub-agents primitive · image read+gen · cost per-turn streaming · multi-model self-validation · browser sidecar (chromiumoxide)
-- [ ] **M12** — Cron/scheduling · GitHub PR via `gh` · audit replay UI · reviewer auto · Tauri ship unsigned + AppImage
+- [x] **M11.S2/S3/S5/S6/S7** — Cmd+K palette · web_search · spawn_subagent (explorer/worker/reviewer) · cost per-turn streaming · multi-model verdict validator
+- [x] **M12.S1/S2/S3/S4** — Cron/scheduling (`/schedules`) · GitHub PR via `gh` · audit replay UI (▶/2×/4×/8×) · auto reviewer sub-agent
+- [ ] **M11.rest** — image read+gen · browser sidecar (chromiumoxide)
+- [ ] **M12.S5** — Tauri release workflow (unsigned + AppImage)
 
 Plan complet, décisions, risques : `~/.claude/plans/analyse-le-projet-l-ui-drifting-valley.md`.
 
