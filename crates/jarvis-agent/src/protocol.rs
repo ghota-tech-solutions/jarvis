@@ -304,6 +304,55 @@ fn split_top_level_commas(body: &str) -> Vec<&str> {
     out
 }
 
+/// § C thinking mode — strip Gemma 4's reflection channel.
+///
+/// When thinking mode is on, Gemma 4 emits its reasoning inside a
+/// `<|channel>thought\n...<channel|>` block before the actual reply. The
+/// model card also warns that "the model still generates empty tags on
+/// most variants" even when thinking is disabled — so we strip the block
+/// unconditionally before parsing. The reflection is reasoning, not the
+/// JSON action; it must not reach `parse_reply` (and per the multi-turn
+/// rule it must not enter history either).
+///
+/// Returns the input unchanged when no channel block is present.
+pub fn strip_think_channel(raw: &str) -> Option<String> {
+    if !raw.contains("<|channel") {
+        return None;
+    }
+    let mut out = String::with_capacity(raw.len());
+    let mut rest = raw;
+    let mut stripped_any = false;
+    while let Some(start) = rest.find("<|channel") {
+        // Everything before the channel opener stays.
+        out.push_str(&rest[..start]);
+        let after = &rest[start..];
+        // The block closes at `<channel|>` (or `<|channel|>` variant).
+        // Search for the closing tag after the opener.
+        let close_idx = after
+            .match_indices("channel|>")
+            .map(|(i, m)| i + m.len())
+            .next();
+        match close_idx {
+            Some(end) => {
+                rest = &after[end..];
+                stripped_any = true;
+            }
+            None => {
+                // Unterminated channel — drop the rest defensively.
+                stripped_any = true;
+                rest = "";
+                break;
+            }
+        }
+    }
+    out.push_str(rest);
+    if stripped_any {
+        Some(out.trim().to_string())
+    } else {
+        None
+    }
+}
+
 /// § C.M-C — dialect-aware preprocessing slot called before `parse_reply`.
 /// Returns `Cow::Borrowed` for the common case (no rewrite needed).
 pub fn preprocess_response(
@@ -311,11 +360,18 @@ pub fn preprocess_response(
     dialect: jarvis_core::ToolDialect,
 ) -> std::borrow::Cow<'_, str> {
     use jarvis_core::ToolDialect;
+    // First, strip any Gemma reflection channel — applies regardless of
+    // dialect (the model emits empty `<|channel>` tags even with thinking
+    // off, and full blocks when it's on).
+    let dethought: std::borrow::Cow<'_, str> = match strip_think_channel(raw) {
+        Some(s) => std::borrow::Cow::Owned(s),
+        None => std::borrow::Cow::Borrowed(raw),
+    };
     match dialect {
-        ToolDialect::Json | ToolDialect::Gemma4Strict => std::borrow::Cow::Borrowed(raw),
-        ToolDialect::Gemma4Native => match rewrite_gemma4_native(raw) {
+        ToolDialect::Json | ToolDialect::Gemma4Strict => dethought,
+        ToolDialect::Gemma4Native => match rewrite_gemma4_native(&dethought) {
             Some(rewritten) => std::borrow::Cow::Owned(rewritten),
-            None => std::borrow::Cow::Borrowed(raw),
+            None => dethought,
         },
     }
 }
@@ -485,6 +541,44 @@ mod tests {
         assert!(rewrite_gemma4_native("<|tool_call>{x:1}<tool_call|>").is_none());
         // Empty name.
         assert!(rewrite_gemma4_native("<|tool_call>call:{x:1}<tool_call|>").is_none());
+    }
+
+    #[test]
+    fn strip_think_channel_removes_block() {
+        let raw = "<|channel>thought\nLet me reason about this carefully.<channel|>{\"action\":\"done\",\"message\":\"ok\"}";
+        let out = strip_think_channel(raw).expect("should strip");
+        assert_eq!(out, r#"{"action":"done","message":"ok"}"#);
+    }
+
+    #[test]
+    fn strip_think_channel_none_when_absent() {
+        assert!(strip_think_channel(r#"{"action":"done"}"#).is_none());
+        assert!(strip_think_channel("plain text").is_none());
+    }
+
+    #[test]
+    fn strip_think_channel_handles_empty_tags() {
+        // The card warns empty tags appear even with thinking disabled.
+        let raw = "<|channel>thought\n<channel|>{\"action\":\"done\"}";
+        let out = strip_think_channel(raw).unwrap();
+        assert_eq!(out, r#"{"action":"done"}"#);
+    }
+
+    #[test]
+    fn strip_think_channel_unterminated_drops_tail() {
+        let raw = "{\"action\":\"tool\"}<|channel>thought never closed";
+        let out = strip_think_channel(raw).unwrap();
+        assert_eq!(out, r#"{"action":"tool"}"#);
+    }
+
+    #[test]
+    fn preprocess_strips_think_channel_for_json_dialect() {
+        let raw =
+            "<|channel>thought\nreasoning here<channel|>{\"action\":\"done\",\"message\":\"hi\"}";
+        let out = preprocess_response(raw, jarvis_core::ToolDialect::Json);
+        let reply = parse_reply(&out).unwrap();
+        assert_eq!(reply.action, ActionKind::Done);
+        assert_eq!(reply.message.as_deref(), Some("hi"));
     }
 
     #[test]

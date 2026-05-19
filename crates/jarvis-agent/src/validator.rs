@@ -75,6 +75,7 @@ pub fn build_request(
             ChatMessage::user(evidence),
         ],
         temperature: Some(0.0),
+        top_p: None,
         max_tokens: Some(240),
         stream: false,
     }

@@ -19,6 +19,11 @@ capabilities = { ctx_len = 128000, tool_calls = true, json_schema = true, vision
 # in prose" failure mode observed in task c867ee5d.
 # Possible values: "json" | "gemma4_strict" | "gemma4_native"
 tool_dialect = "gemma4_strict"
+# § C — Gemma 4 reflection / thinking mode. When true, the agent prepends
+# the `<|think|>` token to the system prompt so the model reasons in a
+# dedicated channel before answering; the daemon strips that channel
+# before parsing. Off by default — turn on to trade latency for quality.
+thinking = false
 
 # --- Remote providers (enabled in M5) --------------------------------
 # [providers.remote.deepseek_pro]

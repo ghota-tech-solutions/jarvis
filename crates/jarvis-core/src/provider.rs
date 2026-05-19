@@ -44,6 +44,8 @@ impl ChatMessage {
 pub struct ChatRequest {
     pub messages: Vec<ChatMessage>,
     pub temperature: Option<f32>,
+    /// Nucleus sampling cutoff. The Gemma 4 model card recommends 0.95.
+    pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
     pub stream: bool,
 }
@@ -53,6 +55,7 @@ impl ChatRequest {
         Self {
             messages,
             temperature: None,
+            top_p: None,
             max_tokens: None,
             stream: true,
         }

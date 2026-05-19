@@ -37,6 +37,9 @@ pub struct ModelEntry {
     /// this model. Defaults to `Json` (universal). Configure per-model in
     /// `jarvis.toml` via the `tool_dialect = "gemma4_strict"` field.
     pub tool_dialect: ToolDialect,
+    /// Gemma 4 reflection / thinking mode. When true the agent prepends
+    /// `<|think|>` to the system prompt. Off by default.
+    pub thinking: bool,
 }
 
 impl std::fmt::Debug for ModelEntry {
@@ -50,6 +53,7 @@ impl std::fmt::Debug for ModelEntry {
             .field("cost_per_mtok_in", &self.cost_per_mtok_in)
             .field("cost_per_mtok_out", &self.cost_per_mtok_out)
             .field("tool_dialect", &self.tool_dialect)
+            .field("thinking", &self.thinking)
             .finish_non_exhaustive()
     }
 }
@@ -124,5 +128,6 @@ pub fn make_openai_compat_entry(
         cost_per_mtok_out,
         provider,
         tool_dialect: ToolDialect::default(),
+        thinking: false,
     }
 }

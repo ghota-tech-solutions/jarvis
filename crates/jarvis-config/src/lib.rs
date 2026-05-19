@@ -236,6 +236,11 @@ pub struct LocalProvider {
     /// tighter system prompt with explicit anti-drift recovery clause.
     #[serde(default)]
     pub tool_dialect: jarvis_core::ToolDialect,
+    /// Enable Gemma 4 reflection / thinking mode — prepends `<|think|>`
+    /// to the system prompt so the model reasons in a dedicated channel
+    /// before its answer. Off by default.
+    #[serde(default)]
+    pub thinking: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -255,6 +260,9 @@ pub struct RemoteProvider {
     /// § C.M-B — tool-call dialect for this model. Defaults to `Json`.
     #[serde(default)]
     pub tool_dialect: jarvis_core::ToolDialect,
+    /// Enable Gemma 4 reflection / thinking mode. Off by default.
+    #[serde(default)]
+    pub thinking: bool,
 }
 
 fn default_priority() -> i32 {

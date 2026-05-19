@@ -111,6 +111,8 @@ pub struct PickedModel {
     /// § C.M-B — propagated from `ModelEntry::tool_dialect` so the agent
     /// loop knows which system prompt + response preprocessing to apply.
     pub tool_dialect: jarvis_core::ToolDialect,
+    /// Gemma 4 thinking mode, propagated from `ModelEntry::thinking`.
+    pub thinking: bool,
 }
 
 impl std::fmt::Debug for PickedModel {
@@ -120,6 +122,7 @@ impl std::fmt::Debug for PickedModel {
             .field("kind", &self.kind)
             .field("model_id", &self.model_id)
             .field("tool_dialect", &self.tool_dialect)
+            .field("thinking", &self.thinking)
             .finish_non_exhaustive()
     }
 }
@@ -168,6 +171,7 @@ impl LlmPool {
                     ChatMessage::user("ping"),
                 ],
                 temperature: Some(0.0),
+                top_p: None,
                 max_tokens: Some(8),
                 stream: false,
             };
@@ -367,6 +371,7 @@ fn picked(entry: &ModelEntry) -> PickedModel {
         provider: entry.provider.clone(),
         model_id: entry.model_id.clone(),
         tool_dialect: entry.tool_dialect,
+        thinking: entry.thinking,
     }
 }
 

@@ -92,6 +92,9 @@ impl LlmProvider for OpenAiCompatProvider {
         if let Some(t) = req.temperature {
             builder.temperature(t);
         }
+        if let Some(p) = req.top_p {
+            builder.top_p(p);
+        }
         if let Some(m) = req.max_tokens {
             builder.max_tokens(m);
         }
@@ -141,6 +144,9 @@ impl LlmProvider for OpenAiCompatProvider {
             .stream(true);
         if let Some(t) = req.temperature {
             builder.temperature(t);
+        }
+        if let Some(p) = req.top_p {
+            builder.top_p(p);
         }
         if let Some(m) = req.max_tokens {
             builder.max_tokens(m);

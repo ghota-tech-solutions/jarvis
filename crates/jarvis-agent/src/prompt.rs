@@ -231,6 +231,7 @@ your prompt as a system message — you do NOT need to restate the plan in
 REMEMBER: ONE JSON object per reply. Nothing outside the JSON. EVER.
 "##;
 
+#[allow(clippy::too_many_arguments)] // each arg is an independent prompt input
 pub fn build_messages(
     goal: &str,
     workdir: &str,
@@ -239,11 +240,22 @@ pub fn build_messages(
     memories: &[jarvis_ledger::MemoryRecord],
     dialect: ToolDialect,
     ancestor_goals: &[String],
+    thinking: bool,
 ) -> Vec<ChatMessage> {
     let mut msgs = Vec::with_capacity(history.len() + 7);
+    // § C — Gemma 4 reflection mode: the model card says to prepend the
+    // `<|think|>` token at the very start of the system prompt. The
+    // model then reasons inside a `<|channel>thought ... <channel|>`
+    // block before its JSON reply; `protocol::strip_think_channel`
+    // removes that block before parsing.
+    let system = if thinking {
+        format!("<|think|>\n{}", system_prompt_for(dialect))
+    } else {
+        system_prompt_for(dialect).to_string()
+    };
     msgs.push(ChatMessage {
         role: ChatRole::System,
-        content: system_prompt_for(dialect).to_string(),
+        content: system,
     });
     msgs.push(ChatMessage {
         role: ChatRole::System,
@@ -398,9 +410,36 @@ fn render_tool_catalog(tools: &[ToolSchema]) -> String {
     s
 }
 
+/// Render a past decision for the conversation history.
+///
+/// § C.M-E — the Gemma 4 model card is explicit: "in multi-turn
+/// conversations, the model's historical output should include only the
+/// final response. Previous turn reflections must not be added before the
+/// next user turn." The `thought` field IS that reflection — so we strip
+/// it here. The decision still carries its load-bearing parts (the
+/// action plus tool/args, or the done/fail message) so the model sees
+/// what it did, just not the reasoning that led there. The full payload
+/// (thought included) stays in the ledger and the SPA timeline — only
+/// the LLM-facing history is trimmed.
 fn render_decision(ev: &EventRecord) -> String {
-    // We stored the parsed reply as the payload — re-serialize.
-    serde_json::to_string(&ev.payload).unwrap_or_else(|_| "{}".to_string())
+    let p = &ev.payload;
+    let action = p.get("action").and_then(|v| v.as_str()).unwrap_or("");
+    let mut out = serde_json::Map::new();
+    if !action.is_empty() {
+        out.insert("action".to_string(), serde_json::json!(action));
+    }
+    // Tool calls: keep tool + args so the observation that follows makes
+    // sense. Done/fail: keep the message (the final answer).
+    if let Some(tool) = p.get("tool").filter(|v| !v.is_null()) {
+        out.insert("tool".to_string(), tool.clone());
+    }
+    if let Some(args) = p.get("args").filter(|v| !v.is_null()) {
+        out.insert("args".to_string(), args.clone());
+    }
+    if let Some(msg) = p.get("message").filter(|v| !v.is_null()) {
+        out.insert("message".to_string(), msg.clone());
+    }
+    serde_json::to_string(&serde_json::Value::Object(out)).unwrap_or_else(|_| "{}".to_string())
 }
 
 fn render_observation(ev: &EventRecord) -> String {

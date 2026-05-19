@@ -248,6 +248,7 @@ pub async fn run_agent(
                 &memories,
                 picked.tool_dialect,
                 &ancestor_goals,
+                picked.thinking,
             );
             log_event(
                 &ledger,
@@ -265,7 +266,10 @@ pub async fn run_agent(
 
             let chat_req = ChatRequest {
                 messages: messages.clone(),
+                // Low temperature keeps the model on the strict JSON
+                // contract; top_p follows the Gemma 4 model-card value.
                 temperature: Some(0.2),
+                top_p: Some(0.95),
                 max_tokens: Some(1024),
                 stream: true,
             };

@@ -246,10 +246,12 @@ fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
         );
         // § C.M-B — propagate per-model dialect from config.
         entry.tool_dialect = lp.tool_dialect;
+        entry.thinking = lp.thinking;
         info!(
             model = %entry.name,
             model_id = %entry.model_id,
             tool_dialect = %entry.tool_dialect,
+            thinking = entry.thinking,
             "registered local model"
         );
         r.insert(entry);
@@ -267,10 +269,12 @@ fn build_registry(cfg: &Config) -> Result<ModelRegistry> {
             rp.cost_per_mtok_out,
         );
         entry.tool_dialect = rp.tool_dialect;
+        entry.thinking = rp.thinking;
         info!(
             model = %entry.name,
             model_id = %entry.model_id,
             tool_dialect = %entry.tool_dialect,
+            thinking = entry.thinking,
             "registered remote model"
         );
         r.insert(entry);
@@ -624,6 +628,7 @@ impl Jarvis for JarvisService {
         let chat_req = ChatRequest {
             messages: vec![ChatMessage::user(req.prompt)],
             temperature: req.temperature,
+            top_p: None,
             max_tokens: req.max_tokens,
             stream: true,
         };
