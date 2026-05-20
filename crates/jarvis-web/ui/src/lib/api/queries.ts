@@ -37,3 +37,11 @@ export const timelineQuery = (id: string) => ({
   queryFn: async () => await jarvis.getTimeline({ id }),
   refetchInterval: 3000,
 });
+
+export const qkCostBreakdown = (id: string) => ['cost', id] as const;
+
+export const costBreakdownQuery = (id: string) => ({
+  queryKey: qkCostBreakdown(id),
+  queryFn: async () => await jarvis.getTaskCostBreakdown({ id }),
+  refetchInterval: 3000,
+});

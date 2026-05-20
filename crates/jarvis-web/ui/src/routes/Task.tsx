@@ -16,6 +16,8 @@ import { jarvis } from '~/lib/api/client';
 import Transcript from '~/components/Transcript';
 import Timeline from '~/features/timeline/Timeline';
 import DiffByIntent from '~/features/diff/DiffByIntent';
+import TerminalLogs from '~/components/TerminalLogs';
+import Telemetry from '~/components/Telemetry';
 
 const Task: Component = () => {
   const params = useParams<{ id: string }>();
@@ -31,6 +33,7 @@ const Task: Component = () => {
   const [submitting, setSubmitting] = createSignal(false);
   const [view, setView] = createSignal<'timeline' | 'transcript' | 'both' | 'diff'>('both');
   const [selectedEvtId, setSelectedEvtId] = createSignal(0);
+  const [activeTab, setActiveTab] = createSignal<'files' | 'terminal' | 'telemetry'>('files');
   // § C UX — goal text per task id, populated lazily from getTask so the
   // transcript can label each follow-up turn. The leaf (latest task in
   // the chain) is what new follow-ups attach to.
@@ -214,90 +217,135 @@ const Task: Component = () => {
             </header>
 
             <Show when={stream.loaded()} fallback={<p class="dim">loading events…</p>}>
-              <div class="view-toggle">
-                <button
-                  type="button"
-                  class={`btn ghost ${view() === 'both' ? 'active' : ''}`}
-                  onClick={() => setView('both')}
-                >
-                  both
-                </button>
-                <button
-                  type="button"
-                  class={`btn ghost ${view() === 'timeline' ? 'active' : ''}`}
-                  onClick={() => setView('timeline')}
-                >
-                  timeline
-                </button>
-                <button
-                  type="button"
-                  class={`btn ghost ${view() === 'transcript' ? 'active' : ''}`}
-                  onClick={() => setView('transcript')}
-                >
-                  transcript
-                </button>
-                <button
-                  type="button"
-                  class={`btn ghost ${view() === 'diff' ? 'active' : ''}`}
-                  onClick={() => setView('diff')}
-                >
-                  diff
-                </button>
-              </div>
-              <Show when={view() === 'both' || view() === 'timeline'}>
-                <Timeline
-                  events={events()}
-                  spans={spans()}
-                  minTs={minTs()}
-                  maxTs={maxTs()}
-                  selectedEvtId={selectedEvtId()}
-                  onSelect={scrollToEvent}
-                />
-              </Show>
-              <Show when={view() === 'both' || view() === 'transcript'}>
-                <Transcript
-                  events={events()}
-                  selectedEvtId={selectedEvtId()}
-                  taskGoals={taskGoals()}
-                />
-              </Show>
-              <Show when={view() === 'diff'}>
-                <DiffByIntent taskId={params.id} />
-              </Show>
-            </Show>
+              <div class="task-split-container">
+                {/* Left Pane: Timeline, Event Transcript, and follow-up form */}
+                <div class="task-pane-left">
+                  <div class="view-toggle">
+                    <button
+                      type="button"
+                      class={`btn ghost ${view() === 'both' ? 'active' : ''}`}
+                      onClick={() => setView('both')}
+                    >
+                      both
+                    </button>
+                    <button
+                      type="button"
+                      class={`btn ghost ${view() === 'timeline' ? 'active' : ''}`}
+                      onClick={() => setView('timeline')}
+                    >
+                      timeline
+                    </button>
+                    <button
+                      type="button"
+                      class={`btn ghost ${view() === 'transcript' ? 'active' : ''}`}
+                      onClick={() => setView('transcript')}
+                    >
+                      transcript
+                    </button>
+                    <button
+                      type="button"
+                      class={`btn ghost ${view() === 'diff' ? 'active' : ''}`}
+                      onClick={() => setView('diff')}
+                    >
+                      diff
+                    </button>
+                  </div>
+                  
+                  <Show when={view() === 'both' || view() === 'timeline'}>
+                    <Timeline
+                      events={events()}
+                      spans={spans()}
+                      minTs={minTs()}
+                      maxTs={maxTs()}
+                      selectedEvtId={selectedEvtId()}
+                      onSelect={scrollToEvent}
+                    />
+                  </Show>
+                  <Show when={view() === 'both' || view() === 'transcript'}>
+                    <Transcript
+                      events={events()}
+                      selectedEvtId={selectedEvtId()}
+                      taskGoals={taskGoals()}
+                    />
+                  </Show>
+                  <Show when={view() === 'diff'}>
+                    <DiffByIntent taskId={params.id} />
+                  </Show>
 
-            <form class="form" onSubmit={onContinue} style="margin-top: 1.5rem">
-              <textarea
-                class="textarea"
-                placeholder="Ask for a follow-up change — Enter sends, Shift+Enter newlines"
-                value={followup()}
-                onInput={(e) => setFollowup(e.currentTarget.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    onContinue(e);
-                  }
-                }}
-              />
-              <div class="row" style="justify-content: flex-end; gap: 0.5rem">
-                <button
-                  type="button"
-                  class="btn ghost"
-                  onClick={onCancel}
-                  disabled={t().status !== 'running' && t().status !== 'pending'}
-                  title="Cancel current task"
-                >
-                  cancel
-                </button>
-                <button
-                  type="submit"
-                  class="btn"
-                  disabled={submitting() || !followup().trim()}
-                >
-                  {submitting() ? 'sending…' : 'send'}
-                </button>
+                  <form class="form" onSubmit={onContinue} style="margin-top: 1.5rem">
+                    <textarea
+                      class="textarea"
+                      placeholder="Ask for a follow-up change — Enter sends, Shift+Enter newlines"
+                      value={followup()}
+                      onInput={(e) => setFollowup(e.currentTarget.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          onContinue(e);
+                        }
+                      }}
+                    />
+                    <div class="row" style="justify-content: flex-end; gap: 0.5rem">
+                      <button
+                        type="button"
+                        class="btn ghost"
+                        onClick={onCancel}
+                        disabled={t().status !== 'running' && t().status !== 'pending'}
+                        title="Cancel current task"
+                      >
+                        cancel
+                      </button>
+                      <button
+                        type="submit"
+                        class="btn"
+                        disabled={submitting() || !followup().trim()}
+                      >
+                        {submitting() ? 'sending…' : 'send'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Right Pane: Premium Workspace Tabs (Files, Terminal Logs, Telemetry) */}
+                <div class="task-pane-right">
+                  <div class="workspace-tabs">
+                    <button
+                      type="button"
+                      class={`workspace-tab ${activeTab() === 'files' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('files')}
+                    >
+                      📁 files & diffs
+                    </button>
+                    <button
+                      type="button"
+                      class={`workspace-tab ${activeTab() === 'terminal' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('terminal')}
+                    >
+                      💻 terminal logs
+                    </button>
+                    <button
+                      type="button"
+                      class={`workspace-tab ${activeTab() === 'telemetry' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('telemetry')}
+                    >
+                      📊 telemetry
+                    </button>
+                  </div>
+
+                  <div class="workspace-content">
+                    <Show when={activeTab() === 'files'}>
+                      <DiffByIntent taskId={params.id} />
+                    </Show>
+                    <Show when={activeTab() === 'terminal'}>
+                      <TerminalLogs events={events()} />
+                    </Show>
+                    <Show when={activeTab() === 'telemetry'}>
+                      <Telemetry taskId={params.id} />
+                    </Show>
+                  </div>
+                </div>
               </div>
-            </form>
+            </Show>
           </>
         )}
       </Show>

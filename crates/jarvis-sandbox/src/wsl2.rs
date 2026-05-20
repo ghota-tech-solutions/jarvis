@@ -13,8 +13,11 @@
 use crate::spec::{Sandbox, SandboxError, SandboxKind, SandboxOutput, SandboxSpec};
 use async_trait::async_trait;
 use std::path::Path;
+#[cfg(windows)]
 use std::process::Stdio;
+#[cfg(windows)]
 use tokio::process::Command;
+#[cfg(windows)]
 use tracing::debug;
 
 /// WSL distro to invoke. Defaults to the user's default (`wsl.exe` without
@@ -126,6 +129,7 @@ pub fn wsl_workdir(p: &Path) -> Option<String> {
 
 /// Shell-escape a path for inclusion inside single quotes in a `bash -c`
 /// invocation. The path must not itself contain newlines.
+#[cfg(any(windows, test))]
 fn shell_escape(p: &str) -> String {
     // Replace any single quote with the standard "'\''" escape.
     p.replace('\'', "'\\''")

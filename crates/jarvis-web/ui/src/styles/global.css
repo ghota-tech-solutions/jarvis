@@ -1157,3 +1157,334 @@ kbd {
     padding: 0.35rem 0.45rem;
   }
 }
+
+/* --- Premium Devin-Style Revamp Extensions ----------------------------- */
+
+/* Glassmorphism & High-Depth UI */
+.glass-panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.8rem;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Pulsing Status Badges & Glows */
+@keyframes pulse-gold {
+  0% { box-shadow: 0 0 0 0 rgba(220, 175, 90, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(220, 175, 90, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 175, 90, 0); }
+}
+
+@keyframes pulse-green {
+  0% { box-shadow: 0 0 0 0 rgba(140, 180, 110, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(140, 180, 110, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(140, 180, 110, 0); }
+}
+
+.pill.good {
+  box-shadow: 0 0 4px rgba(140, 180, 110, 0.1);
+}
+
+.pill.warn {
+  animation: pulse-gold 2s infinite;
+}
+
+/* Button interactive spring-effect */
+.btn {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+.task-card {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.task-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--accent);
+}
+
+/* Dual-Pane split layout */
+.task-split-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .task-split-container {
+    grid-template-columns: 55fr 45fr;
+    height: calc(100vh - 120px);
+    overflow: hidden;
+    gap: 1.5rem;
+  }
+  
+  .task-pane-left {
+    height: 100%;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+  }
+  
+  .task-pane-right {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Workspace Tabs Navigation */
+.workspace-tabs {
+  display: flex;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0.25rem 0.25rem 0 0.25rem;
+  gap: 0.2rem;
+}
+
+.workspace-tab {
+  background: transparent;
+  color: var(--dim);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 5px 5px 0 0;
+  padding: 0.4rem 0.8rem;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.workspace-tab:hover {
+  color: var(--body);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workspace-tab.active {
+  color: var(--accent);
+  background: var(--bg-elev);
+  border-color: var(--border);
+  font-weight: 600;
+}
+
+.workspace-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  min-height: 0;
+}
+
+/* High-fidelity retro-sleek active command terminal */
+.terminal-box {
+  background: #000000;
+  border: 1px solid #1a1a1a;
+  border-radius: 6px;
+  font-family: ui-monospace, 'Cascadia Code', 'JetBrains Mono', monospace;
+  color: #33ff33; /* Neon green default stdout */
+  padding: 0.8rem;
+  font-size: 12px;
+  line-height: 1.4;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #1a1a1a;
+  margin-bottom: 0.5rem;
+}
+
+.terminal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.terminal-dot.red { background: #ff5f56; }
+.terminal-dot.yellow { background: #ffbd2e; }
+.terminal-dot.green { background: #27c93f; }
+
+.terminal-title {
+  color: #888888;
+  font-size: 11px;
+  margin-left: 0.4rem;
+}
+
+.terminal-logs {
+  flex: 1;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding-right: 0.3rem;
+}
+
+.terminal-line {
+  margin-bottom: 0.4rem;
+}
+
+.terminal-cmd {
+  color: #ffbd2e; /* Neon yellow-amber for command name */
+  font-weight: bold;
+}
+
+.terminal-args {
+  color: #00e5ff; /* Cyan-blue for arguments */
+}
+
+.terminal-output {
+  color: #e0e0e0; /* Light gray for command outputs */
+  margin-left: 0.8rem;
+  border-left: 1px solid #1a1a1a;
+  padding-left: 0.6rem;
+  margin-top: 0.2rem;
+  white-space: pre-wrap;
+}
+
+.terminal-success {
+  color: #27c93f; /* Success green badge */
+}
+
+.terminal-error {
+  color: #ff5f56; /* Failure red badge */
+}
+
+/* Telemetry & Circular Gauge Layouts */
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.2rem;
+}
+
+@media (min-width: 640px) {
+  .telemetry-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.telemetry-card {
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.telemetry-card-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  margin-bottom: 0.5rem;
+}
+
+.telemetry-card-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--heading);
+  margin-top: 0.25rem;
+}
+
+.progress-container {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin-bottom: 0.5rem;
+}
+
+.progress-ring-circle-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.03);
+}
+
+.progress-ring-circle {
+  fill: none;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.35s;
+}
+
+.telemetry-percentage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--accent);
+}
+
+.telemetry-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 1rem;
+}
+
+.telemetry-table th,
+.telemetry-table td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.telemetry-table th {
+  color: var(--dim);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
