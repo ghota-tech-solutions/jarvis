@@ -360,6 +360,14 @@ async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerSt
     r.register(GrepTool);
     r.register(GlobTool);
     r.register(UpdatePlanTool);
+    // Surgical search-and-replace, batch read, folder explorer, and url fetcher
+    r.register(jarvis_tools::ReplaceFileContentTool);
+    r.register(jarvis_tools::FsReadManyTool);
+    r.register(jarvis_tools::ListDirTool);
+    r.register(jarvis_tools::FetchUrlTool);
+    // Git status and View symbols
+    r.register(jarvis_tools::GitStatusTool);
+    r.register(jarvis_tools::ViewSymbolsTool);
     // M11.S2: web search — registered unconditionally; the tool fails fast
     // with a clear error if neither BRAVE_API_KEY nor TAVILY_API_KEY is set,
     // so the agent learns immediately to skip it instead of mid-task.

@@ -73,6 +73,24 @@ impl OpenAiCompatProvider {
     }
 }
 
+fn is_rate_limit_error(err: &async_openai::error::OpenAIError) -> bool {
+    let err_str = err.to_string().to_lowercase();
+    if err_str.contains("429") || err_str.contains("too many requests") || err_str.contains("rate limit") {
+        return true;
+    }
+    match err {
+        async_openai::error::OpenAIError::Reqwest(req_err) => {
+            if let Some(status) = req_err.status() {
+                if status.as_u16() == 429 {
+                    return true;
+                }
+            }
+        }
+        _ => {}
+    }
+    false
+}
+
 #[async_trait]
 impl LlmProvider for OpenAiCompatProvider {
     fn name(&self) -> &ProviderName {
@@ -84,112 +102,147 @@ impl LlmProvider for OpenAiCompatProvider {
     }
 
     async fn complete(&self, req: ChatRequest) -> Result<ChatResponse> {
-        let mut builder = CreateChatCompletionRequestArgs::default();
-        builder
-            .model(&self.cfg.model)
-            .messages(Self::convert_messages(&req.messages)?)
-            .stream(false);
-        if let Some(t) = req.temperature {
-            builder.temperature(t);
-        }
-        if let Some(p) = req.top_p {
-            builder.top_p(p);
-        }
-        if let Some(m) = req.max_tokens {
-            builder.max_tokens(m);
-        }
-        let oai_req = builder
-            .build()
-            .map_err(|e| Error::Provider(format!("build request: {e}")))?;
+        let mut attempt = 0;
+        let max_attempts = 3;
+        let mut delay = std::time::Duration::from_millis(500);
 
-        debug!(model = %self.cfg.model, "openai-compat: non-streaming complete");
-        let resp = self
-            .client
-            .chat()
-            .create(oai_req)
-            .await
-            .map_err(|e| Error::Provider(format!("upstream: {e}")))?;
+        loop {
+            let mut builder = CreateChatCompletionRequestArgs::default();
+            builder
+                .model(&self.cfg.model)
+                .messages(Self::convert_messages(&req.messages)?)
+                .stream(false);
+            if let Some(t) = req.temperature {
+                builder.temperature(t);
+            }
+            if let Some(p) = req.top_p {
+                builder.top_p(p);
+            }
+            if let Some(m) = req.max_tokens {
+                builder.max_tokens(m);
+            }
+            let oai_req = builder
+                .build()
+                .map_err(|e| Error::Provider(format!("build request: {e}")))?;
 
-        let choice = resp
-            .choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::Provider("empty choices".to_string()))?;
-        let content = choice.message.content.unwrap_or_default();
-        let usage = resp
-            .usage
-            .map(|u| Usage {
-                prompt_tokens: u.prompt_tokens,
-                completion_tokens: u.completion_tokens,
-                total_tokens: u.total_tokens,
-            })
-            .unwrap_or_default();
-        Ok(ChatResponse {
-            content,
-            usage,
-            finish_reason: choice
-                .finish_reason
-                .map(|fr| format!("{fr:?}").to_lowercase()),
-        })
+            debug!(model = %self.cfg.model, "openai-compat: non-streaming complete");
+            match self.client.chat().create(oai_req).await {
+                Ok(resp) => {
+                    let choice = resp
+                        .choices
+                        .into_iter()
+                        .next()
+                        .ok_or_else(|| Error::Provider("empty choices".to_string()))?;
+                    let content = choice.message.content.unwrap_or_default();
+                    let usage = resp
+                        .usage
+                        .map(|u| Usage {
+                            prompt_tokens: u.prompt_tokens,
+                            completion_tokens: u.completion_tokens,
+                            total_tokens: u.total_tokens,
+                        })
+                        .unwrap_or_default();
+                    return Ok(ChatResponse {
+                        content,
+                        usage,
+                        finish_reason: choice
+                            .finish_reason
+                            .map(|fr| format!("{fr:?}").to_lowercase()),
+                    });
+                }
+                Err(e) => {
+                    if is_rate_limit_error(&e) && attempt < max_attempts {
+                        attempt += 1;
+                        warn!(
+                            model = %self.cfg.model,
+                            attempt = attempt,
+                            delay_ms = delay.as_millis(),
+                            "rate limited (429), retrying with backoff"
+                        );
+                        tokio::time::sleep(delay).await;
+                        delay *= 2;
+                    } else {
+                        return Err(Error::Provider(format!("upstream: {e}")));
+                    }
+                }
+            }
+        }
     }
 
     async fn complete_stream(
         &self,
         req: ChatRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<CompletionChunk>> + Send + 'static>>> {
-        let mut builder = CreateChatCompletionRequestArgs::default();
-        builder
-            .model(&self.cfg.model)
-            .messages(Self::convert_messages(&req.messages)?)
-            .stream(true);
-        if let Some(t) = req.temperature {
-            builder.temperature(t);
-        }
-        if let Some(p) = req.top_p {
-            builder.top_p(p);
-        }
-        if let Some(m) = req.max_tokens {
-            builder.max_tokens(m);
-        }
-        let oai_req = builder
-            .build()
-            .map_err(|e| Error::Provider(format!("build request: {e}")))?;
+        let mut attempt = 0;
+        let max_attempts = 3;
+        let mut delay = std::time::Duration::from_millis(500);
 
-        debug!(model = %self.cfg.model, "openai-compat: streaming complete");
-        let raw = self
-            .client
-            .chat()
-            .create_stream(oai_req)
-            .await
-            .map_err(|e| Error::Provider(format!("upstream: {e}")))?;
-
-        let mapped = raw.map(|item| match item {
-            Ok(chunk) => {
-                let choice = chunk.choices.into_iter().next();
-                let delta = choice
-                    .as_ref()
-                    .and_then(|c| c.delta.content.clone())
-                    .unwrap_or_default();
-                let finish_reason = choice
-                    .and_then(|c| c.finish_reason)
-                    .map(|fr| format!("{fr:?}").to_lowercase());
-                let usage = chunk.usage.map(|u| Usage {
-                    prompt_tokens: u.prompt_tokens,
-                    completion_tokens: u.completion_tokens,
-                    total_tokens: u.total_tokens,
-                });
-                Ok(CompletionChunk {
-                    delta,
-                    usage,
-                    finish_reason,
-                })
+        loop {
+            let mut builder = CreateChatCompletionRequestArgs::default();
+            builder
+                .model(&self.cfg.model)
+                .messages(Self::convert_messages(&req.messages)?)
+                .stream(true);
+            if let Some(t) = req.temperature {
+                builder.temperature(t);
             }
-            Err(e) => {
-                warn!(error = %e, "stream error");
-                Err(Error::Provider(format!("stream: {e}")))
+            if let Some(p) = req.top_p {
+                builder.top_p(p);
             }
-        });
+            if let Some(m) = req.max_tokens {
+                builder.max_tokens(m);
+            }
+            let oai_req = builder
+                .build()
+                .map_err(|e| Error::Provider(format!("build request: {e}")))?;
 
-        Ok(Box::pin(mapped))
+            debug!(model = %self.cfg.model, "openai-compat: streaming complete");
+            match self.client.chat().create_stream(oai_req).await {
+                Ok(raw) => {
+                    let mapped = raw.map(|item| match item {
+                        Ok(chunk) => {
+                            let choice = chunk.choices.into_iter().next();
+                            let delta = choice
+                                .as_ref()
+                                .and_then(|c| c.delta.content.clone())
+                                .unwrap_or_default();
+                            let finish_reason = choice
+                                .and_then(|c| c.finish_reason)
+                                .map(|fr| format!("{fr:?}").to_lowercase());
+                            let usage = chunk.usage.map(|u| Usage {
+                                prompt_tokens: u.prompt_tokens,
+                                completion_tokens: u.completion_tokens,
+                                total_tokens: u.total_tokens,
+                            });
+                            Ok(CompletionChunk {
+                                delta,
+                                usage,
+                                finish_reason,
+                            })
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "stream error");
+                            Err(Error::Provider(format!("stream: {e}")))
+                        }
+                    });
+                    return Ok(Box::pin(mapped));
+                }
+                Err(e) => {
+                    if is_rate_limit_error(&e) && attempt < max_attempts {
+                        attempt += 1;
+                        warn!(
+                            model = %self.cfg.model,
+                            attempt = attempt,
+                            delay_ms = delay.as_millis(),
+                            "rate limited (429) on stream handshake, retrying with backoff"
+                        );
+                        tokio::time::sleep(delay).await;
+                        delay *= 2;
+                    } else {
+                        return Err(Error::Provider(format!("upstream: {e}")));
+                    }
+                }
+            }
+        }
     }
 }

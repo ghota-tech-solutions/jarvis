@@ -44,67 +44,182 @@ const renderInline = (s: string): string => {
   return out;
 };
 
-const renderBlocks = (escaped: string): string => {
-  // Split into blocks on blank lines.
-  const blocks = escaped.split(/\n{2,}/);
-  const out: string[] = [];
-  for (const blkRaw of blocks) {
-    const blk = blkRaw.replace(/\s+$/, '');
-    if (!blk) continue;
-
-    // Fenced code block: ```lang\n...\n```
-    const fenceMatch = blk.match(/^```(\w*)\n([\s\S]*?)\n```$/);
-    if (fenceMatch) {
-      const lang = fenceMatch[1] || '';
-      const body = fenceMatch[2];
-      out.push(
-        `<pre class="md-code"${lang ? ` data-lang="${lang}"` : ''}><code>${body}</code></pre>`
-      );
-      continue;
-    }
-
-    // Heading: # / ## / ### / #### / ##### / ######
-    const headingMatch = blk.match(/^(#{1,6})\s+(.+)$/);
-    if (headingMatch && !blk.includes('\n')) {
-      const level = headingMatch[1].length;
-      out.push(`<h${level}>${renderInline(headingMatch[2])}</h${level}>`);
-      continue;
-    }
-
-    // Horizontal rule
-    if (/^(-{3,}|_{3,}|\*{3,})$/.test(blk)) {
-      out.push('<hr />');
-      continue;
-    }
-
-    // Bulleted list (all lines start with `- ` or `* `)
-    const lines = blk.split('\n');
-    if (lines.every((l) => /^[-*]\s+/.test(l))) {
-      const items = lines
-        .map((l) => `<li>${renderInline(l.replace(/^[-*]\s+/, ''))}</li>`)
-        .join('');
-      out.push(`<ul>${items}</ul>`);
-      continue;
-    }
-    // Ordered list (all lines start with `<number>. `)
-    if (lines.every((l) => /^\d+\.\s+/.test(l))) {
-      const items = lines
-        .map((l) => `<li>${renderInline(l.replace(/^\d+\.\s+/, ''))}</li>`)
-        .join('');
-      out.push(`<ol>${items}</ol>`);
-      continue;
-    }
-
-    // Default: paragraph. Convert single newlines to <br>.
-    const para = lines.map(renderInline).join('<br />');
-    out.push(`<p>${para}</p>`);
-  }
-  return out.join('\n');
-};
-
 export const renderMarkdown = (md: string): string => {
-  const escaped = escapeHtml(md);
-  return renderBlocks(escaped);
+  const lines = md.split(/\r?\n/);
+  let html = '';
+  let inCode = false;
+  let codeLang = '';
+  let codeBody: string[] = [];
+  let inList = false;
+  let listType: 'ul' | 'ol' | null = null;
+  let inPara = false;
+  let paraBody: string[] = [];
+  let activeSection: 'reasoning' | 'answer' | null = null;
+
+  const flushPara = () => {
+    if (inPara) {
+      if (paraBody.length > 0) {
+        html += `<p>${paraBody.join('<br />')}</p>\n`;
+      }
+      inPara = false;
+      paraBody = [];
+    }
+  };
+
+  const flushList = () => {
+    if (inList && listType) {
+      html += `</${listType}>\n`;
+      inList = false;
+      listType = null;
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // 1. Code Blocks
+    if (line.trim().startsWith('```')) {
+      if (inCode) {
+        // End of code block
+        const escapedBody = escapeHtml(codeBody.join('\n'));
+        html += `<pre class="md-code"${codeLang ? ` data-lang="${codeLang}"` : ''}><code>${escapedBody}</code></pre>\n`;
+        inCode = false;
+        codeBody = [];
+        codeLang = '';
+      } else {
+        // Start of code block
+        flushPara();
+        flushList();
+        inCode = true;
+        codeLang = line.trim().slice(3).trim();
+      }
+      continue;
+    }
+
+    if (inCode) {
+      codeBody.push(line);
+      continue;
+    }
+
+    // 2. Blank Lines
+    if (line.trim() === '') {
+      flushPara();
+      flushList();
+      continue;
+    }
+
+    // 2.5 Box-drawing step divider (e.g. ─step 3/20 or ─ step 3 ─)
+    const stepMatch = line.match(/^\s*(?:─+|-+)\s*step\s*(\d+(?:\/\d+)?)(?:\s*(?:─+|-+)?\s*)?$/i);
+    if (stepMatch) {
+      flushPara();
+      flushList();
+      if (activeSection !== null) {
+        html += `</div>\n</div>\n`;
+        activeSection = null;
+      }
+      html += `<div class="md-step-divider"><span class="md-step-icon">─</span><span class="md-step-text">step ${stepMatch[1]}</span></div>\n`;
+      continue;
+    }
+
+    // 2.6 Reasoning title (case-insensitive reasoning/thought/thinking)
+    const reasoningMatch = line.match(/^\s*(reasoning|thought|thinking)\s*:?\s*$/i);
+    if (reasoningMatch) {
+      flushPara();
+      flushList();
+      if (activeSection !== null) {
+        html += `</div>\n</div>\n`;
+      }
+      activeSection = 'reasoning';
+      html += `<div class="md-reasoning-section">\n<div class="md-section-title md-reasoning-title"><span class="md-section-icon">💭</span> reasoning</div>\n<div class="md-reasoning-content">\n`;
+      continue;
+    }
+
+    // 2.7 Answer title (case-insensitive answer/message/response)
+    const answerMatch = line.match(/^\s*(answer|message|response)\s*:?\s*$/i);
+    if (answerMatch) {
+      flushPara();
+      flushList();
+      if (activeSection !== null) {
+        html += `</div>\n</div>\n`;
+      }
+      activeSection = 'answer';
+      html += `<div class="md-answer-section">\n<div class="md-section-title md-answer-title"><span class="md-section-icon">🎯</span> answer</div>\n<div class="md-answer-content">\n`;
+      continue;
+    }
+
+
+    // 3. Headings
+    const headingMatch = line.match(/^\s*(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      flushPara();
+      flushList();
+      const level = headingMatch[1].length;
+      const content = renderInline(escapeHtml(headingMatch[2]));
+      html += `<h${level}>${content}</h${level}>\n`;
+      continue;
+    }
+
+    // 4. Horizontal Rule
+    if (/^\s*(-{3,}|_{3,}|\*{3,})$/.test(line.trim())) {
+      flushPara();
+      flushList();
+      html += '<hr />\n';
+      continue;
+    }
+
+    // 5. Blockquotes
+    const quoteMatch = line.match(/^\s*>\s+(.+)$/);
+    if (quoteMatch) {
+      flushPara();
+      flushList();
+      html += `<blockquote>${renderInline(escapeHtml(quoteMatch[1]))}</blockquote>\n`;
+      continue;
+    }
+
+    // 6. Bullet Lists
+    const bulletMatch = line.match(/^\s*[-*+]\s+(.+)$/);
+    if (bulletMatch) {
+      flushPara();
+      if (!inList || listType !== 'ul') {
+        flushList();
+        inList = true;
+        listType = 'ul';
+        html += '<ul>\n';
+      }
+      html += `<li>${renderInline(escapeHtml(bulletMatch[1]))}</li>\n`;
+      continue;
+    }
+
+    // 7. Ordered Lists
+    const orderedMatch = line.match(/^\s*(\d+)\.\s+(.+)$/);
+    if (orderedMatch) {
+      flushPara();
+      if (!inList || listType !== 'ol') {
+        flushList();
+        inList = true;
+        listType = 'ol';
+        html += '<ol>\n';
+      }
+      html += `<li>${renderInline(escapeHtml(orderedMatch[2]))}</li>\n`;
+      continue;
+    }
+
+    // 8. Paragraph or continuous text
+    flushList();
+    if (!inPara) {
+      inPara = true;
+    }
+    paraBody.push(renderInline(escapeHtml(line)));
+  }
+
+  flushPara();
+  flushList();
+
+  if (activeSection !== null) {
+    html += `</div>\n</div>\n`;
+  }
+
+  return html;
 };
 
 const Markdown: Component<{ text: string }> = (p) => {

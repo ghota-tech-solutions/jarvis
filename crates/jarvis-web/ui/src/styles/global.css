@@ -508,6 +508,94 @@ pre {
 .markdown strong { font-weight: 600; }
 .markdown em { font-style: italic; }
 
+/* § C UX — custom step divider in markdown */
+.markdown .md-step-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0.75rem 0;
+  color: var(--heading);
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.markdown .md-step-icon {
+  color: var(--accent);
+  font-weight: bold;
+}
+.markdown .md-step-text {
+  background: rgba(212, 180, 120, 0.08);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid rgba(212, 180, 120, 0.15);
+}
+
+/* § C UX — custom sections for reasoning and answer */
+.markdown .md-reasoning-section {
+  border-left: 2px solid var(--border);
+  padding-left: 0.8rem;
+  margin: 0.8rem 0;
+  background: rgba(255, 255, 255, 0.015);
+  border-radius: 0 4px 4px 0;
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+}
+.markdown .md-reasoning-content {
+  font-size: 12px;
+  color: var(--dim);
+}
+.markdown .md-reasoning-content p {
+  margin: 0.25em 0;
+}
+.markdown .md-answer-section {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.8rem;
+  margin: 0.8rem 0;
+  background: rgba(212, 180, 120, 0.02);
+  border-radius: 0 4px 4px 0;
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+}
+.markdown .md-answer-content {
+  font-size: 14px;
+  color: var(--body);
+}
+.markdown .md-answer-content p {
+  margin: 0.35em 0;
+}
+
+/* § C UX — custom section titles for reasoning and answer */
+.markdown .md-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  width: fit-content;
+}
+.markdown .md-reasoning-title {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.65);
+  border-left: 2px solid rgba(255, 255, 255, 0.3);
+}
+.markdown .md-answer-title {
+  background: rgba(212, 180, 120, 0.1);
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+  border: 1px solid rgba(212, 180, 120, 0.15);
+  border-left-width: 3px;
+}
+.markdown .md-section-icon {
+  font-size: 0.95rem;
+}
+
+
 /* § C UX — conversation-turn header between follow-up tasks in a chain */
 .turn-header {
   display: flex;

@@ -113,6 +113,8 @@ pub struct PickedModel {
     pub tool_dialect: jarvis_core::ToolDialect,
     /// Gemma 4 thinking mode, propagated from `ModelEntry::thinking`.
     pub thinking: bool,
+    /// Model context capacity in tokens.
+    pub ctx_len: u32,
 }
 
 impl std::fmt::Debug for PickedModel {
@@ -123,6 +125,7 @@ impl std::fmt::Debug for PickedModel {
             .field("model_id", &self.model_id)
             .field("tool_dialect", &self.tool_dialect)
             .field("thinking", &self.thinking)
+            .field("ctx_len", &self.ctx_len)
             .finish_non_exhaustive()
     }
 }
@@ -146,10 +149,57 @@ struct PoolState {
 
 impl LlmPool {
     pub fn new(registry: ModelRegistry, cfg: QuarantineConfig) -> Self {
-        Self {
+        let pool = Self {
             registry: Arc::new(registry),
             state: Arc::new(RwLock::new(PoolState::default())),
             cfg,
+        };
+
+        // Spawn background healing loop
+        let pool_clone = pool.clone();
+        tokio::spawn(async move {
+            pool_clone.background_healing_loop().await;
+        });
+
+        pool
+    }
+
+    async fn background_healing_loop(&self) {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(120));
+        loop {
+            interval.tick().await;
+            tracing::debug!("LlmPool: running background healing probe...");
+            
+            // Get a list of models that are offline or quarantined
+            let statuses = self.status_all().await;
+            for status in statuses {
+                if !status.online || status.quarantined {
+                    if let Some(entry) = self.registry.get(&status.name) {
+                        let req = ChatRequest {
+                            messages: vec![
+                                ChatMessage::system("Reply with exactly the single word: ok"),
+                                ChatMessage::user("ping"),
+                            ],
+                            temperature: Some(0.0),
+                            top_p: None,
+                            max_tokens: Some(8),
+                            stream: false,
+                        };
+                        match entry.provider.complete(req).await {
+                            Ok(ChatResponse { content, .. }) => {
+                                let ok = !content.trim().is_empty();
+                                if ok {
+                                    info!(model = %status.name, "background healing probe succeeded, restoring online");
+                                    self.record_success(&status.name).await;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::debug!(model = %status.name, error = %e, "background healing probe failed");
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -372,6 +422,7 @@ fn picked(entry: &ModelEntry) -> PickedModel {
         model_id: entry.model_id.clone(),
         tool_dialect: entry.tool_dialect,
         thinking: entry.thinking,
+        ctx_len: entry.capabilities.ctx_len,
     }
 }
 

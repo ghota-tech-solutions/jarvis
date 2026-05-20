@@ -149,15 +149,15 @@ pub async fn run_agent(
         //    instead of the prior weather goal it's refining.
         let ancestors = ledger.walk_ancestors(run.task_id).await?;
         let history = if ancestors.len() <= 1 {
-            ledger.recent_relevant_events(run.task_id, 80).await?
+            ledger.recent_relevant_events(run.task_id, 400).await?
         } else {
             let chain_ids: Vec<jarvis_core::TaskId> = ancestors.iter().map(|t| t.id).collect();
             // Pull a larger raw window (oldest → newest by event id),
-            // filter to relevant kinds, then keep the most-recent 80
-            // globally. Ledger ids are monotonic → most-recent-80-by-id
+            // filter to relevant kinds, then keep the most-recent 400
+            // globally. Ledger ids are monotonic → most-recent-400-by-id
             // gives us the right tail across the entire chain.
             let mut events = ledger
-                .query_events_multi(&chain_ids, 0, 400)
+                .query_events_multi(&chain_ids, 0, 1000)
                 .await?
                 .into_iter()
                 .filter(|e| {
@@ -171,8 +171,8 @@ pub async fn run_agent(
                     )
                 })
                 .collect::<Vec<_>>();
-            if events.len() > 80 {
-                let drop = events.len() - 80;
+            if events.len() > 400 {
+                let drop = events.len() - 400;
                 events.drain(..drop);
             }
             events
@@ -249,6 +249,7 @@ pub async fn run_agent(
                 picked.tool_dialect,
                 &ancestor_goals,
                 picked.thinking,
+                picked.ctx_len,
             );
             log_event(
                 &ledger,

@@ -231,6 +231,10 @@ your prompt as a system message — you do NOT need to restate the plan in
 REMEMBER: ONE JSON object per reply. Nothing outside the JSON. EVER.
 "##;
 
+fn estimate_tokens(s: &str) -> usize {
+    s.len() / 3
+}
+
 #[allow(clippy::too_many_arguments)] // each arg is an independent prompt input
 pub fn build_messages(
     goal: &str,
@@ -241,63 +245,25 @@ pub fn build_messages(
     dialect: ToolDialect,
     ancestor_goals: &[String],
     thinking: bool,
+    ctx_len: u32,
 ) -> Vec<ChatMessage> {
-    let mut msgs = Vec::with_capacity(history.len() + 7);
-    // § C — Gemma 4 reflection mode: the model card says to prepend the
-    // `<|think|>` token at the very start of the system prompt. The
-    // model then reasons inside a `<|channel>thought ... <channel|>`
-    // block before its JSON reply; `protocol::strip_think_channel`
-    // removes that block before parsing.
+    // Dynamic sliding window context budget: limit overall context to 80% of Picked Model's capacity
+    let budget = (ctx_len as usize * 80) / 100;
+
     let system = if thinking {
         format!("<|think|>\n{}", system_prompt_for(dialect))
     } else {
         system_prompt_for(dialect).to_string()
     };
-    msgs.push(ChatMessage {
-        role: ChatRole::System,
-        content: system,
-    });
-    msgs.push(ChatMessage {
-        role: ChatRole::System,
-        content: render_tool_catalog(tools),
-    });
 
-    // Project-level conventions: AGENTS.md / CLAUDE.md / .cursor/rules at the
-    // workdir root. Loaded once per turn, capped at 8 KB so the model isn't
-    // taxed by an unbounded user file.
-    if let Some(agents_md) = try_load_agents_md(workdir) {
-        msgs.push(ChatMessage {
-            role: ChatRole::System,
-            content: agents_md,
-        });
-    }
+    let catalog = render_tool_catalog(tools);
 
-    // M9: promoted long-term memories for this workdir + every global one.
-    // The user curates this list via the SPA's memory sidebar; the agent
-    // treats each entry as a hard constraint or strong preference.
-    if let Some(mem_msg) = render_memories(memories) {
-        msgs.push(ChatMessage {
-            role: ChatRole::System,
-            content: mem_msg,
-        });
-    }
+    let agents_md = try_load_agents_md(workdir).unwrap_or_default();
 
-    // Render the latest plan once, out-of-band, instead of letting every
-    // historic update_plan tool call accumulate in the conversation. This
-    // matches the Codex pattern: the harness shows the plan, the model
-    // doesn't restate it.
-    if let Some(plan_msg) = render_latest_plan(history) {
-        msgs.push(ChatMessage {
-            role: ChatRole::System,
-            content: plan_msg,
-        });
-    }
+    let mem_msg = render_memories(memories).unwrap_or_default();
 
-    // § C follow-up fix — when the task is a follow-up (ancestors_goals
-    // is non-empty), frame the goal explicitly as a continuation. The
-    // model otherwise sees a fresh "Begin" at the TOP of the user turn,
-    // followed by prior decisions/observations BELOW, and gets confused
-    // about what the new goal refers to.
+    let plan_msg = render_latest_plan(history).unwrap_or_default();
+
     let user_turn = if ancestor_goals.is_empty() {
         format!("Goal: {goal}\nWorkdir: {workdir}\n\nBegin.")
     } else {
@@ -309,29 +275,98 @@ pub fn build_messages(
             "Goal: {goal}\nWorkdir: {workdir}\n\nThis is a follow-up turn in a multi-step conversation. Prior turn goals (oldest → newest):\n{prior}\nThe ASSISTANT and USER messages that follow are the recorded conversation history (decisions and tool observations from those prior turns).\n\nThe goal stated above is the user's NEW request. Use the prior turns ONLY to resolve what the new request refers to — for example \"et a Marseille ?\" after a weather question means: get the weather FOR MARSEILLE.\n\nCRITICAL — the new goal asks about something DIFFERENT from the prior turns. Do NOT copy or repeat a previous turn's answer. If the new goal needs fresh data (a different city, a different file, a different computation), you MUST call the appropriate tools again for the NEW goal. Only answer directly without tools if the prior turns ALREADY contain the exact answer to this specific new goal.\n\nBegin."
         )
     };
+
+    // Calculate static parts size to compute remaining budget for history
+    let static_size = estimate_tokens(&system)
+        + estimate_tokens(&catalog)
+        + estimate_tokens(&agents_md)
+        + estimate_tokens(&mem_msg)
+        + estimate_tokens(&plan_msg)
+        + estimate_tokens(&user_turn);
+
+    let history_budget = budget.saturating_sub(static_size);
+
+    // Keep history events chronologically but build them newest-first to slide window
+    let mut selected_history = Vec::new();
+    let mut current_history_tokens = 0;
+
+    for ev in history.iter().rev() {
+        if is_update_plan_event(ev) {
+            continue;
+        }
+
+        let msg_str = match ev.kind {
+            EventKind::Decision => render_decision(ev),
+            EventKind::ToolResult | EventKind::Error => render_observation(ev),
+            EventKind::Continuation => render_continuation(ev),
+            _ => continue,
+        };
+
+        let est = estimate_tokens(&msg_str);
+        if current_history_tokens + est > history_budget {
+            // Keep at least the single most recent history event so the agent is never completely blind to the last step
+            if selected_history.is_empty() {
+                selected_history.push((ev, msg_str));
+            }
+            break;
+        }
+
+        current_history_tokens += est;
+        selected_history.push((ev, msg_str));
+    }
+
+    selected_history.reverse();
+
+    // Assemble final ChatMessages
+    let mut msgs = Vec::with_capacity(selected_history.len() + 7);
+    msgs.push(ChatMessage {
+        role: ChatRole::System,
+        content: system,
+    });
+    msgs.push(ChatMessage {
+        role: ChatRole::System,
+        content: catalog,
+    });
+
+    if !agents_md.is_empty() {
+        msgs.push(ChatMessage {
+            role: ChatRole::System,
+            content: agents_md,
+        });
+    }
+
+    if !mem_msg.is_empty() {
+        msgs.push(ChatMessage {
+            role: ChatRole::System,
+            content: mem_msg,
+        });
+    }
+
+    if !plan_msg.is_empty() {
+        msgs.push(ChatMessage {
+            role: ChatRole::System,
+            content: plan_msg,
+        });
+    }
+
     msgs.push(ChatMessage {
         role: ChatRole::User,
         content: user_turn,
     });
 
-    for ev in history {
-        // Suppress update_plan events from the conversation history — the
-        // out-of-band plan above already carries the current state.
-        if is_update_plan_event(ev) {
-            continue;
-        }
+    for (ev, content) in selected_history {
         match ev.kind {
             EventKind::Decision => msgs.push(ChatMessage {
                 role: ChatRole::Assistant,
-                content: render_decision(ev),
+                content,
             }),
             EventKind::ToolResult | EventKind::Error => msgs.push(ChatMessage {
                 role: ChatRole::User,
-                content: render_observation(ev),
+                content,
             }),
             EventKind::Continuation => msgs.push(ChatMessage {
                 role: ChatRole::User,
-                content: render_continuation(ev),
+                content,
             }),
             _ => {}
         }
@@ -442,11 +477,50 @@ fn render_decision(ev: &EventRecord) -> String {
     serde_json::to_string(&serde_json::Value::Object(out)).unwrap_or_else(|_| "{}".to_string())
 }
 
+fn compact_json_value(val: &serde_json::Value) -> serde_json::Value {
+    match val {
+        serde_json::Value::String(s) => {
+            if s.len() > 4000 {
+                let mut prefix_end = 1000;
+                while prefix_end > 0 && !s.is_char_boundary(prefix_end) {
+                    prefix_end -= 1;
+                }
+                let mut suffix_start = s.len() - 1000;
+                while suffix_start < s.len() && !s.is_char_boundary(suffix_start) {
+                    suffix_start += 1;
+                }
+                let first_part = &s[..prefix_end];
+                let last_part = &s[suffix_start..];
+                let truncated_len = s.len() - prefix_end - (s.len() - suffix_start);
+                serde_json::Value::String(format!(
+                    "{}\n\n... [TRUNCATED {} BYTES FOR CONTEXT EFFICIENCY] ...\n\n{}",
+                    first_part, truncated_len, last_part
+                ))
+            } else {
+                val.clone()
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            let compacted: Vec<serde_json::Value> = arr.iter().map(compact_json_value).collect();
+            serde_json::Value::Array(compacted)
+        }
+        serde_json::Value::Object(obj) => {
+            let mut compacted = serde_json::Map::new();
+            for (k, v) in obj {
+                compacted.insert(k.clone(), compact_json_value(v));
+            }
+            serde_json::Value::Object(compacted)
+        }
+        _ => val.clone(),
+    }
+}
+
 fn render_observation(ev: &EventRecord) -> String {
     let mut s = String::new();
     s.push_str("Observation:\n");
     s.push_str("```json\n");
-    s.push_str(&serde_json::to_string_pretty(&ev.payload).unwrap_or_default());
+    let compacted = compact_json_value(&ev.payload);
+    s.push_str(&serde_json::to_string_pretty(&compacted).unwrap_or_default());
     s.push_str("\n```");
     s
 }
