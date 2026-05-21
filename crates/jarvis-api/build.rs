@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proto_file = proto_root.join("jarvis.proto");
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
 
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .file_descriptor_set_path(out_dir.join("jarvis_descriptor.bin"))
         .build_client(true)
         .build_server(true)
