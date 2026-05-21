@@ -2755,7 +2755,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jarvis-agent"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "futures",
@@ -2779,7 +2779,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures-core",
  "jarvis-core",
@@ -2795,7 +2795,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2814,7 +2814,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-config"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dotenvy",
  "figment",
@@ -2827,7 +2827,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "futures-core",
@@ -2839,7 +2839,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-daemon"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2876,7 +2876,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-desktop"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -2895,7 +2895,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-ledger"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2913,7 +2913,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-llm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-openai",
  "async-trait",
@@ -2931,7 +2931,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2946,7 +2946,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "bollard",
@@ -2966,7 +2966,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-tools"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "ignore",
@@ -2988,7 +2988,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-tui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3013,7 +3013,7 @@ dependencies = [
 
 [[package]]
 name = "jarvis-web"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5647,9 +5647,12 @@ checksum = "703d5c7ef118737c72f1af64ad2f6f8c5e1921f818cdcb97b8fe6fc69bf66214"
 
 [[package]]
 name = "similar"
-version = "2.7.0"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
+checksum = "04d93e861ede2e497b47833469b8ec9d5c07fa4c78ce7a00f6eb7dd8168b4b3f"
+dependencies = [
+ "bstr",
+]
 
 [[package]]
 name = "siphasher"
