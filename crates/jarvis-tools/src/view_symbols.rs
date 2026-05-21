@@ -39,10 +39,12 @@ impl Tool for ViewSymbolsTool {
     }
 
     async fn invoke(&self, args: Json, ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
-        let a: ViewSymbolsArgs = serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let a: ViewSymbolsArgs =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
         let path = ctx.resolve(&a.path)?;
 
-        let content = tokio::fs::read_to_string(&path).await
+        let content = tokio::fs::read_to_string(&path)
+            .await
             .map_err(|e| ToolError::Other(format!("failed to read file: {e}")))?;
 
         let ext = Path::new(&a.path)
@@ -59,26 +61,35 @@ impl Tool for ViewSymbolsTool {
             _ => {
                 return Ok(ToolOutput::err(
                     format!("unsupported file extension for symbol viewing: '.{}'", ext),
-                    json!({ "supported_extensions": ["rs", "ts", "tsx", "js", "jsx", "py", "go"] })
+                    json!({ "supported_extensions": ["rs", "ts", "tsx", "js", "jsx", "py", "go"] }),
                 ));
             }
         };
 
         Ok(ToolOutput::ok(
-            format!("extracted {} structural symbols from {}", symbols.len(), a.path),
+            format!(
+                "extracted {} structural symbols from {}",
+                symbols.len(),
+                a.path
+            ),
             json!({
                 "path": a.path,
                 "symbols": symbols
-            })
+            }),
         ))
     }
 }
 
 fn parse_rust(content: &str) -> Vec<SymbolInfo> {
-    let re_fn = Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
-    let re_struct = Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?struct\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
-    let re_enum = Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?enum\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
-    let re_trait = Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?trait\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+    let re_fn =
+        Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+            .unwrap();
+    let re_struct =
+        Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?struct\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+    let re_enum =
+        Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?enum\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+    let re_trait =
+        Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?trait\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
     let re_impl = Regex::new(r"^\s*impl\b(.*)").unwrap();
 
     let mut symbols = Vec::new();
@@ -117,9 +128,13 @@ fn parse_rust(content: &str) -> Vec<SymbolInfo> {
         } else if let Some(caps) = re_impl.captures(line) {
             let body = caps.get(1).map_or("", |m| m.as_str()).trim();
             let name = if body.contains(" for ") {
-                body.split(" for ").nth(0).unwrap_or(body).trim().to_string()
+                body.split(" for ")
+                    .next()
+                    .unwrap_or(body)
+                    .trim()
+                    .to_string()
             } else {
-                body.split('{').nth(0).unwrap_or(body).trim().to_string()
+                body.split('{').next().unwrap_or(body).trim().to_string()
             };
             symbols.push(SymbolInfo {
                 name,
@@ -133,11 +148,16 @@ fn parse_rust(content: &str) -> Vec<SymbolInfo> {
 }
 
 fn parse_js_ts(content: &str) -> Vec<SymbolInfo> {
-    let re_fn = Regex::new(r"^\s*(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+    let re_fn =
+        Regex::new(r"^\s*(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
     let re_class = Regex::new(r"^\s*(?:export\s+)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
-    let re_interface = Regex::new(r"^\s*(?:export\s+)?interface\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+    let re_interface =
+        Regex::new(r"^\s*(?:export\s+)?interface\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
     let re_type = Regex::new(r"^\s*(?:export\s+)?type\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=").unwrap();
-    let re_arrow = Regex::new(r"^\s*(?:export\s+)?const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:async\s*)?\(.*?\)\s*=>").unwrap();
+    let re_arrow = Regex::new(
+        r"^\s*(?:export\s+)?const\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:async\s*)?\(.*?\)\s*=>",
+    )
+    .unwrap();
 
     let mut symbols = Vec::new();
     for (idx, line) in content.lines().enumerate() {
@@ -214,7 +234,8 @@ fn parse_python(content: &str) -> Vec<SymbolInfo> {
 
 fn parse_go(content: &str) -> Vec<SymbolInfo> {
     let re_fn = Regex::new(r"^\s*func\s+(?:\([^)]*\)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\(").unwrap();
-    let re_type = Regex::new(r"^\s*type\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:struct|interface)\b").unwrap();
+    let re_type =
+        Regex::new(r"^\s*type\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:struct|interface)\b").unwrap();
 
     let mut symbols = Vec::new();
     for (idx, line) in content.lines().enumerate() {
@@ -266,7 +287,10 @@ mod tests {
 
         let ctx = ToolCtx::new(temp.path());
         let tool = ViewSymbolsTool;
-        let res = tool.invoke(json!({ "path": "main.rs" }), &ctx).await.unwrap();
+        let res = tool
+            .invoke(json!({ "path": "main.rs" }), &ctx)
+            .await
+            .unwrap();
         assert!(!res.is_error);
 
         let syms = res.data["symbols"].as_array().unwrap();
@@ -300,7 +324,10 @@ mod tests {
 
         let ctx = ToolCtx::new(temp.path());
         let tool = ViewSymbolsTool;
-        let res = tool.invoke(json!({ "path": "helper.ts" }), &ctx).await.unwrap();
+        let res = tool
+            .invoke(json!({ "path": "helper.ts" }), &ctx)
+            .await
+            .unwrap();
         assert!(!res.is_error);
 
         let syms = res.data["symbols"].as_array().unwrap();

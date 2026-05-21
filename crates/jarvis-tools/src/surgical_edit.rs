@@ -58,8 +58,8 @@ impl Tool for ReplaceFileContentTool {
     }
 
     async fn invoke(&self, args: Json, ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
-        let a: ReplaceArgs = serde_json::from_value(args)
-            .map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let a: ReplaceArgs =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
         let path = ctx.resolve(&a.path)?;
 
         let mut content = match tokio::fs::read_to_string(&path).await {

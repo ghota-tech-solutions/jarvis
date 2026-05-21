@@ -43,8 +43,8 @@ impl Tool for ListDirTool {
     }
 
     async fn invoke(&self, args: Json, ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
-        let a: ListDirArgs = serde_json::from_value(args)
-            .map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let a: ListDirArgs =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
         let root = match &a.path {
             Some(p) => ctx.resolve(p)?,
             None => ctx.workdir.clone(),
@@ -53,11 +53,10 @@ impl Tool for ListDirTool {
         let depth = a.max_depth.unwrap_or(2);
         let workdir = ctx.workdir.clone();
 
-        let entries = tokio::task::spawn_blocking(move || {
-            list_dir_blocking(&root, &workdir, depth)
-        })
-        .await
-        .map_err(|e| ToolError::Other(format!("join: {e}")))?;
+        let entries =
+            tokio::task::spawn_blocking(move || list_dir_blocking(&root, &workdir, depth))
+                .await
+                .map_err(|e| ToolError::Other(format!("join: {e}")))?;
 
         Ok(ToolOutput::ok(
             format!(
@@ -98,12 +97,7 @@ fn list_dir_blocking(root: &Path, workdir: &Path, max_depth: usize) -> Vec<serde
     }
 
     // Sort entries for deterministic output
-    entries.sort_by(|a, b| {
-        a["path"]
-            .as_str()
-            .unwrap()
-            .cmp(b["path"].as_str().unwrap())
-    });
+    entries.sort_by(|a, b| a["path"].as_str().unwrap().cmp(b["path"].as_str().unwrap()));
     entries
 }
 

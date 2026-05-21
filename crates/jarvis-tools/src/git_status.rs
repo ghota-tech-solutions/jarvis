@@ -30,7 +30,8 @@ impl Tool for GitStatusTool {
     }
 
     async fn invoke(&self, args: Json, ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
-        let a: GitStatusArgs = serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let a: GitStatusArgs =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
         let root = match &a.path {
             Some(p) => ctx.resolve(p)?,
             None => ctx.workdir.clone(),
@@ -38,7 +39,7 @@ impl Tool for GitStatusTool {
 
         // Check if git is installed and it's a repository
         let output = match Command::new("git")
-            .args(&["status", "--porcelain", "-b"])
+            .args(["status", "--porcelain", "-b"])
             .current_dir(&root)
             .output()
             .await
@@ -50,7 +51,7 @@ impl Tool for GitStatusTool {
                     json!({
                         "is_git_repo": false,
                         "error": e.to_string()
-                    })
+                    }),
                 ));
             }
         };
@@ -62,7 +63,7 @@ impl Tool for GitStatusTool {
                 json!({
                     "is_git_repo": false,
                     "error": stderr.trim()
-                })
+                }),
             ));
         }
 
@@ -76,10 +77,10 @@ impl Tool for GitStatusTool {
             if line.is_empty() {
                 continue;
             }
-            if line.starts_with("##") {
+            if let Some(rest) = line.strip_prefix("##") {
                 // Header line: branch information
                 // E.g., "## main...origin/main" or "## HEAD (no branch)"
-                let b = line[2..].trim();
+                let b = rest.trim();
                 if let Some(pos) = b.find("...") {
                     branch = b[..pos].to_string();
                 } else {
@@ -111,14 +112,20 @@ impl Tool for GitStatusTool {
         }
 
         Ok(ToolOutput::ok(
-            format!("git status on branch '{}' (staged: {}, unstaged: {}, untracked: {})", branch, staged.len(), unstaged.len(), untracked.len()),
+            format!(
+                "git status on branch '{}' (staged: {}, unstaged: {}, untracked: {})",
+                branch,
+                staged.len(),
+                unstaged.len(),
+                untracked.len()
+            ),
             json!({
                 "is_git_repo": true,
                 "branch": branch,
                 "staged": staged,
                 "unstaged": unstaged,
                 "untracked": untracked
-            })
+            }),
         ))
     }
 }
