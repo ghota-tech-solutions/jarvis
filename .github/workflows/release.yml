@@ -1,17 +1,33 @@
 name: release
 
-# Builds installable bundles for Windows / macOS / Linux on every tag
-# vX.Y.Z and attaches them to the GitHub release that release-please
-# already created for that tag. Bundles are UNSIGNED — Windows
-# SmartScreen / macOS Gatekeeper will warn; documented in README §Install.
+# Builds installable bundles for Windows / macOS / Linux and attaches them
+# to the GitHub release for a given tag. Invoked by release-please.yml once
+# a release is cut, by a manually pushed vX.Y.Z tag, or manually from the
+# Actions tab. Bundles are UNSIGNED — Windows SmartScreen / macOS Gatekeeper
+# will warn; documented in README §Install.
 
 on:
+  # Called by release-please.yml after it cuts a release.
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag whose GitHub release the bundles attach to.
+        type: string
+        required: false
+        default: ''
+  # Manual run: pass a tag to build + attach bundles to that release, or
+  # leave it empty for a dry-run build that publishes nothing.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build bundles for and attach them to.
+        type: string
+        required: false
+        default: ''
+  # A manually pushed tag builds + publishes on its own.
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
-  # Lets us trigger a dry-run release build from the Actions tab without
-  # cutting a tag. Doesn't publish anything when run this way.
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -103,10 +119,9 @@ jobs:
           retention-days: 7
 
   publish:
-    # On a tag, attach the built bundles to the release that release-please
-    # already created. workflow_dispatch builds the artifacts (above) but
-    # stops here.
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Attach the built bundles to the release for this tag. Skipped on a
+    # tag-less dry-run dispatch.
+    if: ${{ inputs.tag != '' || github.event_name == 'push' }}
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -115,8 +130,9 @@ jobs:
           path: dist
           merge-multiple: true
       # release-please already created the GitHub release (with the
-      # CHANGELOG body) for this tag — we only upload the bundles to it.
+      # CHANGELOG body) for this tag — we only upload the bundles onto it.
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: dist/*
           fail_on_unmatched_files: false
