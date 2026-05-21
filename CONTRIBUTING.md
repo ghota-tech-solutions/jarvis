@@ -60,74 +60,13 @@ bun run dev
 # Open the URL Vite prints, append #token=<contents of .jarvis/web.token>
 ```
 
-### Local LLM setup (macOS, Apple Silicon)
+### Local LLM setup
 
-Jarvis talks to any OpenAI-compatible endpoint, so vLLM, llama.cpp, Ollama,
-and LM Studio all work. The fastest path on Apple Silicon is
-[**omlx**](https://github.com/jundot/omlx) — an MLX-backed server with a
-built-in admin UI for model downloads and tuning.
-
-```bash
-# 1. Install
-brew tap jundot/omlx
-brew install --head omlx
-
-# 2. Start the server (default port 8000)
-omlx serve
-```
-
-Open the admin UI and pull the two Gemma 4 model variants we recommend for
-Jarvis:
-
-1. **Models →
-   [Downloader](http://localhost:8000/admin/dashboard?tab=models&modelsTab=downloader)**
-   — download both:
-   - `gemma-4-26B-A4B-it-assistant-bf16` (full precision, for thinking/planning)
-   - `gemma-4-26B-A4B-it-MLX-4bit` (4-bit quant, for fast tool-call turns)
-
-2. **Settings →
-   [Models](http://localhost:8000/admin/dashboard?tab=settings&settingsTab=models)**
-   — open the gear on `gemma-4-26B-A4B-it-assistant-bf16` and enable:
-   - **TurboQuant KV Cache** at 4-bit (cuts cache memory ~4×)
-   - **deflash** (faster attention on Apple Silicon)
-
-3. **Smoke-test** the chat at
-   [/admin/chat](http://localhost:8000/admin/chat) before wiring Jarvis.
-
-Once chat works, point Jarvis at omlx via `.env`:
-
-```bash
-# Local LLM (OpenAI-compatible endpoint — omlx, MLX-LM, llama.cpp, vLLM)
-HERMES_LOCAL_URL=http://127.0.0.1:8000/v1
-HERMES_LOCAL_MODEL=gemma-4-26B-A4B-it-MLX-4bit
-HERMES_LOCAL_API_KEY=azer
-
-# Remote LLM (DeepSeek API — optional, only if you want failover)
-#DEEPSEEK_API_KEY=sk-xxx
-
-# Daemon — bind 0.0.0.0 so LAN devices (e.g. mobile testing) can reach
-# the daemon's gRPC + gRPC-Web endpoint. Auth bearer token gates access.
-JARVIS_DAEMON_ADDR=0.0.0.0:7777
-# JARVIS_SPA_ADDR overrides jarvis-web's bind. Default is 0.0.0.0:7879.
-JARVIS_LOG=jarvis=debug,info
-
-# Web search (M11.S2) — Brave Search API (free tier:
-# https://api.search.brave.com/app/dashboard)
-# Note: var name avoids the JARVIS_ prefix because that namespace is reserved
-# for jarvis.toml field overrides (figment strict mode).
-#WEB_SEARCH_BACKEND=brave
-#BRAVE_API_KEY=xxx
-#TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-The `HERMES_LOCAL_API_KEY` value can be anything — omlx accepts any
-non-empty key. The OpenAI SDK we use requires the field to be set.
-
-> **Linux / Windows**: omlx is macOS-only. On Linux use
-> [vLLM](https://github.com/vllm-project/vllm) or
-> [llama.cpp](https://github.com/ggerganov/llama.cpp); on Windows use WSL2
-> with either, or [LM Studio](https://lmstudio.ai/). Any OpenAI-compatible
-> server works — only `HERMES_LOCAL_URL` and `HERMES_LOCAL_MODEL` change.
+Jarvis needs an OpenAI-compatible LLM endpoint. The recommended setup — omlx
+on Apple Silicon, the two Gemma 4 model variants, omlx tuning (VLM MTP, hot
+cache, chunked prefill), and the `.env` wiring — lives in the README's
+[**Local LLM setup**](./README.md#local-llm-setup) section, since it is
+end-user configuration rather than contributor-only.
 
 ## Workflow
 
@@ -213,8 +152,8 @@ Please **don't** open public issues for security vulnerabilities. See
 
 ## Licensing
 
-By contributing, you agree that your contributions will be dual-licensed
-under MIT and Apache-2.0, matching the project license.
+By contributing, you agree that your contributions will be licensed under
+the MIT License, matching the project license.
 
 ## Questions?
 

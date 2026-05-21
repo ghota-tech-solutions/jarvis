@@ -1,28 +1,36 @@
 # Jarvis
 
-> Système d'agents de codage autonome et continu, à la qualité institutionnelle, en Rust.
+> An institutional-quality, continuously-running autonomous coding-agent system, written in Rust.
 
-**Statut : `v0.1.0-dev` — M12 majoritairement livré · daemon + agent + sandbox + multi-modèles + SPA SolidJS + scheduling + GitHub PR + verdict validator + replay UI · 105 tests verts**
+[![CI](https://github.com/ghota-tech-solutions/jarvis/actions/workflows/rust.yml/badge.svg)](https://github.com/ghota-tech-solutions/jarvis/actions/workflows/rust.yml)
+[![Web](https://github.com/ghota-tech-solutions/jarvis/actions/workflows/web.yml/badge.svg)](https://github.com/ghota-tech-solutions/jarvis/actions/workflows/web.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
+[![Rust 1.95+](https://img.shields.io/badge/rust-1.95%2B-orange.svg)](https://www.rust-lang.org)
 
-Jarvis est conçu pour **travailler en continu** sur les tâches que tu lui donnes, plutôt
-que de répondre tour par tour comme un chatbot. Il dépasse OpenCode, Claude Code,
-Hermes et Codex sur quatre axes que personne d'autre n'attaque correctement :
+**Status: `v0.1.0-dev` — active development.** Core daemon, agent loop, sandboxes,
+multi-model registry, SolidJS SPA, scheduling, GitHub PR integration, multi-model
+verdict validator, and the replay UI have all shipped.
 
-1. **Ledger event-sourced** (SQLite, append-only) comme mémoire primaire — pas le
-   contexte LLM. L'agent interroge son passé avant d'agir, et son travail survit
-   aux redémarrages. Le ledger nourrit la **timeline canvas scrubable** dans la SPA.
-2. **Registry multi-modèles** avec capabilities probées + quarantaine automatique :
-   tu ajoutes un modèle en éditant `jarvis.toml`, zéro code. Le routeur choisit par
-   capability requise, bascule tout seul, et exhibe coût + tokens en temps réel
-   dans le HUD bas-écran.
-3. **Daemon + clients gRPC** : tu peux fermer la TUI ou la SPA, le travail continue.
-   CLI, TUI, SPA SolidJS, Tauri desktop, et bientôt mobile — tous partagent le
-   même état via gRPC + gRPC-Web (`tonic-web`), authentifié par un bearer token
-   loopback.
-4. **Diff-by-intent + phase-gating** : au lieu de stager les fichiers, l'agent
-   regroupe ses écritures par décision parent (event-sourced via `parent_evt`).
-   L'utilisateur approuve / rejette **une phase entière** ; un commit Git
-   atomique tombe par phase. Aucune autre tool n'a ça.
+Jarvis is built to **work continuously** on the tasks you hand it, instead of
+answering turn-by-turn like a chatbot. It goes beyond OpenCode, Claude Code,
+Hermes, and Codex on four axes that nobody else tackles properly:
+
+1. **Event-sourced ledger** (SQLite, append-only) as primary memory — not the
+   LLM context. The agent queries its own past before acting, and its work
+   survives restarts. The ledger feeds the **scrubbable canvas timeline** in
+   the SPA.
+2. **Multi-model registry** with probed capabilities and automatic quarantine:
+   you add a model by editing `jarvis.toml`, zero code. The router picks by
+   required capability, fails over on its own, and surfaces cost + tokens in
+   real time in the bottom-screen HUD.
+3. **Daemon + gRPC clients**: you can close the TUI or the SPA and the work
+   keeps going. CLI, TUI, SolidJS SPA, Tauri desktop — and mobile soon — all
+   share the same state over gRPC + gRPC-Web (`tonic-web`), authenticated by a
+   loopback bearer token.
+4. **Diff-by-intent + phase-gating**: instead of staging files, the agent
+   groups its writes by parent decision (event-sourced via `parent_evt`). The
+   user approves / rejects **an entire phase**; an atomic Git commit lands per
+   phase. No other tool does this.
 
 ---
 
@@ -30,152 +38,267 @@ Hermes et Codex sur quatre axes que personne d'autre n'attaque correctement :
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│   Tauri 2 desktop (Win/Mac/Linux) — wrappe le bundle SPA         │
-│   + tray, deep links jarvis://, notifs natives, sidecar daemon   │
+│   Tauri 2 desktop (Win/Mac/Linux) — wraps the SPA bundle          │
+│   + tray, jarvis:// deep links, native notifications, daemon       │
+│     sidecar                                                        │
 └──────────────────────────────────────────────────────────────────┘
-                            ▲ (charge le même bundle)
+                            ▲ (loads the same bundle)
 ┌──────────────────────────────────────────────────────────────────┐
-│   Bundle SolidJS (Bun + Vite)                                    │
-│   routes: /, /fleet, /memory, /task/:id, /settings (todo)        │
-│   features: timeline canvas, fleet DAG, diff-by-intent,          │
-│             memory promotion, HUD coût/sandbox, Cmd+K palette    │
+│   SolidJS bundle (Bun + Vite)                                      │
+│   routes: /, /fleet, /memory, /task/:id, /schedules, /settings     │
+│   features: timeline canvas, fleet DAG, diff-by-intent,            │
+│             memory promotion, cost/sandbox HUD, Cmd+K palette       │
 └──────────────────────────────────────────────────────────────────┘
             ▲ gRPC-Web (Connect-ES)
 ┌──────────────────────────────────────────────────────────────────┐
-│   crates/jarvis-web — axum                                       │
-│   • bearer-token auth (`<data_dir>/web.token`, 256 bits CSPRNG)  │
-│   • static SPA via rust-embed (en release)                       │
-│   • port :7879 (CSP + static + future SSE événements)            │
+│   crates/jarvis-web — axum                                         │
+│   • bearer-token auth (`<data_dir>/web.token`, 256-bit CSPRNG)     │
+│   • static SPA via rust-embed (in release)                         │
+│   • port :7879 (CSP + static + future SSE events)                  │
 └──────────────────────────────────────────────────────────────────┘
                             ▲ in-process
 ┌──────────────────────────────────────────────────────────────────┐
-│   jarvis-daemon — gRPC + gRPC-Web sur :7777                      │
-│   • Interceptor d'auth: tous RPCs exigent Bearer token           │
-│   • Refuse 0.0.0.0 sans daemon.bind_lan=true                     │
-│   • Orchestrator: LlmPool, agent loop, ledger, sandbox, MCP      │
-│   • 19 RPCs: tasks, timeline, fleet, diff-by-intent, memory      │
+│   jarvis-daemon — gRPC + gRPC-Web on :7777                         │
+│   • Auth interceptor: every RPC requires a Bearer token            │
+│   • Refuses 0.0.0.0 unless daemon.bind_lan=true                    │
+│   • Orchestrator: LlmPool, agent loop, ledger, sandbox, MCP        │
+│   • 19 RPCs: tasks, timeline, fleet, diff-by-intent, memory        │
 └──────────────────────────────────────────────────────────────────┘
                             ▲
 ┌──────────────────────────────────────────────────────────────────┐
-│   Clients tonic auto-authentifiés                                │
-│   jarvis-cli  · jarvis-tui  · jarvis-desktop sidecar             │
+│   Auto-authenticated tonic clients                                 │
+│   jarvis-cli  ·  jarvis-tui  ·  jarvis-desktop sidecar             │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ### Crates
 
-| Crate | Rôle | Status |
+| Crate | Role | Status |
 |---|---|---|
-| `jarvis-core` | Types, traits, erreurs. Pas d'I/O. | Stable |
-| `jarvis-api` | Proto gRPC + client/server généré + `auth` (token discovery + interceptors). | Stable |
-| `jarvis-config` | Loader TOML + env (figment, interpolation `${VAR}` et `$$` escape). | Stable |
-| `jarvis-ledger` | SQLite WAL, event store append-only, **memories table** (mutable), broadcast bus. | Stable |
-| `jarvis-llm` | `LlmProvider` trait, OpenAI-compat client, `ModelRegistry`, `LlmPool`, `pricing`. | Stable |
-| `jarvis-tools` | `Tool` trait + 12 builtins : `fs_read`, `fs_write`, `shell`, `apply_patch`, `grep`, `glob`, `update_plan`, `web_search`, `spawn_subagent`, `gh.pr_list`, `gh.pr_view`, `gh.pr_comment`, `gh.pr_create`. | Stable |
+| `jarvis-core` | Types, traits, errors. No I/O. | Stable |
+| `jarvis-api` | gRPC proto + generated client/server + `auth` (token discovery + interceptors). | Stable |
+| `jarvis-config` | TOML + env loader (figment, `${VAR}` interpolation and `$$` escape). | Stable |
+| `jarvis-ledger` | SQLite WAL, append-only event store, **memories table** (mutable), broadcast bus. | Stable |
+| `jarvis-llm` | `LlmProvider` trait, OpenAI-compatible client, `ModelRegistry`, `LlmPool`, `pricing`. | Stable |
+| `jarvis-tools` | `Tool` trait + 12 builtins: `fs_read`, `fs_write`, `shell`, `apply_patch`, `grep`, `glob`, `update_plan`, `web_search`, `spawn_subagent`, `gh.pr_list`, `gh.pr_view`, `gh.pr_comment`, `gh.pr_create`. | Stable |
 | `jarvis-sandbox` | `NativeSandbox`, `DockerSandbox`, **`WslSandbox`** (Windows), `WorktreeManager`. | Stable |
-| `jarvis-mcp` | MCP client + tool adapter — branche des serveurs MCP externes (stdio). | Stable |
-| `jarvis-agent` | Boucle plan-act-observe, parser JSON tolérant, **loop detector**, **memory extractor**, system-prompt assembly avec memories + AGENTS.md. | Stable |
-| `jarvis-daemon` | Binaire `jarvis-daemon`. Auth gRPC + tonic-web, orchestrateur, 16 RPCs implémentées. | Stable |
-| `jarvis-cli` | Binaire `jarvis` — client gRPC scriptable. Auto-load token. | Stable |
-| `jarvis-tui` | Binaire `jarvis-tui` — front-end ratatui, look OpenCode. Auto-load token. | Stable |
-| `jarvis-web` | Crate Axum : bearer-token auth, SPA static (rust-embed), SolidJS bundle dans `ui/`. | Stable |
-| `jarvis-desktop` | Wrapper Tauri 2 — sidecar daemon, IPC (daemon_status, read_web_token), tray. | Scaffold ; icônes placeholder à remplacer pour ship signé. |
+| `jarvis-mcp` | MCP client + tool adapter — plugs in external MCP servers (stdio). | Stable |
+| `jarvis-agent` | Plan-act-observe loop, tolerant JSON parser, **loop detector**, **memory extractor**, system-prompt assembly with memories + AGENTS.md. | Stable |
+| `jarvis-daemon` | `jarvis-daemon` binary. gRPC + tonic-web auth, orchestrator, 19 RPCs. | Stable |
+| `jarvis-cli` | `jarvis` binary — scriptable gRPC client. Auto-loads token. | Stable |
+| `jarvis-tui` | `jarvis-tui` binary — ratatui front-end, OpenCode-style. Auto-loads token. | Stable |
+| `jarvis-web` | Axum crate: bearer-token auth, static SPA (rust-embed), SolidJS bundle in `ui/`. | Stable |
+| `jarvis-desktop` | Tauri 2 wrapper — daemon sidecar, IPC (daemon_status, read_web_token), tray. | Scaffold; placeholder icons must be replaced before a signed ship. |
 
-DAG strict : `core` est leaf ; clients (`cli`, `tui`) ne dépendent que de `api` + `core`.
-La SPA SolidJS génère son client TypeScript depuis le même proto via `@bufbuild/protoc-gen-es` — un seul contrat, partagé front + back.
+Strict DAG: `core` is the leaf; clients (`cli`, `tui`) depend only on `api` + `core`.
+The SolidJS SPA generates its TypeScript client from the same proto via
+`@bufbuild/protoc-gen-es` — one contract, shared front and back.
 
 ---
 
 ## Quick start
 
-### Prérequis
+### Prerequisites
 
 - Rust **1.95+** (edition 2024)
-- [Bun](https://bun.sh) 1.3+ pour la SPA
-- `protoc` (vendored via `protoc-bin-vendored`, rien à installer)
-- Optionnel : Docker (sandbox), WSL2 distro (sandbox Windows)
-- Tauri 2 desktop : `cargo install tauri-cli --version "^2.0"`
+- [Bun](https://bun.sh) 1.3+ for the SPA
+- `protoc` (vendored via `protoc-bin-vendored`, nothing to install)
+- Optional: Docker (sandbox), a WSL2 distro (Windows sandbox)
+- Tauri 2 desktop: `cargo install tauri-cli --version "^2.0"`
 
-### Build et démarrage
+### Build and run
 
 ```powershell
-# 1. Cloner et builder le workspace Rust
+# 1. Clone and build the Rust workspace
+git clone https://github.com/ghota-tech-solutions/jarvis
+cd jarvis
 cargo build --release --workspace
 
-# 2. Configurer (la première fois)
-cp .env.example .env                 # remplir HERMES_LOCAL_*, DEEPSEEK_API_KEY, etc.
-cp jarvis.toml.example jarvis.toml   # ajuster modèles, sandbox, routing
+# 2. First-time configuration
+cp .env.example .env                 # fill HERMES_LOCAL_*, DEEPSEEK_API_KEY, etc.
+cp jarvis.toml.example jarvis.toml   # tweak models, sandbox, routing
 
-# 3. Démarrer le daemon (shell 1)
+# 3. Start the daemon (shell 1)
 .\target\release\jarvis-daemon.exe run
-#  → gRPC + gRPC-Web : 127.0.0.1:7777 (auth bearer token)
-#  → SPA host        : 127.0.0.1:7879 (auth bearer token)
-#  → token persistant : .jarvis/web.token (0o600 sur Unix)
+#  → gRPC + gRPC-Web : 127.0.0.1:7777 (bearer-token auth)
+#  → SPA host        : 127.0.0.1:7879 (bearer-token auth)
+#  → persistent token: .jarvis/web.token (0o600 on Unix)
 
-# 4. Utiliser — au choix
-.\target\release\jarvis-tui.exe       # TUI ratatui
-.\target\release\jarvis.exe ping      # CLI scriptable
+# 4. Use it — your choice of client
+.\target\release\jarvis-tui.exe       # ratatui TUI
+.\target\release\jarvis.exe ping      # scriptable CLI
 ```
 
-### Ouvrir la SPA
+### Open the SPA
 
 ```powershell
-# Build statique embeddé dans le binaire jarvis-web (futur)
-# ou — pour l'instant — Vite en dev :
+# A static build will be embedded in the jarvis-web binary (upcoming).
+# For now, run Vite in dev mode:
 cd crates/jarvis-web/ui
 bun install
 bun run dev
-# Ouvrir l'URL affichée par Vite, puis ajouter le token :
-#   http://127.0.0.1:5173/#token=<contenu de .jarvis/web.token>
-# La SPA strip le hash après bootstrap (token en sessionStorage).
+# Open the URL Vite prints, then append the token:
+#   http://127.0.0.1:5173/#token=<contents of .jarvis/web.token>
+# The SPA strips the hash after bootstrap (token kept in sessionStorage).
 ```
 
-### Wrapper desktop Tauri 2
+### Tauri 2 desktop wrapper
 
 ```powershell
 cd crates/jarvis-desktop
-cargo tauri dev    # spawn vite + sidecar daemon, ouvre l'app
-# ou
-cargo tauri build  # build natif (Windows .msi/.exe, Mac .dmg, Linux .AppImage/.deb/.rpm)
-# Note: les icônes shipped sont placeholders 64x64. Remplacer avant ship
-#       prod via `cargo tauri icon path/to/icon.png`.
+cargo tauri dev    # spawns vite + the daemon sidecar, opens the app
+# or
+cargo tauri build  # native build (Windows .msi/.exe, macOS .dmg,
+                   #               Linux .AppImage/.deb/.rpm)
+# Note: the shipped icons are 64x64 placeholders. Replace them before a
+#       production ship via `cargo tauri icon path/to/icon.png`.
 ```
 
-### Installation (binaires distribués)
+### Installation (distributed binaries)
 
-Les releases publient des **bundles non-signés** pour les trois OS via
-`.github/workflows/release.yml`. Tagger `vX.Y.Z` déclenche le workflow ;
-les bundles atterrissent dans une **draft release** que l'utilisateur
-review puis publie manuellement.
+Releases publish **unsigned bundles** for all three OSes via
+`.github/workflows/release.yml`. Tagging `vX.Y.Z` triggers the workflow; the
+bundles land in a **draft release** that the maintainer reviews, then publishes
+manually.
 
-| OS | Format | Avertissement | Bypass |
+| OS | Format | Warning | Bypass |
 |---|---|---|---|
 | Windows | `.msi` / `.nsis` (NSIS .exe) | SmartScreen "Unknown publisher" | "More info" → "Run anyway" |
-| macOS | `.dmg` + `.app.tar.gz` | Gatekeeper "cannot be opened" | Préf. Système → Sécurité → "Open Anyway" ; ou `xattr -dr com.apple.quarantine /Applications/Jarvis.app` |
-| Linux | `.AppImage` / `.deb` / `.rpm` | aucun | `chmod +x Jarvis-*.AppImage && ./Jarvis-*.AppImage` |
+| macOS | `.dmg` + `.app.tar.gz` | Gatekeeper "cannot be opened" | System Settings → Security → "Open Anyway"; or `xattr -dr com.apple.quarantine /Applications/Jarvis.app` |
+| Linux | `.AppImage` / `.deb` / `.rpm` | none | `chmod +x Jarvis-*.AppImage && ./Jarvis-*.AppImage` |
 
-> Signature code reportée à M13 (Apple Developer ID + Windows EV cert).
-> Pour l'instant, builds reproductibles depuis tag git → checksums dispo
-> dans les artefacts de la draft release.
+> Code signing is deferred (Apple Developer ID + Windows EV cert). For now,
+> builds are reproducible from a git tag → checksums available in the draft
+> release artifacts.
 
-### Accès LAN / mobile
+### LAN / mobile access
 
-Le daemon refuse `0.0.0.0` par défaut. Pour exposer sur le LAN :
+The daemon refuses `0.0.0.0` by default. To expose it on the LAN:
 
 ```toml
 # jarvis.toml
 [daemon]
 addr = "0.0.0.0:7777"
-bind_lan = true       # obligatoire dès que addr est non-loopback
+bind_lan = true       # required as soon as addr is non-loopback
 ```
 
-Puis depuis ton téléphone sur le même Wi-Fi :
+Then, from your phone on the same Wi-Fi:
 
 ```
 http://<host-lan-ip>:5173/#token=<cat .jarvis/web.token>
 ```
 
-Le bearer token gate les RPCs ; le bind 0.0.0.0 n'ouvre pas un trou aveugle.
+The bearer token gates the RPCs; binding `0.0.0.0` does not open a blind hole.
+
+---
+
+## Local LLM setup
+
+Jarvis talks to any OpenAI-compatible endpoint — vLLM, llama.cpp, Ollama, and
+LM Studio all work. The fastest path on Apple Silicon is
+[**omlx**](https://github.com/jundot/omlx), an MLX-backed server with a built-in
+admin UI for model downloads and tuning.
+
+### Install omlx (macOS, Apple Silicon)
+
+```bash
+brew tap jundot/omlx
+brew install --head --with-grammar omlx
+omlx serve              # default port 8000
+```
+
+Open the admin UI and pull the two Gemma 4 variants Jarvis uses, via **Models →
+[Downloader](http://localhost:8000/admin/dashboard?tab=models&modelsTab=downloader)**:
+
+- `gemma-4-26B-A4B-it-MLX-4bit` — 4-bit quant, the model Jarvis runs against
+  (`HERMES_LOCAL_MODEL`).
+- `gemma-4-26B-A4B-it-assistant-bf16` — full precision, used **only** as the
+  speculative-decoding drafter (see below).
+
+### Tuning omlx for Jarvis
+
+omlx persists tuning to two JSON files; editing them directly is more reliable
+than the admin UI gear. Stop the server before editing, then restart it.
+
+**`~/.omlx/model_settings.json`** — per-model settings, keyed by model name.
+For `gemma-4-26B-A4B-it-MLX-4bit`, enable VLM MTP speculative decoding with the
+bf16 assistant as the drafter:
+
+```jsonc
+{
+  "gemma-4-26B-A4B-it-MLX-4bit": {
+    // VLM MTP speculative decoding — ~80-90% token acceptance on code.
+    "vlm_mtp_enabled": true,
+    // Absolute path to the downloaded bf16 assistant model.
+    "vlm_mtp_draft_model": "<omlx-models-dir>/gemma-4-26B-A4B-it-assistant-bf16",
+
+    // TurboQuant KV is mutually exclusive with vlm_mtp — must be off.
+    "turboquant_kv_enabled": false,
+
+    // DFlash crashes on the gemma4 assistant drafter — must be off. Also
+    // drop every dflash_* key (draft_model, quant_*, in_memory_cache_*,
+    // ssd_cache, verify_mode) and specprefill_draft_model entirely.
+    "dflash_enabled": false
+  }
+}
+```
+
+**`~/.omlx/settings.json`** — global server settings:
+
+```jsonc
+{
+  "scheduler": {
+    // Better time-to-first-token on long agent prompts.
+    "chunked_prefill": true
+  },
+  "cache": {
+    // Prefix cache held in RAM — visible win on prompts ≥1024 tokens.
+    "hot_cache_max_size": "8GB"
+  }
+}
+```
+
+With this config: no DFlash warning, VLM MTP active with the bf16 drafter,
+~80-90% MTP acceptance on code (vs ~66% on short text), an 8 GB RAM hot cache,
+and ~27.6 → 30.4 tok/s on short prompts — a larger gain on the long prompts the
+agent actually sends.
+
+Smoke-test the chat at [/admin/chat](http://localhost:8000/admin/chat) before
+wiring Jarvis.
+
+> **Linux / Windows**: omlx is macOS-only. On Linux use
+> [vLLM](https://github.com/vllm-project/vllm) or
+> [llama.cpp](https://github.com/ggerganov/llama.cpp); on Windows use WSL2 with
+> either, or [LM Studio](https://lmstudio.ai/). Any OpenAI-compatible server
+> works — only `HERMES_LOCAL_URL` and `HERMES_LOCAL_MODEL` change.
+
+### `.env`
+
+`cp .env.example .env`, then point Jarvis at the endpoint:
+
+```bash
+# Local LLM (OpenAI-compatible endpoint — omlx, MLX-LM, llama.cpp, vLLM)
+HERMES_LOCAL_URL=http://127.0.0.1:8000/v1
+HERMES_LOCAL_MODEL=gemma-4-26B-A4B-it-MLX-4bit
+HERMES_LOCAL_API_KEY=azer            # any non-empty string — omlx ignores it,
+                                     # the OpenAI SDK just requires the field
+
+# Remote LLM (DeepSeek API — optional, only for failover)
+#DEEPSEEK_API_KEY=sk-xxx
+
+# Daemon — bind 0.0.0.0 so LAN devices (e.g. mobile testing) can reach the
+# gRPC + gRPC-Web endpoint. The bearer token still gates access.
+JARVIS_DAEMON_ADDR=0.0.0.0:7777
+# JARVIS_SPA_ADDR overrides jarvis-web's bind. Default is 0.0.0.0:7879.
+JARVIS_LOG=jarvis=debug,info
+
+# Web search — Brave Search API (free tier:
+# https://api.search.brave.com/app/dashboard). The var name avoids the
+# JARVIS_ prefix, reserved for jarvis.toml field overrides (figment strict).
+#WEB_SEARCH_BACKEND=brave
+#BRAVE_API_KEY=xxx
+#TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxxxxxxxxxx
+```
 
 ---
 
@@ -185,12 +308,12 @@ Le bearer token gate les RPCs ; le bind 0.0.0.0 n'ouvre pas un trou aveugle.
 [daemon]
 addr = "127.0.0.1:7777"
 data_dir = ".jarvis"
-# Opt-in pour bind non-loopback. Le daemon refuse de démarrer sinon.
+# Opt-in for non-loopback binds. The daemon refuses to start otherwise.
 bind_lan = false
-# Désactive l'auth (DANGER — uniquement local dev fully trusted).
+# Disables auth (DANGER — local, fully-trusted dev only).
 disable_auth = false
 
-# --- Modèles locaux (multi-entrées) ---
+# --- Local models (multi-entry) ---
 [providers.local.gemma]
 url      = "${HERMES_LOCAL_URL}"
 model    = "${HERMES_LOCAL_MODEL}"
@@ -198,13 +321,13 @@ api_key  = "${HERMES_LOCAL_API_KEY}"
 priority = 10
 capabilities = { ctx_len = 128000, tool_calls = true, json_schema = true, vision = false }
 
-# --- Modèles remote ---
+# --- Remote models ---
 [providers.remote.deepseek_pro]
 url      = "https://api.deepseek.com/v1"
 model    = "deepseek-chat"
 api_key  = "${DEEPSEEK_API_KEY:-disabled}"
 priority = 7
-cost_per_mtok_in  = 0.27       # $/M input tokens — alimente le HUD
+cost_per_mtok_in  = 0.27       # $/M input tokens — feeds the HUD
 cost_per_mtok_out = 1.10       # $/M output tokens
 capabilities = { ctx_len = 200000, tool_calls = true, json_schema = true, vision = false }
 
@@ -226,13 +349,13 @@ docker_memory      = "2g"
 docker_cpus        = 2.0
 docker_autopull    = true
 
-# --- MCP servers (M7) ---
+# --- MCP servers ---
 [mcp.servers.mock]
 enable  = true
 command = "jarvis-mcp-mock"
 args    = []
 
-# --- Hooks post-tool (auto-`cargo check` etc.) ---
+# --- Post-tool hooks (auto `cargo check`, etc.) ---
 [[hooks.post_tool]]
 match    = "apply_patch|fs_write"
 cmd      = "cargo check --workspace"
@@ -240,118 +363,126 @@ label    = "cargo check"
 timeout_s = 60
 ```
 
-Variables d'environnement qui complètent jarvis.toml :
+Environment variables that complement `jarvis.toml`:
 
-| Var | Effet |
+| Var | Effect |
 |---|---|
-| `JARVIS_DAEMON_ADDR` | Override de `daemon.addr` (env > toml > defaults). |
-| `JARVIS_SPA_ADDR` | Override de l'addr du host SPA (default `0.0.0.0:7879`). |
-| `JARVIS_DATA_DIR` | Override de `daemon.data_dir`. Aussi cherché pour `web.token` côté clients. |
-| `JARVIS_WEB_TOKEN` | Override direct du bearer token côté client (CI, scripts). |
-| `JARVIS_SEARCH_BACKEND` | `brave` ou `tavily` pour le tool `web_search` (M11.S2). |
-| `BRAVE_API_KEY` / `TAVILY_API_KEY` | Clés API pour `web_search`. |
+| `JARVIS_DAEMON_ADDR` | Overrides `daemon.addr` (env > toml > defaults). |
+| `JARVIS_SPA_ADDR` | Overrides the SPA host address (default `0.0.0.0:7879`). |
+| `JARVIS_DATA_DIR` | Overrides `daemon.data_dir`. Also where clients look for `web.token`. |
+| `JARVIS_WEB_TOKEN` | Directly overrides the client-side bearer token (CI, scripts). |
+| `JARVIS_SEARCH_BACKEND` | `brave` or `tavily` for the `web_search` tool. |
+| `BRAVE_API_KEY` / `TAVILY_API_KEY` | API keys for `web_search`. |
 
 ---
 
 ## CLI — `jarvis`
 
 ```
-# Santé + statut
+# Health + status
 jarvis ping
-jarvis status                                  # liste modèles + état
+jarvis status                                  # lists models + state
 
-# LLM brut (one-shot, bypass agent)
-jarvis ask "Liste 3 crates Rust pour les acteurs"
+# Raw LLM (one-shot, bypasses the agent)
+jarvis ask "List 3 Rust crates for actors"
 
-# Tâches autonomes
-jarvis task add "Refactor src/ to use anyhow"  # workdir = cwd par défaut
-jarvis task add --workdir C:\proj\app --watch "Ajoute une route POST /users"
+# Autonomous tasks
+jarvis task add "Refactor src/ to use anyhow"  # workdir = cwd by default
+jarvis task add --workdir C:\proj\app --watch "Add a POST /users route"
 jarvis task add --sandbox docker --net egress_only --worktree --watch \
    "Run cargo test and fix any failures"
 jarvis task add --sandbox wsl2 --watch \
-   "Run a Linux-only build in /mnt/c/proj"   # M10.S5
-jarvis task add --model local:fallback "..."   # force un modèle précis
-jarvis task add --routing remote_only "..."    # remote uniquement
-jarvis task add --require vision "Décris cette image"
-jarvis task add --resume <task-uuid> "..."     # M10.S4 : reprendre après crash
+   "Run a Linux-only build in /mnt/c/proj"
+jarvis task add --model local:fallback "..."   # force a specific model
+jarvis task add --routing remote_only "..."    # remote only
+jarvis task add --require vision "Describe this image"
+jarvis task add --resume <task-uuid> "..."     # resume after a crash
 
-# Gestion
-jarvis task list           # tâches actives seulement
-jarvis task list --all     # incluant terminées
+# Management
+jarvis task list           # active tasks only
+jarvis task list --all     # including finished
 jarvis task get <id>
-jarvis task watch <id>     # stream live des events
+jarvis task watch <id>     # live event stream
 jarvis task cancel <id>
 ```
 
-### Flags `task add`
+### `task add` flags
 
-| Flag | Effet |
+| Flag | Effect |
 |---|---|
-| `--workdir <path>` | Dossier de travail de l'agent (défaut : cwd). |
-| `--max-steps N` | Cap sur la boucle agent (défaut 20). |
-| `--sandbox native\|docker\|wsl2` | Backend d'exécution. Défaut = config. |
-| `--net none\|egress_only\|full` | Politique réseau (Docker uniquement). |
-| `--worktree` | Crée un git worktree isolé si workdir est un repo. |
-| `--base-ref <ref>` | Ref Git de base pour le worktree (défaut `HEAD`). |
-| `--routing <policy>` | `auto`, `local_only`, `remote_only`, ou `model:<name>`. |
-| `--model <name>` | Raccourci pour `--routing model:<name>`. |
-| `--require <cap>` | Capacité requise (répétable) : `tool_calls`, `json_schema`, `vision`. |
-| `--parent <uuid>` | Continue une conversation : task parent, hérite workdir/sandbox/net. |
-| `--resume <uuid>` | Reprend une tâche interrompue : hérite tout, logue un event `Continuation`. |
-| `--watch` | Streame les events live après soumission. |
+| `--workdir <path>` | Agent working directory (default: cwd). |
+| `--max-steps N` | Cap on the agent loop (default 20). |
+| `--sandbox native\|docker\|wsl2` | Execution backend. Default = config. |
+| `--net none\|egress_only\|full` | Network policy (Docker only). |
+| `--worktree` | Creates an isolated git worktree if workdir is a repo. |
+| `--base-ref <ref>` | Base Git ref for the worktree (default `HEAD`). |
+| `--routing <policy>` | `auto`, `local_only`, `remote_only`, or `model:<name>`. |
+| `--model <name>` | Shorthand for `--routing model:<name>`. |
+| `--require <cap>` | Required capability (repeatable): `tool_calls`, `json_schema`, `vision`. |
+| `--parent <uuid>` | Continues a conversation: parent task, inherits workdir/sandbox/net. |
+| `--resume <uuid>` | Resumes an interrupted task: inherits everything, logs a `Continuation` event. |
+| `--watch` | Streams live events after submission. |
 
 ---
 
-## SPA (`crates/jarvis-web/ui`) — la vraie front-end
+## SPA (`crates/jarvis-web/ui`) — the primary front-end
 
-5 routes dans une seule page SolidJS, partagée par Web et Tauri.
+Six routes in a single SolidJS page, shared by Web and Tauri.
 
-| Route | Composant clef |
+| Route | Key component |
 |---|---|
-| `/` | Quick Ask (chat one-shot streamé) + Tasks grid groupé par parent + form New task + filter goal/id/workdir + status selector |
-| `/task/:id` | Header + view toggle (both \| timeline \| transcript \| diff) + transcript markdown + **scrubbable canvas timeline** (4 lanes) avec **mode replay 1×/2×/4×/8×** + DiffByIntent + Cancel/Continue |
-| `/fleet` | DAG SVG hand-rolled, parent → child orienté, auto-bubble des tâches "attention" |
+| `/` | Quick Ask (streamed one-shot chat) + Tasks grid grouped by parent + New-task form + goal/id/workdir filter + status selector |
+| `/task/:id` | Header + view toggle (both \| timeline \| transcript \| diff) + markdown transcript + **scrubbable canvas timeline** (4 lanes) with **replay mode 1×/2×/4×/8×** + DiffByIntent + Cancel/Continue |
+| `/fleet` | Hand-rolled SVG DAG, parent → child oriented, auto-bubbling of "attention" tasks |
 | `/memory` | Candidates / Active, edit-in-place, promote/forget/dismiss, usage counters |
 | `/schedules` | Cron-driven autonomous runs. CRUD + run-now + paused state. |
-| (footer) | HUD permanent : modèle actif · running · tokens in/out réels · $ vs cap · badge sandbox · live indicator |
+| (footer) | Permanent HUD: active model · running · real tokens in/out · $ vs cap · sandbox badge · live indicator |
 
-**Cmd/Ctrl+K** ouvre le command palette (fuzzy match sur 8 commandes : navigation, theme, new task, spawn-explorer, quick ask…). `?` ouvre l'overlay des shortcuts (drag playhead, jk navigate events, `[`/`]` jumps spans, 1-4 toggle lanes, etc.).
+**Cmd/Ctrl+K** opens the command palette (fuzzy match over 8 commands:
+navigation, theme, new task, spawn-explorer, quick ask…). `?` opens the
+shortcuts overlay (drag the playhead, `j`/`k` navigate events, `[`/`]` jump
+spans, `1`-`4` toggle lanes, etc.).
 
-Le bundle se construit avec `bun run build` ; il sera embeddé dans `jarvis-web` via `rust-embed` au moment du M12.
+The bundle is built with `bun run build`; it will be embedded into `jarvis-web`
+via `rust-embed`.
 
 ---
 
 ## TUI — `jarvis-tui`
 
-Interface borderless inspirée d'OpenCode. **Stable mais en mode maintenance** depuis que la SPA a la priorité produit. Couvre les usages "terminal-only" et machines sans GUI.
+A borderless interface inspired by OpenCode. **Stable but in maintenance mode**
+since the SPA took product priority. Covers "terminal-only" use and machines
+without a GUI.
 
 ```
 ┌──────────────────────────────────────────────┬────────────────────────┐
-│ Implémenter l'auth JWT                       │ ▼ Task                 │
-│ running · docker/egress_only · 7f3a2b1c      │ id      7f3a2b1c       │
-│                                              │ status  running        │
-│ J'analyse le code existant…                  │                        │
-│ → fs_read src/auth.rs                        │ ▼ Sandbox              │
-│   ✓ read 1248 bytes                          │ backend  docker        │
-│ → shell cargo build --tests                  │ network  egress_only   │
-│   ✓ [docker] cargo build → exit=0            │                        │
-│ ─ step 2 ─                                   │ ▼ Models               │
-│ Je vais ajouter le middleware JWT…           │ ● gemma · local        │
+│ Implement JWT auth                            │ ▼ Task                 │
+│ running · docker/egress_only · 7f3a2b1c       │ id      7f3a2b1c       │
+│                                                │ status  running        │
+│ Analyzing the existing code…                  │                        │
+│ → fs_read src/auth.rs                          │ ▼ Sandbox              │
+│   ✓ read 1248 bytes                            │ backend  docker        │
+│ → shell cargo build --tests                    │ network  egress_only   │
+│   ✓ [docker] cargo build → exit=0              │                        │
+│ ─ step 2 ─                                     │ ▼ Models               │
+│ Adding the JWT middleware…                     │ ● gemma · local        │
 ├──────────────────────────────────────────────┴────────────────────────┤
 │ ❯ type to send  ·  :cancel  :all  :refresh  :theme  :q                │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-Touches : `j/k`, `↓/↑`, `c` cancel, `r` refresh, `a` toggle actives ↔ toutes, `:` slash palette, `?` help, `Esc` quit (sur input vide).
+Keys: `j/k`, `↓/↑`, `c` cancel, `r` refresh, `a` toggle active ↔ all, `:` slash
+palette, `?` help, `Esc` quit (on an empty input).
 
-Tu peux **tuer la TUI** à tout moment, le daemon continue le travail. Relance `jarvis-tui` pour rejoindre l'état (gRPC re-sync + replay des events).
+You can **kill the TUI** at any time and the daemon keeps working. Relaunch
+`jarvis-tui` to rejoin the state (gRPC re-sync + event replay).
 
 ---
 
-## Le ledger
+## The ledger
 
-Toutes les actions de l'agent sont écrites en append-only dans
-`.jarvis/ledger.sqlite` (WAL, triggers anti-`UPDATE`/`DELETE`). Tu peux l'explorer :
+Every agent action is written append-only into `.jarvis/ledger.sqlite` (WAL,
+anti-`UPDATE`/`DELETE` triggers). You can explore it:
 
 ```sql
 sqlite3 .jarvis/ledger.sqlite
@@ -360,68 +491,76 @@ sqlite3 .jarvis/ledger.sqlite
   FROM events WHERE task_id = ? ORDER BY id;
 ```
 
-Types d'events : `attempt`, `decision`, `tool_call`, `tool_result`, `observation`,
+Event kinds: `attempt`, `decision`, `tool_call`, `tool_result`, `observation`,
 `error`, `verdict`, `spawn`, `heartbeat`, `continuation`, `llm_chunk`.
 
-La table `memories` (M9) est **mutable** : promote/forget/edit via la SPA `/memory`.
+The `memories` table is **mutable**: promote/forget/edit via the SPA `/memory`
+route.
 
 ---
 
 ## Tests + CI
 
 ```powershell
-cargo test --workspace --lib              # 91 tests, ~10s
-cargo clippy --workspace -- -D warnings   # zéro warning
-cargo fmt --all -- --check                # zéro diff
+cargo test --workspace --lib              # unit test suite
+cargo clippy --workspace -- -D warnings   # zero warnings
+cargo fmt --all -- --check                # zero diff
 cd crates/jarvis-web/ui && bun run typecheck && bun run build
 ```
 
-**CI** (`.github/workflows/`) :
-- `rust.yml` — fmt + clippy + test sur matrice **ubuntu + windows**
-- `web.yml` — Bun install + typecheck + vite build + budget 2 MB sur `dist/`
-- `proto.yml` — `buf lint` (le module est défini dans `crates/jarvis-api/proto/buf.yaml`)
+**CI** (`.github/workflows/`):
+- `rust.yml` — fmt + clippy + test on an **ubuntu + windows** matrix
+- `web.yml` — Bun install + typecheck + vite build + 2 MB budget on `dist/`
+- `proto.yml` — `buf lint` (the module is defined in `crates/jarvis-api/proto/buf.yaml`)
+- `release.yml` — cross-OS release matrix, triggered by a `vX.Y.Z` tag
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full development workflow.
 
 ---
 
 ## Roadmap
 
-- [x] **M1** — squelette daemon + CLI + LLM local
-- [x] **M2** — ledger event-sourcing + boucle agent
-- [x] **M3** — sandbox Native + Docker + worktrees + parallélisme
-- [x] **M4** — TUI ratatui multi-pane
-- [x] **M5** — registry multi-modèles + routage capability-aware + quarantaine
-- [x] **M6** — refonte SPA (SolidJS + Vite + Bun) + **scrubbable canvas timeline** (flagship)
-- [x] **M7** — Fleet DAG + HUD coût/sandbox + MCP client
-- [x] **M8** — **Diff-by-intent + phase-gating** (commits Git atomiques par décision parent)
-- [x] **M9** — **Memory promotion** (extractor LLM post-verdict + injection system prompt + UI curation)
-- [x] **M10** — Auth gRPC bearer-token + CI workflows + WSL2 sandbox + loop detector + resume_from
-- [x] **M11.S2/S3/S5/S6/S7** — Cmd+K palette · web_search · spawn_subagent (explorer/worker/reviewer) · cost per-turn streaming · multi-model verdict validator
-- [x] **M12.S1/S2/S3/S4/S5** — Cron/scheduling (`/schedules`) · GitHub PR via `gh` · audit replay UI (▶/2×/4×/8×) · auto reviewer sub-agent · GitHub Actions release matrix (Win `.msi`/`.nsis`, macOS `.dmg`, Linux `.AppImage`/`.deb`/`.rpm`, unsigned, draft release on `vX.Y.Z`)
-- [ ] **M11.rest** — image read+gen · browser sidecar (chromiumoxide)
-
-Plan complet, décisions, risques : `~/.claude/plans/analyse-le-projet-l-ui-drifting-valley.md`.
+- [x] **M1** — daemon + CLI + local LLM skeleton
+- [x] **M2** — event-sourced ledger + agent loop
+- [x] **M3** — Native + Docker sandboxes + worktrees + parallelism
+- [x] **M4** — multi-pane ratatui TUI
+- [x] **M5** — multi-model registry + capability-aware routing + quarantine
+- [x] **M6** — SPA rebuild (SolidJS + Vite + Bun) + **scrubbable canvas timeline** (flagship)
+- [x] **M7** — Fleet DAG + cost/sandbox HUD + MCP client
+- [x] **M8** — **Diff-by-intent + phase-gating** (atomic Git commits per parent decision)
+- [x] **M9** — **Memory promotion** (post-verdict LLM extractor + system-prompt injection + curation UI)
+- [x] **M10** — gRPC bearer-token auth + CI workflows + WSL2 sandbox + loop detector + resume_from
+- [x] **M11** (partial) — Cmd+K palette · `web_search` · `spawn_subagent` (explorer/worker/reviewer) · per-turn cost streaming · multi-model verdict validator
+- [x] **M12** — Cron/scheduling (`/schedules`) · GitHub PR via `gh` · audit replay UI (▶/2×/4×/8×) · auto reviewer sub-agent · GitHub Actions release matrix
+- [ ] **M11** (remaining) — image read + generation · browser sidecar (chromiumoxide)
 
 ---
 
-## Décisions structurantes
+## Design decisions
 
-| Question | Réponse | Pourquoi |
+| Question | Answer | Why |
 |---|---|---|
-| Langage | **Rust** | Performance, type safety, écosystème async mature. |
-| Architecture process | **Daemon + clients** | TUI/SPA peuvent être tués, le travail continue. Multi-clients via gRPC. |
-| Mémoire de l'agent | **Ledger append-only** (SQLite) | Le contexte LLM est jetable ; attempts/decisions sont permanentes et interrogeables. Alimente la timeline scrubable. |
-| Orchestration | **Supervisor/worker** (Tokio tasks) | Pattern qui a shippé en prod. Pas de swarm. |
-| Isolation | **3 sandboxes : Native + Docker + WSL2** | Native = fast debug. Docker = isolation kernel-level. WSL2 = "Linux sur Windows sans Docker" (M10.S5). |
-| Politique réseau | **3 modes : none / egress_only / full** | `egress_only` est le défaut sensé (permet `cargo build`, `npm install`). |
-| Multi-modèles | **Registry** (N local + N remote), routing capability-aware | Pas de lock-in. Ajout = éditer TOML, zéro code. Failover auto via quarantaine. |
-| Front | **SolidJS + Vite + Bun + Tauri 2** | Réactivité fine-grain pour streams gRPC ; bundle minuscule ; Tauri wrappe le MÊME bundle. Pas deux codebases. |
-| Bridge browser↔gRPC | **`tonic-web` + Connect-ES** | Un seul contrat proto, client TS généré par `bufbuild/protoc-gen-es`. |
-| Auth | **Bearer token loopback** (256 bits, `.jarvis/web.token`) | Discovery auto côté clients. Pas de mTLS tant que pas multi-utilisateur. |
-| Bordures TUI | **Aucune** (borderless, inspiré OpenCode) | Lisibilité, look moderne. Whitespace > box-drawing. |
-| Sort de l'HTMX legacy | **Supprimé en M6.S15** (-3000 lignes) | La SPA SolidJS feature-parity + flagship en plus. |
+| Language | **Rust** | Performance, type safety, mature async ecosystem. |
+| Process architecture | **Daemon + clients** | The TUI/SPA can be killed; the work continues. Multi-client over gRPC. |
+| Agent memory | **Append-only ledger** (SQLite) | The LLM context is disposable; attempts/decisions are permanent and queryable. Feeds the scrubbable timeline. |
+| Orchestration | **Supervisor/worker** (Tokio tasks) | A pattern that has shipped in production. No swarm. |
+| Isolation | **3 sandboxes: Native + Docker + WSL2** | Native = fast debugging. Docker = kernel-level isolation. WSL2 = "Linux on Windows without Docker". |
+| Network policy | **3 modes: none / egress_only / full** | `egress_only` is the sensible default (allows `cargo build`, `npm install`). |
+| Multi-model | **Registry** (N local + N remote), capability-aware routing | No lock-in. Adding a model = editing TOML, zero code. Automatic failover via quarantine. |
+| Front-end | **SolidJS + Vite + Bun + Tauri 2** | Fine-grained reactivity for gRPC streams; tiny bundle; Tauri wraps the SAME bundle. Not two codebases. |
+| Browser ↔ gRPC bridge | **`tonic-web` + Connect-ES** | One proto contract, TS client generated by `bufbuild/protoc-gen-es`. |
+| Auth | **Loopback bearer token** (256-bit, `.jarvis/web.token`) | Auto-discovery client-side. No mTLS until multi-user. |
+| TUI borders | **None** (borderless, OpenCode-inspired) | Readability, modern look. Whitespace > box-drawing. |
 
 ---
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the dev
+environment, commit conventions, and review expectations, and
+[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) for community standards. Security
+issues: please follow the process in [SECURITY.md](./SECURITY.md).
 
 ## License
 
-MIT OR Apache-2.0
+Released under the [MIT License](./LICENSE).
