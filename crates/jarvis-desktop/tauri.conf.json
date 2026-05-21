@@ -5,7 +5,7 @@
   "identifier": "com.ghotatech.jarvis",
   "build": {
     "beforeDevCommand": "cd ../jarvis-web/ui && bun run dev",
-    "beforeBuildCommand": "cd ../jarvis-web/ui && bun run build",
+    "beforeBuildCommand": "",
     "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../jarvis-web/ui/dist"
   },
