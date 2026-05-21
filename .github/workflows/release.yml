@@ -1,8 +1,8 @@
 name: release
 
 # Builds installable bundles for Windows / macOS / Linux on every tag
-# vX.Y.Z and uploads them as assets on a DRAFT GitHub release. The user
-# reviews + publishes manually. Bundles are UNSIGNED — Windows
+# vX.Y.Z and attaches them to the GitHub release that release-please
+# already created for that tag. Bundles are UNSIGNED — Windows
 # SmartScreen / macOS Gatekeeper will warn; documented in README §Install.
 
 on:
@@ -40,7 +40,7 @@ jobs:
             bundle_args: --bundles msi,nsis
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -95,7 +95,7 @@ jobs:
             -exec cp {} dist/ \;
           ls -la dist/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: jarvis-${{ matrix.target }}
           path: dist/*
@@ -103,35 +103,20 @@ jobs:
           retention-days: 7
 
   publish:
-    # Only publish a draft release on tags. workflow_dispatch builds the
-    # artifacts (above) but stops here.
+    # On a tag, attach the built bundles to the release that release-please
+    # already created. workflow_dispatch builds the artifacts (above) but
+    # stops here.
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
-      - name: Compute changelog
-        id: changelog
-        run: |
-          echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-          # Grab git log since the previous tag (or initial commit if none).
-          PREV=$(git describe --tags --abbrev=0 --exclude="${GITHUB_REF#refs/tags/}" 2>/dev/null || echo "")
-          if [ -z "$PREV" ]; then
-            git log --pretty=format:'- %s' > changelog.md
-          else
-            git log "$PREV..HEAD" --pretty=format:'- %s' > changelog.md
-          fi
-          echo "--- changelog ---"
-          cat changelog.md
-      - uses: softprops/action-gh-release@v2
+      # release-please already created the GitHub release (with the
+      # CHANGELOG body) for this tag — we only upload the bundles to it.
+      - uses: softprops/action-gh-release@v3
         with:
-          draft: true
-          name: ${{ steps.changelog.outputs.tag }}
-          body_path: changelog.md
           files: dist/*
           fail_on_unmatched_files: false
-          generate_release_notes: false
