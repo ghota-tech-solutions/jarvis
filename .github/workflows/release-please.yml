@@ -2,7 +2,8 @@ name: release-please
 
 # Maintains a rolling "release PR" off main: it accrues every Conventional
 # Commit into CHANGELOG.md and bumps the workspace version. Merging that PR
-# tags `vX.Y.Z`, which in turn triggers release.yml to build the bundles.
+# tags vX.Y.Z and — when a release is cut — calls release.yml to build the
+# installable bundles and attach them to the GitHub release.
 on:
   push:
     branches: [main]
@@ -18,8 +19,24 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v5
+        id: rp
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Once a release is cut, build the installable bundles and attach them to
+  # the freshly created GitHub release. GITHUB_TOKEN-created tags don't fire
+  # release.yml's own `push: tags` trigger, so we call it directly.
+  bundles:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
