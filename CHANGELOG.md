@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/ghota-tech-solutions/jarvis/compare/v0.1.0...v0.1.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* **ci:** attach release bundles via a reusable workflow ([3ab7b95](https://github.com/ghota-tech-solutions/jarvis/commit/3ab7b953aaed4d21a784e85f5cbe6a97b5f47314))
+* **desktop:** drop the broken beforeBuildCommand ([c1d8a93](https://github.com/ghota-tech-solutions/jarvis/commit/c1d8a93b36470e6d8acbeaafb4991ca1cc56dc44))
+
 ## [0.1.0](https://github.com/ghota-tech-solutions/jarvis/compare/v0.1.0...v0.1.0) (2026-05-21)
 
 
