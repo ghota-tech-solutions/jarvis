@@ -863,6 +863,13 @@ fn subject_from_args(tool: &str, args: &serde_json::Value) -> Option<String> {
                 .take(64)
                 .collect()
         }),
+        "update_plan" => args.get("plan").and_then(|v| v.as_array()).map(|steps| {
+            let done = steps
+                .iter()
+                .filter(|s| s.get("status").and_then(|v| v.as_str()) == Some("completed"))
+                .count();
+            format!("{done}/{} done", steps.len())
+        }),
         _ => None,
     }
 }

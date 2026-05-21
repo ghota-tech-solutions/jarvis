@@ -44,6 +44,29 @@ struct RawReply {
     args: Option<Json>,
     #[serde(default)]
     message: Option<String>,
+    /// Lenient: small models commonly hoist tool arguments to the top level
+    /// of the reply instead of nesting them under `args` — Gemma 4 does this
+    /// consistently for `update_plan` (`{"action":"update_plan","plan":[…]}`).
+    /// Capture every unrecognized field so `normalize()` can fold them back
+    /// into `args` for tool actions.
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Json>,
+}
+
+/// Fold top-level "extra" fields into `args` when the model hoisted tool
+/// arguments out of the `args` object. An explicit, non-empty `args` always
+/// wins — extras are only used when `args` is absent, null, or `{}`.
+fn recover_args(args: Option<Json>, extra: serde_json::Map<String, Json>) -> Option<Json> {
+    let args_empty = match &args {
+        None | Some(Json::Null) => true,
+        Some(Json::Object(m)) => m.is_empty(),
+        Some(_) => false,
+    };
+    if args_empty && !extra.is_empty() {
+        Some(Json::Object(extra))
+    } else {
+        args
+    }
 }
 
 impl RawReply {
@@ -68,7 +91,7 @@ impl RawReply {
                 thought: self.thought,
                 action: ActionKind::Tool,
                 tool: self.tool,
-                args: self.args,
+                args: recover_args(self.args, self.extra),
                 message: self.message,
             },
             // Anything else: assume the model put the tool name directly in `action`.
@@ -76,7 +99,7 @@ impl RawReply {
                 thought: self.thought,
                 action: ActionKind::Tool,
                 tool: self.tool.or_else(|| Some(tool_name.to_string())),
-                args: self.args,
+                args: recover_args(self.args, self.extra),
                 message: self.message,
             },
         }
@@ -448,6 +471,48 @@ mod tests {
         let text = r#"{"action":"finish","message":"ok"}"#;
         let r = parse_reply(text).unwrap();
         assert_eq!(r.action, ActionKind::Done);
+    }
+
+    // Top-level args recovery — Gemma 4 hoists `plan` out of `args`.
+
+    #[test]
+    fn recovers_top_level_args_for_tool_name_action() {
+        // Exact step-11 shape from task 29fa7542: `plan` at the top level,
+        // `args` absent, tool name in `action`.
+        let text = r#"{"thought":"t","action":"update_plan","plan":[{"step":"a","status":"completed"},{"step":"b","status":"in_progress"}]}"#;
+        let r = parse_reply(text).unwrap();
+        assert_eq!(r.action, ActionKind::Tool);
+        assert_eq!(r.tool.as_deref(), Some("update_plan"));
+        let plan = &r.args.as_ref().unwrap()["plan"];
+        assert_eq!(plan.as_array().unwrap().len(), 2);
+        assert_eq!(plan[0]["status"], "completed");
+    }
+
+    #[test]
+    fn recovers_top_level_args_for_explicit_tool_action() {
+        let text =
+            r#"{"action":"tool","tool":"update_plan","plan":[{"step":"a","status":"pending"}]}"#;
+        let r = parse_reply(text).unwrap();
+        assert_eq!(r.action, ActionKind::Tool);
+        assert_eq!(r.tool.as_deref(), Some("update_plan"));
+        assert!(r.args.as_ref().unwrap()["plan"].is_array());
+    }
+
+    #[test]
+    fn explicit_args_win_over_top_level_extras() {
+        // A correct `args` is never overridden by stray top-level fields.
+        let text = r#"{"action":"tool","tool":"shell","args":{"cmd":"ls"},"stray":"x"}"#;
+        let r = parse_reply(text).unwrap();
+        let args = r.args.as_ref().unwrap();
+        assert_eq!(args["cmd"], "ls");
+        assert!(args.get("stray").is_none());
+    }
+
+    #[test]
+    fn empty_args_object_falls_back_to_extras() {
+        let text = r#"{"action":"update_plan","args":{},"plan":[{"step":"a","status":"pending"}]}"#;
+        let r = parse_reply(text).unwrap();
+        assert!(r.args.as_ref().unwrap()["plan"].is_array());
     }
 
     // § C.M-A — recovery tests.

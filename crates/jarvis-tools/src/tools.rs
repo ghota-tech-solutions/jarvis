@@ -361,6 +361,35 @@ struct PlanStep {
     status: String,
 }
 
+/// Coerce a sloppy `plan` argument into the canonical array shape.
+///
+/// Gemma 4 mangles `update_plan` in two observed ways (task 29fa7542):
+/// it sends `plan` as a JSON-encoded *string* rather than an array, and it
+/// sometimes wraps the real array under a second `plan` key
+/// (`{"plan":{"plan":[…]}}`). Both are recoverable without losing intent.
+fn coerce_plan_args(mut args: Json) -> Json {
+    let Some(obj) = args.as_object_mut() else {
+        return args;
+    };
+    // 1) String-encoded plan: `"plan": "[…]"` or `"plan": "{\"plan\":[…]}"`.
+    if let Some(Json::String(s)) = obj.get("plan") {
+        if let Ok(parsed) = serde_json::from_str::<Json>(s) {
+            obj.insert("plan".into(), parsed);
+        }
+    }
+    // 2) Double-wrapped plan: `"plan": {"plan": [...]}` → unwrap one level.
+    let unwrapped = match obj.get("plan") {
+        Some(Json::Object(inner)) if inner.len() == 1 => {
+            inner.get("plan").filter(|v| v.is_array()).cloned()
+        }
+        _ => None,
+    };
+    if let Some(arr) = unwrapped {
+        obj.insert("plan".into(), arr);
+    }
+    args
+}
+
 #[async_trait]
 impl Tool for UpdatePlanTool {
     fn schema(&self) -> ToolSchema {
@@ -398,8 +427,24 @@ impl Tool for UpdatePlanTool {
     }
 
     async fn invoke(&self, args: Json, _ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
-        let a: UpdatePlanArgs =
-            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let args = coerce_plan_args(args);
+        let a: UpdatePlanArgs = match serde_json::from_value(args) {
+            Ok(a) => a,
+            // Soft error, not a hard `ToolError`: the model gets the result
+            // back and can retry on the next step with the right shape,
+            // instead of the loop swallowing an opaque parse failure.
+            Err(e) => {
+                return Ok(ToolOutput::err(
+                    format!(
+                        "invalid plan args ({e}). Pass `plan` as an array of \
+                         {{\"step\",\"status\"}} objects inside `args`, e.g. \
+                         args={{\"plan\":[{{\"step\":\"Read README\",\"status\":\"completed\"}},\
+                         {{\"step\":\"Audit core crate\",\"status\":\"in_progress\"}}]}}"
+                    ),
+                    json!({ "error": "invalid_args" }),
+                ));
+            }
+        };
         let n = a.plan.len();
         let in_progress = a.plan.iter().filter(|s| s.status == "in_progress").count();
         if in_progress > 1 {
@@ -643,5 +688,66 @@ mod tests {
         assert!(!out.is_error);
         assert!(out.data["stdout"].as_str().unwrap().contains("hi"));
         assert_eq!(out.data["backend"], "native");
+    }
+
+    #[tokio::test]
+    async fn update_plan_accepts_canonical_array() {
+        let dir = tempdir().unwrap();
+        let ctx = ToolCtx::new(dir.path());
+        let out = UpdatePlanTool
+            .invoke(
+                json!({"plan":[
+                    {"step":"a","status":"completed"},
+                    {"step":"b","status":"in_progress"}
+                ]}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert!(!out.is_error);
+        assert_eq!(out.data["plan"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn update_plan_coerces_stringified_plan() {
+        // Task 29fa7542 step 7: `plan` arrived as a JSON-encoded string that
+        // itself wraps the array under a second `plan` key.
+        let dir = tempdir().unwrap();
+        let ctx = ToolCtx::new(dir.path());
+        let out = UpdatePlanTool
+            .invoke(
+                json!({"plan": "{\"plan\":[{\"step\":\"a\",\"status\":\"completed\"}]}"}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert!(!out.is_error);
+        assert_eq!(out.data["plan"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn update_plan_unwraps_double_wrapped_plan() {
+        let dir = tempdir().unwrap();
+        let ctx = ToolCtx::new(dir.path());
+        let out = UpdatePlanTool
+            .invoke(
+                json!({"plan": {"plan": [{"step":"a","status":"pending"}]}}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert!(!out.is_error);
+        assert_eq!(out.data["plan"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn update_plan_missing_plan_is_soft_error() {
+        // An unrecoverable call returns a soft error (the model retries next
+        // step) rather than a hard `ToolError`.
+        let dir = tempdir().unwrap();
+        let ctx = ToolCtx::new(dir.path());
+        let out = UpdatePlanTool.invoke(json!({}), &ctx).await.unwrap();
+        assert!(out.is_error);
+        assert_eq!(out.data["error"], "invalid_args");
     }
 }
