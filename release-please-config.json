@@ -3,9 +3,10 @@
   "include-component-in-tag": false,
   "packages": {
     ".": {
-      "release-type": "rust",
+      "release-type": "simple",
       "package-name": "jarvis",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["Cargo.toml"]
     }
   }
 }
