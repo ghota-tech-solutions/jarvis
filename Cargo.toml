@@ -83,7 +83,7 @@ git2 = { version = "0.20", default-features = false }
 # TUI (M4)
 ratatui = "0.29"
 crossterm = { version = "0.28", features = ["event-stream"] }
-tui-input = "0.11"
+tui-input = "0.14"
 
 # Web (M6)
 axum = "0.8"
