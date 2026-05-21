@@ -64,7 +64,7 @@ async-openai = "0.27"
 tonic = "0.13"
 tonic-web = "0.13"
 cron = "0.13"
-prost = "0.13"
+prost = "0.14"
 tonic-build = "0.13"
 protoc-bin-vendored = "3"
 

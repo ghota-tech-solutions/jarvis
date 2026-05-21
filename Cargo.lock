@@ -2654,7 +2654,7 @@ version = "0.1.0"
 dependencies = [
  "futures-core",
  "jarvis-core",
- "prost",
+ "prost 0.14.3",
  "protoc-bin-vendored",
  "serde",
  "tokio",
@@ -2673,7 +2673,7 @@ dependencies = [
  "futures",
  "jarvis-api",
  "jarvis-core",
- "prost",
+ "prost 0.14.3",
  "serde_json",
  "tokio",
  "tokio-stream",
@@ -2729,7 +2729,7 @@ dependencies = [
  "jarvis-sandbox",
  "jarvis-tools",
  "jarvis-web",
- "prost",
+ "prost 0.14.3",
  "regex",
  "serde",
  "serde_json",
@@ -2868,7 +2868,7 @@ dependencies = [
  "futures-util",
  "jarvis-api",
  "jarvis-core",
- "prost",
+ "prost 0.14.3",
  "ratatui",
  "serde",
  "serde_json",
@@ -2901,7 +2901,7 @@ dependencies = [
  "jarvis-sandbox",
  "jarvis-tools",
  "maud",
- "prost",
+ "prost 0.14.3",
  "pulldown-cmark",
  "regex",
  "serde",
@@ -4159,7 +4159,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2796faa41db3ec313a31f7624d9286acf277b52de526150b7e69f3debf891ee5"
 dependencies = [
  "bytes",
- "prost-derive",
+ "prost-derive 0.13.5",
+]
+
+[[package]]
+name = "prost"
+version = "0.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2ea70524a2f82d518bce41317d0fae74151505651af45faf1ffbd6fd33f0568"
+dependencies = [
+ "bytes",
+ "prost-derive 0.14.3",
 ]
 
 [[package]]
@@ -4175,7 +4185,7 @@ dependencies = [
  "once_cell",
  "petgraph",
  "prettyplease",
- "prost",
+ "prost 0.13.5",
  "prost-types",
  "regex",
  "syn 2.0.117",
@@ -4196,12 +4206,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-derive"
+version = "0.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27c6023962132f4b30eb4c172c91ce92d933da334c59c23cddee82358ddafb0b"
+dependencies = [
+ "anyhow",
+ "itertools 0.14.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "prost-types"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52c2c1bf36ddb1a1c396b3601a3cec27c2462e45f07c386894ec3ccf5332bd16"
 dependencies = [
- "prost",
+ "prost 0.13.5",
 ]
 
 [[package]]
@@ -6397,7 +6420,7 @@ dependencies = [
  "hyper-util",
  "percent-encoding",
  "pin-project",
- "prost",
+ "prost 0.13.5",
  "socket2 0.5.10",
  "tokio",
  "tokio-stream",
