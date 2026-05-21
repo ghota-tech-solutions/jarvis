@@ -6,11 +6,12 @@
 use crate::spec::{NetPolicy, Sandbox, SandboxError, SandboxKind, SandboxOutput, SandboxSpec};
 use async_trait::async_trait;
 use bollard::Docker;
-use bollard::container::{
-    Config, CreateContainerOptions, LogOutput, LogsOptions, RemoveContainerOptions,
+use bollard::container::LogOutput;
+use bollard::models::{ContainerCreateBody, HostConfig, Mount, MountType};
+use bollard::query_parameters::{
+    CreateContainerOptions, KillContainerOptions, LogsOptions, RemoveContainerOptions,
     StartContainerOptions, WaitContainerOptions,
 };
-use bollard::models::{HostConfig, Mount, MountTypeEnum};
 use futures_util::StreamExt;
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
@@ -63,13 +64,13 @@ impl DockerSandbox {
 
     /// Pull the configured image if it's not already present locally.
     pub async fn ensure_image(&self) -> Result<(), SandboxError> {
-        use bollard::image::CreateImageOptions;
+        use bollard::query_parameters::CreateImageOptions;
         if self.docker.inspect_image(&self.image).await.is_ok() {
             return Ok(());
         }
         info!(image = %self.image, "pulling image");
         let opts = CreateImageOptions {
-            from_image: self.image.clone(),
+            from_image: Some(self.image.clone()),
             ..Default::default()
         };
         let mut stream = self.docker.create_image(Some(opts), None, None);
@@ -102,7 +103,7 @@ impl Sandbox for DockerSandbox {
         let mounts = vec![Mount {
             target: Some("/work".to_string()),
             source: Some(workdir_str.clone()),
-            typ: Some(MountTypeEnum::BIND),
+            typ: Some(MountType::BIND),
             read_only: Some(false),
             ..Default::default()
         }];
@@ -124,7 +125,7 @@ impl Sandbox for DockerSandbox {
         let mut labels = HashMap::new();
         labels.insert("jarvis.task".to_string(), "1".to_string());
 
-        let create_cfg = Config {
+        let create_cfg = ContainerCreateBody {
             image: Some(self.image.clone()),
             cmd: Some(cmd_vec),
             working_dir: Some("/work".to_string()),
@@ -142,8 +143,8 @@ impl Sandbox for DockerSandbox {
             .docker
             .create_container(
                 Some(CreateContainerOptions {
-                    name: name.clone(),
-                    platform: None,
+                    name: Some(name.clone()),
+                    ..Default::default()
                 }),
                 create_cfg,
             )
@@ -173,11 +174,11 @@ async fn run_to_completion(
     spec: &SandboxSpec,
 ) -> Result<SandboxOutput, SandboxError> {
     docker
-        .start_container(container_id, None::<StartContainerOptions<String>>)
+        .start_container(container_id, None::<StartContainerOptions>)
         .await?;
 
     // Stream logs in parallel with the wait future.
-    let logs_opts = LogsOptions::<String> {
+    let logs_opts = LogsOptions {
         stdout: true,
         stderr: true,
         follow: true,
@@ -204,7 +205,7 @@ async fn run_to_completion(
             biased;
             _ = &mut timer => {
                 warn!("docker: timeout — killing container");
-                let _ = docker.kill_container(container_id, None::<bollard::container::KillContainerOptions<String>>).await;
+                let _ = docker.kill_container(container_id, None::<KillContainerOptions>).await;
                 timed_out = true;
                 break;
             }
