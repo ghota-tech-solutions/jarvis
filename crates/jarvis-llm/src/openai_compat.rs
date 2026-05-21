@@ -75,18 +75,17 @@ impl OpenAiCompatProvider {
 
 fn is_rate_limit_error(err: &async_openai::error::OpenAIError) -> bool {
     let err_str = err.to_string().to_lowercase();
-    if err_str.contains("429") || err_str.contains("too many requests") || err_str.contains("rate limit") {
+    if err_str.contains("429")
+        || err_str.contains("too many requests")
+        || err_str.contains("rate limit")
+    {
         return true;
     }
-    match err {
-        async_openai::error::OpenAIError::Reqwest(req_err) => {
-            if let Some(status) = req_err.status() {
-                if status.as_u16() == 429 {
-                    return true;
-                }
-            }
-        }
-        _ => {}
+    if let async_openai::error::OpenAIError::Reqwest(req_err) = err
+        && let Some(status) = req_err.status()
+        && status.as_u16() == 429
+    {
+        return true;
     }
     false
 }

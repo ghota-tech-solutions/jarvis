@@ -36,8 +36,8 @@ impl Tool for FetchUrlTool {
     }
 
     async fn invoke(&self, args: Json, _ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
-        let a: FetchUrlArgs = serde_json::from_value(args)
-            .map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let a: FetchUrlArgs =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
@@ -120,7 +120,8 @@ fn html_to_markdown(html: &str) -> String {
                     let mut found_end = false;
                     let mut j = i + start_tag.len();
                     while j + end_tag.len() <= clean_chars.len() {
-                        let end_segment: String = lower_chars[j..j + end_tag.len()].iter().collect();
+                        let end_segment: String =
+                            lower_chars[j..j + end_tag.len()].iter().collect();
                         if end_segment == end_tag {
                             j += end_tag.len();
                             while j < clean_chars.len() && clean_chars[j] != '>' {
@@ -185,24 +186,16 @@ fn html_to_markdown(html: &str) -> String {
         } else if c == '>' {
             in_tag = false;
             let tag_content = current_tag.trim();
-            if tag_content.starts_with('/') {
-                let name = tag_content[1..].trim().to_lowercase();
+            if let Some(rest) = tag_content.strip_prefix('/') {
+                let name = rest.trim().to_lowercase();
                 if let Some(pos) = tag_stack.iter().rposition(|x| x == &name) {
                     tag_stack.remove(pos);
                 }
 
-                if name == "p"
-                    || name == "div"
-                    || name == "section"
-                    || name == "h1"
-                    || name == "h2"
-                    || name == "h3"
-                    || name == "h4"
-                    || name == "h5"
-                    || name == "h6"
-                {
-                    output.push('\n');
-                } else if name == "li" {
+                if matches!(
+                    name.as_str(),
+                    "p" | "div" | "section" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "li"
+                ) {
                     output.push('\n');
                 }
             } else {

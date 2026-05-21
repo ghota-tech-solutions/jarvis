@@ -169,33 +169,33 @@ impl LlmPool {
         loop {
             interval.tick().await;
             tracing::debug!("LlmPool: running background healing probe...");
-            
+
             // Get a list of models that are offline or quarantined
             let statuses = self.status_all().await;
             for status in statuses {
-                if !status.online || status.quarantined {
-                    if let Some(entry) = self.registry.get(&status.name) {
-                        let req = ChatRequest {
-                            messages: vec![
-                                ChatMessage::system("Reply with exactly the single word: ok"),
-                                ChatMessage::user("ping"),
-                            ],
-                            temperature: Some(0.0),
-                            top_p: None,
-                            max_tokens: Some(8),
-                            stream: false,
-                        };
-                        match entry.provider.complete(req).await {
-                            Ok(ChatResponse { content, .. }) => {
-                                let ok = !content.trim().is_empty();
-                                if ok {
-                                    info!(model = %status.name, "background healing probe succeeded, restoring online");
-                                    self.record_success(&status.name).await;
-                                }
+                if (!status.online || status.quarantined)
+                    && let Some(entry) = self.registry.get(&status.name)
+                {
+                    let req = ChatRequest {
+                        messages: vec![
+                            ChatMessage::system("Reply with exactly the single word: ok"),
+                            ChatMessage::user("ping"),
+                        ],
+                        temperature: Some(0.0),
+                        top_p: None,
+                        max_tokens: Some(8),
+                        stream: false,
+                    };
+                    match entry.provider.complete(req).await {
+                        Ok(ChatResponse { content, .. }) => {
+                            let ok = !content.trim().is_empty();
+                            if ok {
+                                info!(model = %status.name, "background healing probe succeeded, restoring online");
+                                self.record_success(&status.name).await;
                             }
-                            Err(e) => {
-                                tracing::debug!(model = %status.name, error = %e, "background healing probe failed");
-                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!(model = %status.name, error = %e, "background healing probe failed");
                         }
                     }
                 }

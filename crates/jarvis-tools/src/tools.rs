@@ -372,10 +372,10 @@ fn coerce_plan_args(mut args: Json) -> Json {
         return args;
     };
     // 1) String-encoded plan: `"plan": "[…]"` or `"plan": "{\"plan\":[…]}"`.
-    if let Some(Json::String(s)) = obj.get("plan") {
-        if let Ok(parsed) = serde_json::from_str::<Json>(s) {
-            obj.insert("plan".into(), parsed);
-        }
+    if let Some(Json::String(s)) = obj.get("plan")
+        && let Ok(parsed) = serde_json::from_str::<Json>(s)
+    {
+        obj.insert("plan".into(), parsed);
     }
     // 2) Double-wrapped plan: `"plan": {"plan": [...]}` → unwrap one level.
     let unwrapped = match obj.get("plan") {

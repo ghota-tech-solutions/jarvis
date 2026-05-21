@@ -39,8 +39,8 @@ impl Tool for FsReadManyTool {
     }
 
     async fn invoke(&self, args: Json, ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
-        let a: ReadManyArgs = serde_json::from_value(args)
-            .map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+        let a: ReadManyArgs =
+            serde_json::from_value(args).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
 
         let mut results = Vec::with_capacity(a.paths.len());
 
@@ -68,10 +68,21 @@ impl Tool for FsReadManyTool {
                     }));
                 }
                 Err(e) => {
+                    // Normalize the message: raw `io::Error` text is
+                    // platform-specific ("No such file or directory" on
+                    // Unix vs "The system cannot find the file specified"
+                    // on Windows). A stable string keeps both the tests
+                    // and the agent's parsing OS-independent.
+                    let error = match e.kind() {
+                        std::io::ErrorKind::NotFound => {
+                            format!("file not found: {rel_path}")
+                        }
+                        _ => e.to_string(),
+                    };
                     results.push(json!({
                         "path": rel_path,
                         "success": false,
-                        "error": e.to_string()
+                        "error": error
                     }));
                 }
             }
@@ -83,11 +94,7 @@ impl Tool for FsReadManyTool {
             .count();
 
         Ok(ToolOutput::ok(
-            format!(
-                "read {}/{} files successfully",
-                successful,
-                a.paths.len()
-            ),
+            format!("read {}/{} files successfully", successful, a.paths.len()),
             json!({ "results": results }),
         ))
     }
@@ -135,7 +142,7 @@ mod tests {
         assert_eq!(results[2]["path"], "missing.rs");
         assert_eq!(results[2]["success"], false);
         let err_msg = results[2]["error"].as_str().unwrap().to_lowercase();
-        assert!(err_msg.contains("notfound") || err_msg.contains("no such file") || err_msg.contains("directory"));
+        assert!(err_msg.contains("file not found"), "got: {err_msg}");
 
         // escape.rs
         assert_eq!(results[3]["path"], "../escape.rs");
