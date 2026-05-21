@@ -61,11 +61,12 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 async-openai = "0.27"
 
 # gRPC
-tonic = "0.13"
-tonic-web = "0.13"
+tonic = "0.14"
+tonic-web = "0.14"
 cron = "0.16"
-prost = "0.13"
-tonic-build = "0.13"
+prost = "0.14"
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
 protoc-bin-vendored = "3"
 
 # Config
