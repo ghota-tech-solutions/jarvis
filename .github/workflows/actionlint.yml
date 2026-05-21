@@ -1,0 +1,20 @@
+name: actionlint
+
+# Lints every workflow under .github/workflows — catches bad expressions,
+# unknown action inputs, and (via shellcheck) issues in `run:` blocks.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/**']
+  pull_request:
+    paths: ['.github/**']
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          fail-on-error: true
