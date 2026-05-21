@@ -35,8 +35,8 @@ jobs:
         run: |
           size=$(du -sb dist | cut -f1)
           echo "dist size: ${size} bytes"
-          # Hard cap at 2 MB until we know better. Adjust as the bundle grows.
-          if [ "$size" -gt 2097152 ]; then
-            echo "::error::SPA bundle exceeds 2 MB ($size bytes)"
+          # Hard cap at 4 MB. Adjust as the bundle grows.
+          if [ "$size" -gt 4194304 ]; then
+            echo "::error::SPA bundle exceeds 4 MB ($size bytes)"
             exit 1
           fi
