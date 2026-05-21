@@ -81,7 +81,7 @@ bollard = "0.18"
 git2 = { version = "0.20", default-features = false }
 
 # TUI (M4)
-ratatui = "0.29"
+ratatui = "0.30"
 crossterm = { version = "0.28", features = ["event-stream"] }
 tui-input = "0.11"
 
