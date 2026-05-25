@@ -3046,6 +3046,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "jarvis-mcp-server"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "futures",
+ "jarvis-api",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "jarvis-repomap"
 version = "0.1.1"
 dependencies = [

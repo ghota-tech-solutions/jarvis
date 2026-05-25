@@ -1,0 +1,21 @@
+[package]
+name = "jarvis-mcp-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Jarvis: exposes the running daemon as an MCP server over stdio so external MCP clients (Claude Code, Codex, Cline) can drive Jarvis as a sub-routine."
+
+[dependencies]
+jarvis-api.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-std", "io-util", "process", "sync"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+futures.workspace = true
+tonic.workspace = true
+
+[[bin]]
+name = "jarvis-mcp-server"
+path = "src/main.rs"
