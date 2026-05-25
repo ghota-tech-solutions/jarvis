@@ -22,6 +22,46 @@ pub struct AgentReply {
     pub tool: Option<String>,
     pub args: Option<Json>,
     pub message: Option<String>,
+    /// § T2.7 — optional Plan/Act/Verify/Ship phase tag emitted by the
+    /// LLM to declare which lifecycle phase the next step belongs to.
+    /// One of "plan" | "act" | "verify" | "ship" (case-insensitive,
+    /// other strings are dropped silently). When unset, the previous
+    /// phase carries over. v0 is observability only — sandbox/hook
+    /// enforcement per phase lands in v1.
+    pub phase: Option<Phase>,
+}
+
+/// § T2.7 — lifecycle phase declared by the agent. Used by the SPA's
+/// future FSM swimlane view (F2.1) to bin events visually and to show
+/// the user where the agent thinks it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Phase {
+    Plan,
+    Act,
+    Verify,
+    Ship,
+}
+
+impl Phase {
+    #[allow(dead_code)] // v1 enforcement will read this; tests already exercise from_loose
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Plan => "plan",
+            Self::Act => "act",
+            Self::Verify => "verify",
+            Self::Ship => "ship",
+        }
+    }
+    pub fn from_loose(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "plan" | "planning" => Some(Self::Plan),
+            "act" | "acting" | "execute" | "executing" => Some(Self::Act),
+            "verify" | "verifying" | "verification" | "test" | "testing" => Some(Self::Verify),
+            "ship" | "shipping" | "deliver" | "delivering" | "deploy" => Some(Self::Ship),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,6 +84,10 @@ struct RawReply {
     args: Option<Json>,
     #[serde(default)]
     message: Option<String>,
+    /// § T2.7 — optional phase declaration. Loose-parsed so models can
+    /// emit `"verify"`, `"verification"`, `"Verifying"`, etc.
+    #[serde(default)]
+    phase: Option<String>,
     /// Lenient: small models commonly hoist tool arguments to the top level
     /// of the reply instead of nesting them under `args` — Gemma 4 does this
     /// consistently for `update_plan` (`{"action":"update_plan","plan":[…]}`).
@@ -71,6 +115,7 @@ fn recover_args(args: Option<Json>, extra: serde_json::Map<String, Json>) -> Opt
 
 impl RawReply {
     fn normalize(self) -> AgentReply {
+        let phase = self.phase.as_deref().and_then(Phase::from_loose);
         let act_lower = self.action.to_ascii_lowercase();
         match act_lower.as_str() {
             "done" | "finish" | "complete" => AgentReply {
@@ -79,6 +124,7 @@ impl RawReply {
                 tool: None,
                 args: None,
                 message: self.message,
+                phase,
             },
             "fail" | "give_up" | "abort" => AgentReply {
                 thought: self.thought,
@@ -86,6 +132,7 @@ impl RawReply {
                 tool: None,
                 args: None,
                 message: self.message,
+                phase,
             },
             "tool" | "call_tool" | "use_tool" => AgentReply {
                 thought: self.thought,
@@ -93,6 +140,7 @@ impl RawReply {
                 tool: self.tool,
                 args: recover_args(self.args, self.extra),
                 message: self.message,
+                phase,
             },
             // Anything else: assume the model put the tool name directly in `action`.
             tool_name => AgentReply {
@@ -101,6 +149,7 @@ impl RawReply {
                 tool: self.tool.or_else(|| Some(tool_name.to_string())),
                 args: recover_args(self.args, self.extra),
                 message: self.message,
+                phase,
             },
         }
     }
@@ -775,6 +824,7 @@ pub fn recover_from_parse_failure(text: &str) -> Option<AgentReply> {
         tool: None,
         args: None,
         message: Some(trimmed.to_string()),
+        phase: None,
     })
 }
 
@@ -1185,5 +1235,58 @@ mod tests {
         let reply = parse_reply(&cooked).unwrap();
         assert_eq!(reply.action, ActionKind::Tool);
         assert_eq!(reply.tool.as_deref(), Some("shell"));
+    }
+
+    // § T2.7 — phase declaration on the reply envelope.
+
+    #[test]
+    fn phase_field_parses_when_set() {
+        let txt = r#"{"action":"tool","tool":"fs_read","args":{"path":"x"},"phase":"plan"}"#;
+        let r = parse_reply(txt).unwrap();
+        assert_eq!(r.phase, Some(Phase::Plan));
+    }
+
+    #[test]
+    fn phase_loose_parses_common_variants() {
+        for (raw, want) in [
+            ("plan", Phase::Plan),
+            ("planning", Phase::Plan),
+            ("Act", Phase::Act),
+            ("EXECUTING", Phase::Act),
+            ("verify", Phase::Verify),
+            ("verification", Phase::Verify),
+            ("Testing", Phase::Verify),
+            ("ship", Phase::Ship),
+            ("deploy", Phase::Ship),
+        ] {
+            assert_eq!(Phase::from_loose(raw), Some(want), "raw was {raw:?}");
+        }
+    }
+
+    #[test]
+    fn phase_field_unknown_string_silently_drops() {
+        let txt = r#"{"action":"done","message":"ok","phase":"wat"}"#;
+        let r = parse_reply(txt).unwrap();
+        assert_eq!(r.phase, None);
+    }
+
+    #[test]
+    fn phase_absent_is_none() {
+        let txt = r#"{"action":"done","message":"ok"}"#;
+        let r = parse_reply(txt).unwrap();
+        assert_eq!(r.phase, None);
+    }
+
+    #[test]
+    fn phase_serializes_in_decision_payload() {
+        // The agent loop writes the decision as
+        // `serde_json::to_value(&reply)`; this asserts the field
+        // round-trips so the SPA can read it back without backend
+        // changes elsewhere.
+        let txt =
+            r#"{"action":"tool","tool":"shell","args":{"cmd":"cargo test"},"phase":"verify"}"#;
+        let r = parse_reply(txt).unwrap();
+        let v = serde_json::to_value(&r).unwrap();
+        assert_eq!(v["phase"], "verify");
     }
 }

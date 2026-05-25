@@ -127,6 +127,13 @@ time; steps stay short and imperative; statuses are `pending` /
   ```
 - When the goal is achieved, emit { "action": "done", "message": "<what was done>" }.
 - When the goal is impossible or unsafe, emit { "action": "fail", "message": "<why>" }.
+- **OPTIONAL:** add a top-level `"phase"` field to ANY reply to declare
+  the lifecycle phase the next step belongs to. Accepted values:
+  `"plan"` (read-only exploration), `"act"` (writing changes),
+  `"verify"` (running tests / hooks), `"ship"` (final commit /
+  publish). When you switch phase, set it on that turn's reply; the
+  SPA renders phase transitions on the timeline. The previous phase
+  carries over when `phase` is omitted.
 - Available tools and their JSON-schema args are listed below.
 "#;
 

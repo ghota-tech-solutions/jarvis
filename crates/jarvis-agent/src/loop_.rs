@@ -1019,6 +1019,7 @@ mod loop_detector_tests {
             args: Some(args),
             message: None,
             thought: None,
+            phase: None,
         }
     }
 

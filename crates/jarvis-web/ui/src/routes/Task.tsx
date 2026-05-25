@@ -60,6 +60,40 @@ const Task: Component = () => {
 
   const events = createMemo(() => stream.events());
   const spans = createMemo(() => stream.spans());
+
+  // § T2.7 — current phase, derived from the most recent `decision`
+  // event whose payload carries a `phase` field. Returns null while
+  // the agent hasn't declared any phase yet. The convention is
+  // sticky-forward: a phase set on turn N stays current until the
+  // next decision overrides it.
+  const currentPhase = createMemo<string | null>(() => {
+    const evs = events();
+    for (let i = evs.length - 1; i >= 0; i--) {
+      const ev = evs[i];
+      if (ev.kind !== 'decision') continue;
+      try {
+        const p = JSON.parse(ev.payloadJson) as { phase?: string };
+        if (p.phase) return p.phase;
+      } catch {
+        /* ignore */
+      }
+    }
+    return null;
+  });
+  const phaseClass = (phase: string): string => {
+    switch (phase) {
+      case 'plan':
+        return 'accent';
+      case 'act':
+        return 'warn';
+      case 'verify':
+        return 'good';
+      case 'ship':
+        return 'accent';
+      default:
+        return '';
+    }
+  };
   const minTs = createMemo(() => stream.minTsMicros());
   const maxTs = createMemo(() => stream.maxTsMicros());
 
@@ -210,6 +244,15 @@ const Task: Component = () => {
               <h2 class="heading" style="margin: 0">
                 {t().goal}{' '}
                 <span class={`pill ${statusClass(t().status)}`}>{t().status}</span>
+                <Show when={currentPhase()}>
+                  <span
+                    class={`pill ${phaseClass(currentPhase()!)}`}
+                    style="margin-left: 0.3rem"
+                    title="Current lifecycle phase declared by the agent (Plan/Act/Verify/Ship)"
+                  >
+                    {currentPhase()}
+                  </span>
+                </Show>
               </h2>
               <p class="dim" style="margin: 0.25rem 0; font-size: 12px">
                 <code>{t().id.slice(0, 8)}</code>
