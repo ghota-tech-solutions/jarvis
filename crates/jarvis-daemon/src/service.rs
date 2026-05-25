@@ -149,8 +149,57 @@ pub async fn run(cfg: Config, bind: String) -> Result<()> {
         Err(e) => warn!(error = %e, "could not list active tasks for boot reconciliation"),
     }
 
+    // § T2.4 — load YAML recipes from <data_dir>/recipes/ and upsert
+    // them as `recipe:<name>` schedules. The recipe file is the source
+    // of truth: delete + recreate on every boot so manual edits via
+    // the SPA/CLI to a recipe-derived schedule don't survive a restart.
+    {
+        let recipes_dir = std::path::Path::new(&cfg.daemon.data_dir).join("recipes");
+        match crate::recipes::load_recipes_dir(&recipes_dir) {
+            Ok(recipes) if !recipes.is_empty() => {
+                info!(
+                    count = recipes.len(),
+                    dir = %recipes_dir.display(),
+                    "recipes: loaded YAML recipes"
+                );
+                for r in recipes {
+                    let id = r.schedule_id();
+                    // Ignore "not found" — first boot, or stale schedule
+                    // from a previous recipe that was removed.
+                    let _ = ledger.delete_schedule(&id).await;
+                    let new = crate::scheduler::new_record_from_spec(
+                        id.clone(),
+                        r.cron.clone(),
+                        r.goal.clone(),
+                        r.workdir.clone(),
+                        r.sandbox.clone(),
+                        r.net_policy.clone(),
+                        r.routing.clone(),
+                        r.max_steps,
+                        r.schedule_label(),
+                        r.paused,
+                    );
+                    if let Err(e) = ledger.create_schedule(new).await {
+                        warn!(
+                            recipe = %r.name,
+                            error = %e,
+                            "recipes: failed to register schedule",
+                        );
+                    }
+                }
+            }
+            Ok(_) => {}
+            Err(e) => warn!(
+                error = %e,
+                dir = %recipes_dir.display(),
+                "recipes: load failed",
+            ),
+        }
+    }
+
     // M12.S1: boot any existing non-paused schedules into live cron loops.
     // Done after svc is built so the loops can call back via gRPC.
+    // (Recipes registered above are picked up by this loop.)
     match ledger.list_schedules().await {
         Ok(rows) => {
             for row in rows {

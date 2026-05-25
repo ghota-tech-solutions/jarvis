@@ -1,0 +1,37 @@
+# § T2.4 — example recipe.
+#
+# Copy this file (or any *.yaml in the dir) into `<data_dir>/recipes/`
+# (default: `.jarvis/recipes/`) and restart the daemon. The recipe will
+# be parsed at startup and upserted as a `recipe:<name>` schedule that
+# fires on the cron expression.
+#
+# IMPORTANT: the filename stem MUST match the `name` field — i.e. save
+# this file as `nightly-deps-audit.yaml` (NOT `recipes-example.yaml`).
+# Mismatched files are skipped at load time.
+#
+# The recipe is the source of truth: on every daemon restart the
+# matching schedule is deleted-then-recreated, so any manual edits via
+# the SPA `/schedules` page get blown away. Edit the YAML to change
+# anything.
+
+name: nightly-deps-audit
+description: Run cargo outdated nightly and summarise anything > 1 major behind
+
+# 5-field unix cron (min hour dom mon dow) or 6-field with seconds.
+cron: "0 3 * * *"
+
+# Goal handed to the agent loop verbatim (no templating in v1).
+goal: |
+  Run `cargo outdated` in the workspace root and summarise anything
+  that is more than one major version behind. If a critical security
+  patch is missing, draft a PR with the upgrade.
+
+# Required.
+workdir: /absolute/path/to/repo
+
+# Optional — defaults shown.
+sandbox: native           # native | docker | wsl2
+net_policy: egress_only   # none | egress_only | full
+routing: auto             # auto | local_only | remote_only | model:<name>
+max_steps: 20             # 0 = daemon default
+paused: false             # pause without removing the recipe
