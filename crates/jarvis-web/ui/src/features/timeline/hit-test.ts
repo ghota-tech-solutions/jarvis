@@ -14,7 +14,7 @@ import {
   type Lane,
   type TimelineState,
 } from './types';
-import { pointEventLane, usToPx, visibleLanes } from './canvas-renderer';
+import { phaseOffset, pointEventLane, usToPx, visibleLanes } from './canvas-renderer';
 
 export function hitTest(
   cssX: number,
@@ -22,10 +22,11 @@ export function hitTest(
   events: TimelineEvent[],
   spans: TimelineSpan[],
   state: TimelineState,
+  hasPhases = false,
 ): number {
   // Which lane was clicked?
-  const lanes = visibleLanes(state);
-  const lane = laneAt(cssY, lanes);
+  const lanes = visibleLanes(state, hasPhases);
+  const lane = laneAt(cssY, lanes, hasPhases);
   if (!lane) return 0;
 
   // Check spans on this lane first (they cover wider areas).
@@ -54,8 +55,12 @@ export function hitTest(
   return 0;
 }
 
-function laneAt(cssY: number, lanes: ReturnType<typeof visibleLanes>): Lane | null {
-  if (cssY < HEADER_HEIGHT) return null;
+function laneAt(
+  cssY: number,
+  lanes: ReturnType<typeof visibleLanes>,
+  hasPhases = false,
+): Lane | null {
+  if (cssY < HEADER_HEIGHT + phaseOffset(hasPhases)) return null;
   for (const { lane, y } of lanes) {
     if (cssY >= y && cssY < y + LANE_HEIGHT) return lane;
   }
@@ -73,7 +78,9 @@ export function isOnPlayhead(cssX: number, cssY: number, state: TimelineState): 
 }
 
 /** Compute the canvas's natural total height for N visible lanes. */
-export function naturalHeight(state: TimelineState): number {
+export function naturalHeight(state: TimelineState, hasPhases = false): number {
   const n = ALL_LANES.filter((l) => state.lanes[l]).length;
-  return HEADER_HEIGHT + n * (LANE_HEIGHT + LANE_GAP);
+  return (
+    HEADER_HEIGHT + phaseOffset(hasPhases) + n * (LANE_HEIGHT + LANE_GAP)
+  );
 }

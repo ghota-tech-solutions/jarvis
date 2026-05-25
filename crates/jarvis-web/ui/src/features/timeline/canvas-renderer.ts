@@ -13,17 +13,73 @@
 import type { TimelineEvent, TimelineSpan } from '~/lib/api/gen/jarvis_pb';
 import {
   ALL_LANES,
+  ALL_PHASES,
   HEADER_HEIGHT,
   LANE_GAP,
   LANE_HEIGHT,
+  PHASE_RIBBON_GAP,
+  PHASE_RIBBON_HEIGHT,
+  PHASE_RIBBON_TOTAL,
   POINT_RADIUS,
   SPAN_HEIGHT,
+  phaseColor,
   type Lane,
+  type Phase,
+  type PhaseSegment,
   type ThemeColors,
   type TimelineState,
 } from './types';
 
 const LANE_LABEL_WIDTH = 60;
+
+const isPhase = (s: string): s is Phase =>
+  (ALL_PHASES as readonly string[]).includes(s);
+
+/**
+ * Walk events in chronological order, picking up `phase` from each
+ * decision event's payload and emitting one segment per phase change.
+ * The convention is sticky-forward: a phase set at ts T stays active
+ * until the next decision overrides it (or until maxTs). Events with
+ * unparseable JSON or no `phase` field are skipped silently.
+ */
+export function computePhaseSegments(
+  events: readonly TimelineEvent[],
+  maxTs: bigint,
+): PhaseSegment[] {
+  const segs: PhaseSegment[] = [];
+  let active: { phase: Phase; startUs: number } | null = null;
+  for (const ev of events) {
+    if (ev.kind !== 'decision') continue;
+    let next: Phase | null = null;
+    try {
+      const p = JSON.parse(ev.payloadJson) as { phase?: unknown };
+      if (typeof p.phase === 'string' && isPhase(p.phase)) next = p.phase;
+    } catch {
+      /* unparseable payload — skip */
+    }
+    if (next === null) continue;
+    const t = Number(ev.tsMicros);
+    if (active === null) {
+      active = { phase: next, startUs: t };
+      continue;
+    }
+    if (active.phase === next) continue;
+    segs.push({ startUs: active.startUs, endUs: t, phase: active.phase });
+    active = { phase: next, startUs: t };
+  }
+  if (active !== null) {
+    segs.push({
+      startUs: active.startUs,
+      endUs: Math.max(active.startUs, Number(maxTs)),
+      phase: active.phase,
+    });
+  }
+  return segs;
+}
+
+/** Vertical offset applied to all lanes when phase segments are present. */
+export const phaseOffset = (hasPhases: boolean): number =>
+  hasPhases ? PHASE_RIBBON_TOTAL : 0;
 
 export interface RenderInput {
   ctx: CanvasRenderingContext2D;
@@ -37,6 +93,8 @@ export interface RenderInput {
   state: TimelineState;
   theme: ThemeColors;
   hoverEvtId?: number;
+  /** Pre-computed phase segments. Empty array hides the ribbon. */
+  phaseSegments?: PhaseSegment[];
 }
 
 export interface LaneGeom {
@@ -44,10 +102,16 @@ export interface LaneGeom {
   y: number;
 }
 
-/** Active visible lanes in render order. */
-export function visibleLanes(state: TimelineState): LaneGeom[] {
+/**
+ * Active visible lanes in render order. The optional `hasPhases` shifts
+ * the first lane down by PHASE_RIBBON_TOTAL to leave room for the ribbon.
+ */
+export function visibleLanes(
+  state: TimelineState,
+  hasPhases = false,
+): LaneGeom[] {
   const out: LaneGeom[] = [];
-  let y = HEADER_HEIGHT;
+  let y = HEADER_HEIGHT + phaseOffset(hasPhases);
   for (const lane of ALL_LANES) {
     if (!state.lanes[lane]) continue;
     out.push({ lane, y });
@@ -82,6 +146,8 @@ export function pointEventLane(kind: string): Lane | null {
 
 export function render(input: RenderInput): void {
   const { ctx, widthCss, heightCss, dpr, events, spans, state, theme, hoverEvtId } = input;
+  const phaseSegments = input.phaseSegments ?? [];
+  const hasPhases = phaseSegments.length > 0;
 
   // Reset for HiDPI.
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -93,7 +159,11 @@ export function render(input: RenderInput): void {
 
   drawHeader(ctx, widthCss, theme, state);
 
-  const lanes = visibleLanes(state);
+  if (hasPhases) {
+    drawPhaseRibbon(ctx, phaseSegments, widthCss, state, theme);
+  }
+
+  const lanes = visibleLanes(state, hasPhases);
   drawLaneStripes(ctx, lanes, widthCss, theme);
   drawLaneLabels(ctx, lanes, theme);
 
@@ -282,6 +352,47 @@ function pointEventColor(kind: string, theme: ThemeColors): string {
     case 'error': return theme.error;
     case 'attempt': return theme.dim;
     default: return theme.dim;
+  }
+}
+
+/**
+ * Draw the phase ribbon between header and lanes. Each segment is a
+ * colored rectangle stretching across its time interval; the phase
+ * label is drawn inside when there's room (>32 px). The "PHASE" lane
+ * label sits at the left, mirroring how Lane labels are rendered.
+ */
+function drawPhaseRibbon(
+  ctx: CanvasRenderingContext2D,
+  segments: readonly PhaseSegment[],
+  widthCss: number,
+  state: TimelineState,
+  theme: ThemeColors,
+): void {
+  const y = HEADER_HEIGHT + PHASE_RIBBON_GAP / 2;
+
+  // Left margin label.
+  ctx.fillStyle = theme.dim;
+  ctx.font = '10px ui-monospace, monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PHASE', 4, y + PHASE_RIBBON_HEIGHT / 2);
+
+  for (const seg of segments) {
+    let x0 = usToPx(seg.startUs, state);
+    let x1 = usToPx(seg.endUs, state);
+    if (x1 < LANE_LABEL_WIDTH || x0 > widthCss) continue;
+    x0 = Math.max(x0, LANE_LABEL_WIDTH);
+    x1 = Math.min(x1, widthCss);
+    const w = Math.max(2, x1 - x0);
+    ctx.fillStyle = phaseColor(seg.phase, theme);
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(x0, y, w, PHASE_RIBBON_HEIGHT);
+    ctx.globalAlpha = 1;
+    if (w > 32) {
+      ctx.fillStyle = theme.bg;
+      ctx.font = '9px ui-sans-serif, system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(seg.phase, x0 + 4, y + PHASE_RIBBON_HEIGHT / 2);
+    }
   }
 }
 

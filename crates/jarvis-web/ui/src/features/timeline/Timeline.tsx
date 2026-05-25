@@ -29,7 +29,7 @@ import {
   type Lane,
   type TimelineState,
 } from './types';
-import { pxToUs, render } from './canvas-renderer';
+import { computePhaseSegments, pxToUs, render } from './canvas-renderer';
 import { hitTest, isOnPlayhead, naturalHeight } from './hit-test';
 
 type Props = {
@@ -126,7 +126,15 @@ const Timeline: Component<Props> = (p) => {
 
   const theme = defaultTheme();
 
-  const heightCss = createMemo(() => naturalHeight(state()));
+  // § F2.1 — phase segments, recomputed when events / maxTs change.
+  // Empty array → ribbon hidden, lanes flush against header (zero-cost
+  // when the task has no phase metadata).
+  const phaseSegments = createMemo(() =>
+    computePhaseSegments(p.events, p.maxTs),
+  );
+  const hasPhases = createMemo(() => phaseSegments().length > 0);
+
+  const heightCss = createMemo(() => naturalHeight(state(), hasPhases()));
 
   // Redraw whenever state, events, spans, or size change.
   createEffect(() => {
@@ -153,6 +161,7 @@ const Timeline: Component<Props> = (p) => {
       state: { ...state(), selectedEvtId: sel },
       theme,
       hoverEvtId: hoverEvtId(),
+      phaseSegments: phaseSegments(),
     });
   });
 
@@ -168,7 +177,7 @@ const Timeline: Component<Props> = (p) => {
       canvas.setPointerCapture(e.pointerId);
       return;
     }
-    const id = hitTest(x, y, p.events, p.spans, state());
+    const id = hitTest(x, y, p.events, p.spans, state(), hasPhases());
     if (id !== 0) {
       setState((s) => ({ ...s, selectedEvtId: id }));
       p.onSelect?.(id);
@@ -192,7 +201,7 @@ const Timeline: Component<Props> = (p) => {
       setState((s) => ({ ...s, panUs: s.panUs - dx * s.usPerPx, followLive: false }));
       return;
     }
-    const id = hitTest(x, y, p.events, p.spans, state());
+    const id = hitTest(x, y, p.events, p.spans, state(), hasPhases());
     setHoverEvtId(id);
     canvas.style.cursor = id !== 0 || isOnPlayhead(x, y, state()) ? 'pointer' : 'default';
   };
