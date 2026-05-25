@@ -17,7 +17,7 @@
 
 use jarvis_core::{ChatMessage, ChatRequest, LlmProvider, TaskId};
 use jarvis_ledger::{
-    EventKind, EventRecord, Ledger, MemoryKind, MemoryScope, MemoryStatus, NewMemory,
+    EventKind, EventRecord, Ledger, MemoryKind, MemoryLayer, MemoryScope, MemoryStatus, NewMemory,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -119,10 +119,21 @@ fn sanitise(c: LlmCandidate, default_scope_value: &str) -> Option<NewMemory> {
     } else {
         String::new()
     };
+    // § T2.1 — heuristic kind → layer mapping. The v1 extractor doesn't
+    // ask the LLM for a layer (keeps the prompt tight); we derive it
+    // from the kind because patterns are procedural by definition,
+    // facts are semantic background, and preferences are user-level
+    // semantics. The user can edit the layer later via the SPA when
+    // we surface the field there.
+    let layer = match kind {
+        MemoryKind::Pattern => MemoryLayer::Procedural,
+        MemoryKind::Fact | MemoryKind::Preference => MemoryLayer::Semantic,
+    };
     Some(NewMemory {
         scope,
         scope_value,
         kind,
+        layer,
         text: text.to_string(),
         status: MemoryStatus::Candidate,
         source_task_id: None, // caller sets this

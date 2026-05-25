@@ -103,12 +103,69 @@ impl std::str::FromStr for MemoryStatus {
     }
 }
 
+/// § T2.1 — Memory layer (Hermes-style five-tier scheme). Each layer
+/// has its own retention + recall policy applied at prompt-assembly:
+///
+/// - **Working** — turn-local: produced mid-task, evicted at task end.
+///   Reserved for a future v2 of the extractor; not used in v1.
+/// - **Episodic** — task-local: events / outcomes specific to one task
+///   ("retried `cargo test` 3 times before noticing flaky test X").
+///   Recall is recency-biased and capped tight (≤ N most recent).
+/// - **Semantic** — cross-task patterns ("for rust async, prefer
+///   `tokio::select!` over manually polling futures"). Always rendered
+///   when active. This is the default for memories extracted today.
+/// - **Procedural** — step-by-step procedures the agent learned ("to
+///   add a new RPC: edit proto → regen TS → update service.rs →
+///   register handler"). Always rendered. Larger budget than
+///   semantic so multi-step procedures aren't truncated.
+/// - **Archival** — older memories that survived but are no longer
+///   first-tier. Compressed renderer or skipped entirely depending
+///   on prompt budget; the source of truth lives on disk for
+///   forensic queries (`/memory?layer=archival`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryLayer {
+    Working,
+    Episodic,
+    #[default]
+    Semantic,
+    Procedural,
+    Archival,
+}
+
+impl MemoryLayer {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Working => "working",
+            Self::Episodic => "episodic",
+            Self::Semantic => "semantic",
+            Self::Procedural => "procedural",
+            Self::Archival => "archival",
+        }
+    }
+}
+
+impl std::str::FromStr for MemoryLayer {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        Ok(match s {
+            "working" => Self::Working,
+            "episodic" => Self::Episodic,
+            "semantic" => Self::Semantic,
+            "procedural" => Self::Procedural,
+            "archival" => Self::Archival,
+            _ => return Err(()),
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryRecord {
     pub id: i64,
     pub scope: MemoryScope,
     pub scope_value: String,
     pub kind: MemoryKind,
+    pub layer: MemoryLayer,
     pub text: String,
     pub status: MemoryStatus,
     pub source_task_id: Option<jarvis_core::TaskId>,
@@ -122,6 +179,7 @@ pub struct NewMemory {
     pub scope: MemoryScope,
     pub scope_value: String,
     pub kind: MemoryKind,
+    pub layer: MemoryLayer,
     pub text: String,
     pub status: MemoryStatus,
     pub source_task_id: Option<jarvis_core::TaskId>,

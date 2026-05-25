@@ -396,12 +396,13 @@ impl Ledger {
         let now = now_micros();
         let res = sqlx::query(
             "INSERT INTO memories \
-             (scope, scope_value, kind, text, status, source_task_id, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+             (scope, scope_value, kind, layer, text, status, source_task_id, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(m.scope.as_str())
         .bind(&m.scope_value)
         .bind(m.kind.as_str())
+        .bind(m.layer.as_str())
         .bind(&m.text)
         .bind(m.status.as_str())
         .bind(m.source_task_id.map(|t| uuid_bytes(t.as_uuid())))
@@ -414,6 +415,7 @@ impl Ledger {
             scope: m.scope,
             scope_value: m.scope_value,
             kind: m.kind,
+            layer: m.layer,
             text: m.text,
             status: m.status,
             source_task_id: m.source_task_id,
@@ -432,7 +434,7 @@ impl Ledger {
     ) -> Result<Vec<crate::memory::MemoryRecord>, LedgerError> {
         let limit = if limit == 0 { 200 } else { limit as i64 };
         let mut sql = String::from(
-            "SELECT id, scope, scope_value, kind, text, status, source_task_id, \
+            "SELECT id, scope, scope_value, kind, layer, text, status, source_task_id, \
                     created_at, updated_at, usage_count \
              FROM memories WHERE 1=1",
         );
@@ -465,7 +467,7 @@ impl Ledger {
 
     pub async fn get_memory(&self, id: i64) -> Result<crate::memory::MemoryRecord, LedgerError> {
         let row = sqlx::query(
-            "SELECT id, scope, scope_value, kind, text, status, source_task_id, \
+            "SELECT id, scope, scope_value, kind, layer, text, status, source_task_id, \
                     created_at, updated_at, usage_count \
              FROM memories WHERE id = ?",
         )
@@ -534,7 +536,7 @@ impl Ledger {
         workdir: &str,
     ) -> Result<Vec<crate::memory::MemoryRecord>, LedgerError> {
         let rows = sqlx::query(
-            "SELECT id, scope, scope_value, kind, text, status, source_task_id, \
+            "SELECT id, scope, scope_value, kind, layer, text, status, source_task_id, \
                     created_at, updated_at, usage_count \
              FROM memories \
              WHERE status = 'active' AND (scope = 'global' OR (scope = 'workdir' AND scope_value = ?)) \
@@ -798,6 +800,10 @@ fn row_to_memory(
     let scope_s: String = row.try_get("scope")?;
     let scope_value: String = row.try_get("scope_value")?;
     let kind_s: String = row.try_get("kind")?;
+    // § T2.1 — `layer` is optional in the row to stay forward-compatible
+    // with SELECT lists that haven't been updated yet; defaults to
+    // 'semantic' (matching the migration default).
+    let layer_s: Option<String> = row.try_get("layer").ok();
     let text: String = row.try_get("text")?;
     let status_s: String = row.try_get("status")?;
     let source_bytes: Option<Vec<u8>> = row.try_get("source_task_id")?;
@@ -811,6 +817,12 @@ fn row_to_memory(
         scope_value,
         kind: crate::memory::MemoryKind::from_str(&kind_s)
             .map_err(|_| LedgerError::Invalid(format!("memory kind: {kind_s}")))?,
+        layer: layer_s
+            .as_deref()
+            .map(crate::memory::MemoryLayer::from_str)
+            .transpose()
+            .map_err(|_| LedgerError::Invalid("memory layer".to_string()))?
+            .unwrap_or_default(),
         text,
         status: crate::memory::MemoryStatus::from_str(&status_s)
             .map_err(|_| LedgerError::Invalid(format!("memory status: {status_s}")))?,
@@ -843,6 +855,7 @@ fn now_micros() -> i64 {
 const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("../migrations/0001_initial.sql")),
     (2, include_str!("../migrations/0002_indexes.sql")),
+    (3, include_str!("../migrations/0003_memory_layer.sql")),
 ];
 
 #[cfg(test)]

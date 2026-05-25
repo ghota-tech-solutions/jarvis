@@ -780,23 +780,78 @@ fn render_observation(ev: &EventRecord) -> String {
     s
 }
 
-/// Render the user-promoted memory list as a single system message. Returns
-/// None when there are no active memories.
+/// § T2.1 — render active memories grouped + prioritised by layer.
+/// Procedural and semantic layers are always included (up to their
+/// caps); episodic layer is recency-only and tightly capped; archival
+/// is skipped entirely (the prompt has higher-signal sources). Layer
+/// labels appear in the rendered bullets so the model can weight
+/// procedural patterns over single-shot facts when they conflict.
+///
+/// Returns `None` when no memory survives the filter.
 fn render_memories(memories: &[jarvis_ledger::MemoryRecord]) -> Option<String> {
+    use jarvis_ledger::MemoryLayer;
     if memories.is_empty() {
         return None;
     }
-    let mut out = String::from(
-        "Learned constraints for this workdir (curated by the user — treat as authoritative):\n",
-    );
-    for m in memories.iter().take(32) {
-        let scope = if matches!(m.scope, jarvis_ledger::MemoryScope::Global) {
-            "global"
-        } else {
-            "workdir"
-        };
-        out.push_str(&format!("- [{}/{}] {}\n", scope, m.kind.as_str(), m.text));
+    // Per-layer caps so a flood of one type doesn't crowd out the
+    // others. Numbers were picked from the existing 32-row cap +
+    // post-Hermes guidance (procedural is highest-value for an agent
+    // that runs the same workflows repeatedly).
+    let cap_procedural = 16;
+    let cap_semantic = 12;
+    let cap_episodic = 4;
+
+    let mut procedural = Vec::new();
+    let mut semantic = Vec::new();
+    let mut episodic = Vec::new();
+    // We iterate the input newest-first (the caller already orders
+    // updated_at DESC) so the per-layer take() picks the freshest.
+    for m in memories {
+        match m.layer {
+            MemoryLayer::Procedural if procedural.len() < cap_procedural => {
+                procedural.push(m);
+            }
+            MemoryLayer::Semantic if semantic.len() < cap_semantic => {
+                semantic.push(m);
+            }
+            MemoryLayer::Episodic if episodic.len() < cap_episodic => {
+                episodic.push(m);
+            }
+            // Working / archival never render. Working is turn-local
+            // (caller should evict it before prompt assembly); archival
+            // is intentionally cold storage.
+            _ => {}
+        }
     }
+    if procedural.is_empty() && semantic.is_empty() && episodic.is_empty() {
+        return None;
+    }
+
+    let mut out = String::from(
+        "Learned constraints for this workdir (curated by the user — treat as authoritative; layered: procedural > semantic > episodic):\n",
+    );
+    let push_section = |out: &mut String, label: &str, items: &[&jarvis_ledger::MemoryRecord]| {
+        if items.is_empty() {
+            return;
+        }
+        for m in items {
+            let scope = if matches!(m.scope, jarvis_ledger::MemoryScope::Global) {
+                "global"
+            } else {
+                "workdir"
+            };
+            out.push_str(&format!(
+                "- [{}/{}/{}] {}\n",
+                label,
+                scope,
+                m.kind.as_str(),
+                m.text
+            ));
+        }
+    };
+    push_section(&mut out, "procedural", &procedural);
+    push_section(&mut out, "semantic", &semantic);
+    push_section(&mut out, "episodic", &episodic);
     Some(out)
 }
 
@@ -1252,5 +1307,106 @@ mod tests {
             assert!(p.contains("# Platform awareness"));
             assert!(p.contains("update_plan"));
         }
+    }
+
+    // § T2.1 — layered memory rendering.
+
+    fn mk_mem(
+        id: i64,
+        text: &str,
+        layer: jarvis_ledger::MemoryLayer,
+        kind: jarvis_ledger::MemoryKind,
+    ) -> jarvis_ledger::MemoryRecord {
+        jarvis_ledger::MemoryRecord {
+            id,
+            scope: jarvis_ledger::MemoryScope::Workdir,
+            scope_value: "/repo".to_string(),
+            kind,
+            layer,
+            text: text.to_string(),
+            status: jarvis_ledger::MemoryStatus::Active,
+            source_task_id: None,
+            created_at: 0,
+            updated_at: 0,
+            usage_count: 0,
+        }
+    }
+
+    #[test]
+    fn render_memories_returns_none_for_empty() {
+        assert!(render_memories(&[]).is_none());
+    }
+
+    #[test]
+    fn render_memories_groups_by_layer_with_label() {
+        use jarvis_ledger::{MemoryKind, MemoryLayer};
+        let mems = vec![
+            mk_mem(
+                1,
+                "use cargo check",
+                MemoryLayer::Procedural,
+                MemoryKind::Pattern,
+            ),
+            mk_mem(
+                2,
+                "main branch is develop",
+                MemoryLayer::Semantic,
+                MemoryKind::Fact,
+            ),
+            mk_mem(
+                3,
+                "user prefers FR",
+                MemoryLayer::Semantic,
+                MemoryKind::Preference,
+            ),
+            mk_mem(
+                4,
+                "retried 3x on flaky test",
+                MemoryLayer::Episodic,
+                MemoryKind::Fact,
+            ),
+        ];
+        let out = render_memories(&mems).unwrap();
+        assert!(out.contains("[procedural/"));
+        assert!(out.contains("use cargo check"));
+        assert!(out.contains("[semantic/"));
+        assert!(out.contains("main branch is develop"));
+        assert!(out.contains("[episodic/"));
+        // Procedural before semantic before episodic.
+        let p_pos = out.find("[procedural/").unwrap();
+        let s_pos = out.find("[semantic/").unwrap();
+        let e_pos = out.find("[episodic/").unwrap();
+        assert!(p_pos < s_pos);
+        assert!(s_pos < e_pos);
+    }
+
+    #[test]
+    fn render_memories_skips_working_and_archival_layers() {
+        use jarvis_ledger::{MemoryKind, MemoryLayer};
+        let mems = vec![
+            mk_mem(1, "transient note", MemoryLayer::Working, MemoryKind::Fact),
+            mk_mem(2, "old fact", MemoryLayer::Archival, MemoryKind::Fact),
+        ];
+        // No procedural/semantic/episodic → render returns None.
+        assert!(render_memories(&mems).is_none());
+    }
+
+    #[test]
+    fn render_memories_caps_episodic_tight() {
+        use jarvis_ledger::{MemoryKind, MemoryLayer};
+        // Push 10 episodic entries; only 4 should render.
+        let mems: Vec<_> = (0..10)
+            .map(|i| {
+                mk_mem(
+                    i,
+                    &format!("ep #{i}"),
+                    MemoryLayer::Episodic,
+                    MemoryKind::Fact,
+                )
+            })
+            .collect();
+        let out = render_memories(&mems).unwrap();
+        let count = out.matches("[episodic/").count();
+        assert_eq!(count, 4);
     }
 }
