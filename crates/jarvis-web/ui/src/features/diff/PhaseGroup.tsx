@@ -1,8 +1,8 @@
 import { For, Show, createSignal, type Component } from 'solid-js';
 import { jarvis } from '~/lib/api/client';
 import { useQueryClient } from '@tanstack/solid-query';
-import type { DiffGroup } from '~/lib/api/gen/jarvis_pb';
-import MergeViewer from './MergeView';
+import type { DiffGroup, FileDiff } from '~/lib/api/gen/jarvis_pb';
+import FileDiffViewer from './FileDiffViewer';
 
 type Props = {
   taskId: string;
@@ -114,7 +114,11 @@ const PhaseGroup: Component<Props> = (p) => {
                 </span>
               </button>
               <Show when={expanded()[file.path]}>
-                <MergeViewer before={file.before} after={file.after} readonly />
+                <FileDiffViewer
+                  taskId={p.taskId}
+                  groupEvtId={p.group.decisionEvtId}
+                  file={file as FileDiff}
+                />
               </Show>
             </li>
           )}

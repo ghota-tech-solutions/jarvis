@@ -1,6 +1,6 @@
 // Cost + sandbox HUD — fixed at the bottom of the viewport.
 //
-// Aggregates over the live FleetUpdate stream so the totals reflect ALL
+// Aggregates over the live FleetFrame stream so the totals reflect ALL
 // tasks (running + completed) at once. The sandbox badge surfaces the
 // most "dangerous" sandbox among currently running tasks:
 //   green  → only read_only / network=none

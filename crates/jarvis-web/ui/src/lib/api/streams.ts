@@ -5,7 +5,23 @@
 import { createEffect, createSignal, on, onCleanup, onMount, type Accessor } from 'solid-js';
 import type { ConnectError } from '@connectrpc/connect';
 import { jarvis } from './client';
-import type { Event, FleetUpdate, TimelineEvent, TimelineSpan } from './gen/jarvis_pb';
+import type {
+  Event,
+  FleetEdge,
+  FleetFrame,
+  FleetNode,
+  TimelineEvent,
+  TimelineSpan,
+} from './gen/jarvis_pb';
+
+// Shape consumed by the FleetDag layout — same fields as the old
+// `FleetUpdate` envelope, but assembled client-side from the
+// snapshot + delta stream introduced in M7.1.
+export interface FleetView {
+  nodes: FleetNode[];
+  edges: FleetEdge[];
+  tsMicros: bigint;
+}
 
 export interface StreamState<T> {
   value: Accessor<T | null>;
@@ -15,22 +31,71 @@ export interface StreamState<T> {
 
 const RETRY_MS = 3000;
 
-export function useFleetStream(): StreamState<FleetUpdate> {
-  const [value, setValue] = createSignal<FleetUpdate | null>(null);
+// M7.1: server pushes either a full `FleetSnapshot` (first frame on
+// every fresh subscription) or a `FleetDelta` describing what changed
+// since the previous tick. We assemble the rolling view here so the UI
+// keeps consuming a single `FleetView` accessor.
+export function useFleetStream(): StreamState<FleetView> {
+  const [value, setValue] = createSignal<FleetView | null>(null);
   const [error, setError] = createSignal<ConnectError | Error | null>(null);
   const [connected, setConnected] = createSignal(false);
   let cancelled = false;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const applyFrame = (frame: FleetFrame) => {
+    const kind = frame.kind;
+    if (!kind) return;
+    if (kind.case === 'snapshot') {
+      setValue({
+        nodes: [...kind.value.nodes],
+        edges: [...kind.value.edges],
+        tsMicros: frame.tsMicros,
+      });
+      return;
+    }
+    if (kind.case === 'delta') {
+      const cur = value();
+      if (!cur) {
+        // Defensive: server contract says the first frame is always a
+        // snapshot. If we somehow see a delta first, ignore it and wait
+        // for the snapshot to arrive on reconnect.
+        return;
+      }
+      const d = kind.value;
+      // Index existing nodes for O(1) update / remove.
+      const nodeMap = new Map<string, FleetNode>();
+      for (const n of cur.nodes) nodeMap.set(n.taskId, n);
+      for (const n of d.addedNodes) nodeMap.set(n.taskId, n);
+      for (const n of d.updatedNodes) nodeMap.set(n.taskId, n);
+      for (const id of d.removedNodeIds) nodeMap.delete(id);
+
+      // Edges are de-duped by (parent, child).
+      const edgeKey = (e: FleetEdge) => `${e.parentTaskId}\x00${e.childTaskId}`;
+      const edgeMap = new Map<string, FleetEdge>();
+      for (const e of cur.edges) edgeMap.set(edgeKey(e), e);
+      for (const e of d.addedEdges) edgeMap.set(edgeKey(e), e);
+      for (const e of d.removedEdges) edgeMap.delete(edgeKey(e));
+
+      setValue({
+        nodes: Array.from(nodeMap.values()),
+        edges: Array.from(edgeMap.values()),
+        tsMicros: frame.tsMicros,
+      });
+    }
+  };
 
   const run = async () => {
     while (!cancelled) {
       try {
         setError(null);
         setConnected(true);
+        // Reset on every reconnect — the server replays a full snapshot
+        // as its first frame, so anything we had is stale.
+        setValue(null);
         const it = jarvis.streamFleet({});
-        for await (const snap of it) {
+        for await (const frame of it) {
           if (cancelled) return;
-          setValue(snap);
+          applyFrame(frame);
         }
         // Stream ended cleanly — reconnect after a tick
         setConnected(false);

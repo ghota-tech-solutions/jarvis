@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file jarvis.proto.
  */
 export const file_jarvis: GenFile = /*@__PURE__*/
-  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLkAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCRITCgtyZXN1bWVfZnJvbRgLIAEoCSIPCg1TdGF0dXNSZXF1ZXN0InYKDERhZW1vblN0YXR1cxIPCgd2ZXJzaW9uGAEgASgJEhYKDnVwdGltZV9zZWNvbmRzGAIgASgDEiYKBm1vZGVscxgDIAMoCzIWLmphcnZpcy52MS5Nb2RlbFN0YXR1cxIVCg1ydW5uaW5nX3Rhc2tzGAQgASgNIvoBCgtNb2RlbFN0YXR1cxIMCgRuYW1lGAEgASgJEgwKBGtpbmQYAiABKAkSEAoIbW9kZWxfaWQYAyABKAkSEAoIcHJpb3JpdHkYBCABKAUSDgoGb25saW5lGAUgASgIEhMKC3F1YXJhbnRpbmVkGAYgASgIEiAKGHF1YXJhbnRpbmVkX3VudGlsX21pY3JvcxgHIAEoAxIaChJmYWlsdXJlc19pbl93aW5kb3cYCCABKA0SDwoHY3R4X2xlbhgJIAEoDRISCgp0b29sX2NhbGxzGAogASgIEhMKC2pzb25fc2NoZW1hGAsgASgIEg4KBnZpc2lvbhgMIAEoCCKMAgoEVGFzaxIKCgJpZBgBIAEoCRIMCgRnb2FsGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIPCgd3b3JrZGlyGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAMSGQoMY29tcGxldGVkX2F0GAYgASgDSACIAQESEgoFZXJyb3IYByABKAlIAYgBARIPCgdzYW5kYm94GAggASgJEhIKCm5ldF9wb2xpY3kYCSABKAkSFQoNd29ya3RyZWVfcGF0aBgKIAEoCRIXCg93b3JrdHJlZV9icmFuY2gYCyABKAkSFgoOcGFyZW50X3Rhc2tfaWQYDCABKAlCDwoNX2NvbXBsZXRlZF9hdEIICgZfZXJyb3IiOwoQTGlzdFRhc2tzUmVxdWVzdBIYChBpbmNsdWRlX2ZpbmlzaGVkGAEgASgIEg0KBWxpbWl0GAIgASgNIioKCFRhc2tMaXN0Eh4KBXRhc2tzGAEgAygLMg8uamFydmlzLnYxLlRhc2siYwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEg4KBmZvbGxvdxgCIAEoCBIQCghzaW5jZV9pZBgDIAEoAxIZChFpbmNsdWRlX2FuY2VzdG9ycxgEIAEoCCKSAQoFRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIqMBChBUaW1lbGluZVNuYXBzaG90Eg8KB3Rhc2tfaWQYASABKAkSKAoGZXZlbnRzGAIgAygLMhguamFydmlzLnYxLlRpbWVsaW5lRXZlbnQSJgoFc3BhbnMYAyADKAsyFy5qYXJ2aXMudjEuVGltZWxpbmVTcGFuEhUKDW1pbl90c19taWNyb3MYBCABKAMSFQoNbWF4X3RzX21pY3JvcxgFIAEoAyI7ChJHZXRUaW1lbGluZVJlcXVlc3QSCgoCaWQYASABKAkSGQoRaW5jbHVkZV9hbmNlc3RvcnMYAiABKAgimgEKDVRpbWVsaW5lRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIpYBCgxUaW1lbGluZVNwYW4SFAoMc3RhcnRfZXZ0X2lkGAEgASgDEhIKCmVuZF9ldnRfaWQYAiABKAMSFwoPc3RhcnRfdHNfbWljcm9zGAMgASgDEhUKDWVuZF90c19taWNyb3MYBCABKAMSDQoFbGFiZWwYBSABKAkSDAoEbGFuZRgGIAEoCRIPCgdvdXRjb21lGAcgASgJImoKC0ZsZWV0VXBkYXRlEiMKBW5vZGVzGAEgAygLMhQuamFydmlzLnYxLkZsZWV0Tm9kZRIjCgVlZGdlcxgCIAMoCzIULmphcnZpcy52MS5GbGVldEVkZ2USEQoJdHNfbWljcm9zGAMgASgDIoACCglGbGVldE5vZGUSDwoHdGFza19pZBgBIAEoCRIQCghzaG9ydF9pZBgCIAEoCRIOCgZzdGF0dXMYAyABKAkSDAoEZ29hbBgEIAEoCRIPCgd3b3JrZGlyGAUgASgJEg8KB3NhbmRib3gYBiABKAkSEQoJdG9rZW5zX2luGAcgASgEEhIKCnRva2Vuc19vdXQYCCABKAQSGgoSZXN0aW1hdGVkX2Nvc3RfdXNkGAkgASgBEhkKEWNyZWF0ZWRfYXRfbWljcm9zGAogASgDEhkKEXVwZGF0ZWRfYXRfbWljcm9zGAsgASgDEhcKD25lZWRzX2F0dGVudGlvbhgMIAEoCCI6CglGbGVldEVkZ2USFgoOcGFyZW50X3Rhc2tfaWQYASABKAkSFQoNY2hpbGRfdGFza19pZBgCIAEoCSKRAQoKQ29zdFJlcG9ydBIPCgd0YXNrX2lkGAEgASgJEhcKD3RvdGFsX3Rva2Vuc19pbhgCIAEoBBIYChB0b3RhbF90b2tlbnNfb3V0GAMgASgEEhYKDnRvdGFsX2Nvc3RfdXNkGAQgASgBEicKCGJ5X21vZGVsGAUgAygLMhUuamFydmlzLnYxLk1vZGVsU3BlbmQibQoKTW9kZWxTcGVuZBISCgptb2RlbF9uYW1lGAEgASgJEhEKCXRva2Vuc19pbhgCIAEoBBISCgp0b2tlbnNfb3V0GAMgASgEEhAKCGNvc3RfdXNkGAQgASgBEhIKCmNhbGxfY291bnQYBSABKA0iXAoNRGlmZkdyb3VwTGlzdBIPCgd0YXNrX2lkGAEgASgJEiQKBmdyb3VwcxgCIAMoCzIULmphcnZpcy52MS5EaWZmR3JvdXASFAoMb3JwaGFuX3BhdGhzGAMgAygJIoABCglEaWZmR3JvdXASFwoPZGVjaXNpb25fZXZ0X2lkGAEgASgDEhUKDWRlY2lzaW9uX3RleHQYAiABKAkSDAoEc3RlcBgDIAEoDRIRCgl0c19taWNyb3MYBCABKAMSIgoFZmlsZXMYBSADKAsyEy5qYXJ2aXMudjEuRmlsZURpZmYieAoIRmlsZURpZmYSDAoEcGF0aBgBIAEoCRITCgtjaGFuZ2Vfa2luZBgCIAEoCRIOCgZiZWZvcmUYAyABKAkSDQoFYWZ0ZXIYBCABKAkSEwoLbGluZXNfYWRkZWQYBSABKA0SFQoNbGluZXNfcmVtb3ZlZBgGIAEoDSJPChJDb21taXRQaGFzZVJlcXVlc3QSDwoHdGFza19pZBgBIAEoCRIXCg9kZWNpc2lvbl9ldnRfaWQYAiABKAMSDwoHc3ViamVjdBgDIAEoCSJUCgpDb21taXRJbmZvEhIKCmNvbW1pdF9zaGEYASABKAkSDgoGYnJhbmNoGAIgASgJEg8KB3N1YmplY3QYAyABKAkSEQoJdHNfbWljcm9zGAQgASgDIscBCgZNZW1vcnkSCgoCaWQYASABKAMSDQoFc2NvcGUYAiABKAkSEwoLc2NvcGVfdmFsdWUYAyABKAkSDAoEa2luZBgEIAEoCRIMCgR0ZXh0GAUgASgJEg4KBnN0YXR1cxgGIAEoCRIWCg5zb3VyY2VfdGFza19pZBgHIAEoCRIZChFjcmVhdGVkX2F0X21pY3JvcxgIIAEoAxIZChF1cGRhdGVkX2F0X21pY3JvcxgJIAEoAxITCgt1c2FnZV9jb3VudBgKIAEoDSJYChNMaXN0TWVtb3JpZXNSZXF1ZXN0Eg0KBXNjb3BlGAEgASgJEhMKC3Njb3BlX3ZhbHVlGAIgASgJEg4KBnN0YXR1cxgDIAEoCRINCgVsaW1pdBgEIAEoDSIxCgpNZW1vcnlMaXN0EiMKCG1lbW9yaWVzGAEgAygLMhEuamFydmlzLnYxLk1lbW9yeSIaCgxNZW1vcnlIYW5kbGUSCgoCaWQYASABKAMiMAoUUHJvbW90ZU1lbW9yeVJlcXVlc3QSCgoCaWQYASABKAMSDAoEdGV4dBgCIAEoCSJfChFFZGl0TWVtb3J5UmVxdWVzdBIKCgJpZBgBIAEoAxIMCgR0ZXh0GAIgASgJEg0KBXNjb3BlGAMgASgJEhMKC3Njb3BlX3ZhbHVlGAQgASgJEgwKBGtpbmQYBSABKAkitgEKDFNjaGVkdWxlU3BlYxIKCgJpZBgBIAEoCRIMCgRjcm9uGAIgASgJEgwKBGdvYWwYAyABKAkSDwoHd29ya2RpchgEIAEoCRIPCgdzYW5kYm94GAUgASgJEhIKCm5ldF9wb2xpY3kYBiABKAkSFgoOcm91dGluZ19wb2xpY3kYByABKAkSEQoJbWF4X3N0ZXBzGAggASgNEg0KBWxhYmVsGAkgASgJEg4KBnBhdXNlZBgKIAEoCCJ5CghTY2hlZHVsZRIlCgRzcGVjGAEgASgLMhcuamFydmlzLnYxLlNjaGVkdWxlU3BlYxIXCg9sYXN0X3J1bl9taWNyb3MYAiABKAMSFwoPbmV4dF9ydW5fbWljcm9zGAMgASgDEhQKDGxhc3RfdGFza19pZBgEIAEoCSIcCg5TY2hlZHVsZUhhbmRsZRIKCgJpZBgBIAEoCSI2CgxTY2hlZHVsZUxpc3QSJgoJc2NoZWR1bGVzGAEgAygLMhMuamFydmlzLnYxLlNjaGVkdWxlMvkKCgZKYXJ2aXMSNwoEUGluZxIWLmphcnZpcy52MS5QaW5nUmVxdWVzdBoXLmphcnZpcy52MS5QaW5nUmVzcG9uc2USMwoDQXNrEhUuamFydmlzLnYxLkFza1JlcXVlc3QaEy5qYXJ2aXMudjEuQXNrQ2h1bmswARI4CgpTdWJtaXRUYXNrEhMuamFydmlzLnYxLlRhc2tTcGVjGhUuamFydmlzLnYxLlRhc2tIYW5kbGUSMQoHR2V0VGFzaxIVLmphcnZpcy52MS5UYXNrSGFuZGxlGg8uamFydmlzLnYxLlRhc2sSPQoJTGlzdFRhc2tzEhsuamFydmlzLnYxLkxpc3RUYXNrc1JlcXVlc3QaEy5qYXJ2aXMudjEuVGFza0xpc3QSNQoKQ2FuY2VsVGFzaxIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhAuamFydmlzLnYxLkVtcHR5EkIKDFN0cmVhbUV2ZW50cxIeLmphcnZpcy52MS5TdHJlYW1FdmVudHNSZXF1ZXN0GhAuamFydmlzLnYxLkV2ZW50MAESPgoJR2V0U3RhdHVzEhguamFydmlzLnYxLlN0YXR1c1JlcXVlc3QaFy5qYXJ2aXMudjEuRGFlbW9uU3RhdHVzEkkKC0dldFRpbWVsaW5lEh0uamFydmlzLnYxLkdldFRpbWVsaW5lUmVxdWVzdBobLmphcnZpcy52MS5UaW1lbGluZVNuYXBzaG90EjkKC1N0cmVhbUZsZWV0EhAuamFydmlzLnYxLkVtcHR5GhYuamFydmlzLnYxLkZsZWV0VXBkYXRlMAESRAoUR2V0VGFza0Nvc3RCcmVha2Rvd24SFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoVLmphcnZpcy52MS5Db3N0UmVwb3J0EkQKEUdyb3VwRGlmZkJ5SW50ZW50EhUuamFydmlzLnYxLlRhc2tIYW5kbGUaGC5qYXJ2aXMudjEuRGlmZkdyb3VwTGlzdBJDCgtDb21taXRQaGFzZRIdLmphcnZpcy52MS5Db21taXRQaGFzZVJlcXVlc3QaFS5qYXJ2aXMudjEuQ29tbWl0SW5mbxI+CgtSZWplY3RQaGFzZRIdLmphcnZpcy52MS5Db21taXRQaGFzZVJlcXVlc3QaEC5qYXJ2aXMudjEuRW1wdHkSRQoMTGlzdE1lbW9yaWVzEh4uamFydmlzLnYxLkxpc3RNZW1vcmllc1JlcXVlc3QaFS5qYXJ2aXMudjEuTWVtb3J5TGlzdBJDCg1Qcm9tb3RlTWVtb3J5Eh8uamFydmlzLnYxLlByb21vdGVNZW1vcnlSZXF1ZXN0GhEuamFydmlzLnYxLk1lbW9yeRI5CgxGb3JnZXRNZW1vcnkSFy5qYXJ2aXMudjEuTWVtb3J5SGFuZGxlGhAuamFydmlzLnYxLkVtcHR5Ej0KCkVkaXRNZW1vcnkSHC5qYXJ2aXMudjEuRWRpdE1lbW9yeVJlcXVlc3QaES5qYXJ2aXMudjEuTWVtb3J5Ej4KDkNyZWF0ZVNjaGVkdWxlEhcuamFydmlzLnYxLlNjaGVkdWxlU3BlYxoTLmphcnZpcy52MS5TY2hlZHVsZRI6Cg1MaXN0U2NoZWR1bGVzEhAuamFydmlzLnYxLkVtcHR5GhcuamFydmlzLnYxLlNjaGVkdWxlTGlzdBI9Cg5EZWxldGVTY2hlZHVsZRIZLmphcnZpcy52MS5TY2hlZHVsZUhhbmRsZRoQLmphcnZpcy52MS5FbXB0eRJCCg5SdW5TY2hlZHVsZU5vdxIZLmphcnZpcy52MS5TY2hlZHVsZUhhbmRsZRoVLmphcnZpcy52MS5UYXNrSGFuZGxlYgZwcm90bzM");
+  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLkAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCRITCgtyZXN1bWVfZnJvbRgLIAEoCSIPCg1TdGF0dXNSZXF1ZXN0InYKDERhZW1vblN0YXR1cxIPCgd2ZXJzaW9uGAEgASgJEhYKDnVwdGltZV9zZWNvbmRzGAIgASgDEiYKBm1vZGVscxgDIAMoCzIWLmphcnZpcy52MS5Nb2RlbFN0YXR1cxIVCg1ydW5uaW5nX3Rhc2tzGAQgASgNIvoBCgtNb2RlbFN0YXR1cxIMCgRuYW1lGAEgASgJEgwKBGtpbmQYAiABKAkSEAoIbW9kZWxfaWQYAyABKAkSEAoIcHJpb3JpdHkYBCABKAUSDgoGb25saW5lGAUgASgIEhMKC3F1YXJhbnRpbmVkGAYgASgIEiAKGHF1YXJhbnRpbmVkX3VudGlsX21pY3JvcxgHIAEoAxIaChJmYWlsdXJlc19pbl93aW5kb3cYCCABKA0SDwoHY3R4X2xlbhgJIAEoDRISCgp0b29sX2NhbGxzGAogASgIEhMKC2pzb25fc2NoZW1hGAsgASgIEg4KBnZpc2lvbhgMIAEoCCKMAgoEVGFzaxIKCgJpZBgBIAEoCRIMCgRnb2FsGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIPCgd3b3JrZGlyGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAMSGQoMY29tcGxldGVkX2F0GAYgASgDSACIAQESEgoFZXJyb3IYByABKAlIAYgBARIPCgdzYW5kYm94GAggASgJEhIKCm5ldF9wb2xpY3kYCSABKAkSFQoNd29ya3RyZWVfcGF0aBgKIAEoCRIXCg93b3JrdHJlZV9icmFuY2gYCyABKAkSFgoOcGFyZW50X3Rhc2tfaWQYDCABKAlCDwoNX2NvbXBsZXRlZF9hdEIICgZfZXJyb3IiOwoQTGlzdFRhc2tzUmVxdWVzdBIYChBpbmNsdWRlX2ZpbmlzaGVkGAEgASgIEg0KBWxpbWl0GAIgASgNIioKCFRhc2tMaXN0Eh4KBXRhc2tzGAEgAygLMg8uamFydmlzLnYxLlRhc2siYwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEg4KBmZvbGxvdxgCIAEoCBIQCghzaW5jZV9pZBgDIAEoAxIZChFpbmNsdWRlX2FuY2VzdG9ycxgEIAEoCCKSAQoFRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIqMBChBUaW1lbGluZVNuYXBzaG90Eg8KB3Rhc2tfaWQYASABKAkSKAoGZXZlbnRzGAIgAygLMhguamFydmlzLnYxLlRpbWVsaW5lRXZlbnQSJgoFc3BhbnMYAyADKAsyFy5qYXJ2aXMudjEuVGltZWxpbmVTcGFuEhUKDW1pbl90c19taWNyb3MYBCABKAMSFQoNbWF4X3RzX21pY3JvcxgFIAEoAyI7ChJHZXRUaW1lbGluZVJlcXVlc3QSCgoCaWQYASABKAkSGQoRaW5jbHVkZV9hbmNlc3RvcnMYAiABKAgimgEKDVRpbWVsaW5lRXZlbnQSCgoCaWQYASABKAMSEQoJdHNfbWljcm9zGAIgASgDEg8KB3Rhc2tfaWQYAyABKAkSEAoIYWdlbnRfaWQYBCABKAkSDAoEa2luZBgFIAEoCRIPCgdzdWJqZWN0GAYgASgJEhQKDHBheWxvYWRfanNvbhgHIAEoCRISCgpwYXJlbnRfZXZ0GAggASgDIpYBCgxUaW1lbGluZVNwYW4SFAoMc3RhcnRfZXZ0X2lkGAEgASgDEhIKCmVuZF9ldnRfaWQYAiABKAMSFwoPc3RhcnRfdHNfbWljcm9zGAMgASgDEhUKDWVuZF90c19taWNyb3MYBCABKAMSDQoFbGFiZWwYBSABKAkSDAoEbGFuZRgGIAEoCRIPCgdvdXRjb21lGAcgASgJIn0KCkZsZWV0RnJhbWUSEQoJdHNfbWljcm9zGAEgASgDEiwKCHNuYXBzaG90GAIgASgLMhguamFydmlzLnYxLkZsZWV0U25hcHNob3RIABImCgVkZWx0YRgDIAEoCzIVLmphcnZpcy52MS5GbGVldERlbHRhSABCBgoEa2luZCJZCg1GbGVldFNuYXBzaG90EiMKBW5vZGVzGAEgAygLMhQuamFydmlzLnYxLkZsZWV0Tm9kZRIjCgVlZGdlcxgCIAMoCzIULmphcnZpcy52MS5GbGVldEVkZ2Ui1gEKCkZsZWV0RGVsdGESKQoLYWRkZWRfbm9kZXMYASADKAsyFC5qYXJ2aXMudjEuRmxlZXROb2RlEisKDXVwZGF0ZWRfbm9kZXMYAiADKAsyFC5qYXJ2aXMudjEuRmxlZXROb2RlEhgKEHJlbW92ZWRfbm9kZV9pZHMYAyADKAkSKQoLYWRkZWRfZWRnZXMYBCADKAsyFC5qYXJ2aXMudjEuRmxlZXRFZGdlEisKDXJlbW92ZWRfZWRnZXMYBSADKAsyFC5qYXJ2aXMudjEuRmxlZXRFZGdlIoACCglGbGVldE5vZGUSDwoHdGFza19pZBgBIAEoCRIQCghzaG9ydF9pZBgCIAEoCRIOCgZzdGF0dXMYAyABKAkSDAoEZ29hbBgEIAEoCRIPCgd3b3JrZGlyGAUgASgJEg8KB3NhbmRib3gYBiABKAkSEQoJdG9rZW5zX2luGAcgASgEEhIKCnRva2Vuc19vdXQYCCABKAQSGgoSZXN0aW1hdGVkX2Nvc3RfdXNkGAkgASgBEhkKEWNyZWF0ZWRfYXRfbWljcm9zGAogASgDEhkKEXVwZGF0ZWRfYXRfbWljcm9zGAsgASgDEhcKD25lZWRzX2F0dGVudGlvbhgMIAEoCCI6CglGbGVldEVkZ2USFgoOcGFyZW50X3Rhc2tfaWQYASABKAkSFQoNY2hpbGRfdGFza19pZBgCIAEoCSKRAQoKQ29zdFJlcG9ydBIPCgd0YXNrX2lkGAEgASgJEhcKD3RvdGFsX3Rva2Vuc19pbhgCIAEoBBIYChB0b3RhbF90b2tlbnNfb3V0GAMgASgEEhYKDnRvdGFsX2Nvc3RfdXNkGAQgASgBEicKCGJ5X21vZGVsGAUgAygLMhUuamFydmlzLnYxLk1vZGVsU3BlbmQibQoKTW9kZWxTcGVuZBISCgptb2RlbF9uYW1lGAEgASgJEhEKCXRva2Vuc19pbhgCIAEoBBISCgp0b2tlbnNfb3V0GAMgASgEEhAKCGNvc3RfdXNkGAQgASgBEhIKCmNhbGxfY291bnQYBSABKA0iXAoNRGlmZkdyb3VwTGlzdBIPCgd0YXNrX2lkGAEgASgJEiQKBmdyb3VwcxgCIAMoCzIULmphcnZpcy52MS5EaWZmR3JvdXASFAoMb3JwaGFuX3BhdGhzGAMgAygJIoABCglEaWZmR3JvdXASFwoPZGVjaXNpb25fZXZ0X2lkGAEgASgDEhUKDWRlY2lzaW9uX3RleHQYAiABKAkSDAoEc3RlcBgDIAEoDRIRCgl0c19taWNyb3MYBCABKAMSIgoFZmlsZXMYBSADKAsyEy5qYXJ2aXMudjEuRmlsZURpZmYibgoIRmlsZURpZmYSDAoEcGF0aBgBIAEoCRITCgtjaGFuZ2Vfa2luZBgCIAEoCRITCgtsaW5lc19hZGRlZBgDIAEoDRIVCg1saW5lc19yZW1vdmVkGAQgASgNEhMKC3RvdGFsX2xpbmVzGAUgASgNInIKEkdldEZpbGVEaWZmUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEhQKDGdyb3VwX2V2dF9pZBgCIAEoBBIMCgRwYXRoGAMgASgJEhQKDG9mZnNldF9saW5lcxgEIAEoDRIRCgltYXhfbGluZXMYBSABKA0iiAEKEkZpbGVEaWZmQ2h1bmtCYXRjaBIMCgRwYXRoGAEgASgJEhQKDG9mZnNldF9saW5lcxgCIAEoDRIWCg5yZXR1cm5lZF9saW5lcxgDIAEoDRITCgt0b3RhbF9saW5lcxgEIAEoDRIQCghoYXNfbW9yZRgFIAEoCBIPCgdjb250ZW50GAYgASgJIk8KEkNvbW1pdFBoYXNlUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJEhcKD2RlY2lzaW9uX2V2dF9pZBgCIAEoAxIPCgdzdWJqZWN0GAMgASgJIlQKCkNvbW1pdEluZm8SEgoKY29tbWl0X3NoYRgBIAEoCRIOCgZicmFuY2gYAiABKAkSDwoHc3ViamVjdBgDIAEoCRIRCgl0c19taWNyb3MYBCABKAMixwEKBk1lbW9yeRIKCgJpZBgBIAEoAxINCgVzY29wZRgCIAEoCRITCgtzY29wZV92YWx1ZRgDIAEoCRIMCgRraW5kGAQgASgJEgwKBHRleHQYBSABKAkSDgoGc3RhdHVzGAYgASgJEhYKDnNvdXJjZV90YXNrX2lkGAcgASgJEhkKEWNyZWF0ZWRfYXRfbWljcm9zGAggASgDEhkKEXVwZGF0ZWRfYXRfbWljcm9zGAkgASgDEhMKC3VzYWdlX2NvdW50GAogASgNIlgKE0xpc3RNZW1vcmllc1JlcXVlc3QSDQoFc2NvcGUYASABKAkSEwoLc2NvcGVfdmFsdWUYAiABKAkSDgoGc3RhdHVzGAMgASgJEg0KBWxpbWl0GAQgASgNIjEKCk1lbW9yeUxpc3QSIwoIbWVtb3JpZXMYASADKAsyES5qYXJ2aXMudjEuTWVtb3J5IhoKDE1lbW9yeUhhbmRsZRIKCgJpZBgBIAEoAyIwChRQcm9tb3RlTWVtb3J5UmVxdWVzdBIKCgJpZBgBIAEoAxIMCgR0ZXh0GAIgASgJIl8KEUVkaXRNZW1vcnlSZXF1ZXN0EgoKAmlkGAEgASgDEgwKBHRleHQYAiABKAkSDQoFc2NvcGUYAyABKAkSEwoLc2NvcGVfdmFsdWUYBCABKAkSDAoEa2luZBgFIAEoCSK2AQoMU2NoZWR1bGVTcGVjEgoKAmlkGAEgASgJEgwKBGNyb24YAiABKAkSDAoEZ29hbBgDIAEoCRIPCgd3b3JrZGlyGAQgASgJEg8KB3NhbmRib3gYBSABKAkSEgoKbmV0X3BvbGljeRgGIAEoCRIWCg5yb3V0aW5nX3BvbGljeRgHIAEoCRIRCgltYXhfc3RlcHMYCCABKA0SDQoFbGFiZWwYCSABKAkSDgoGcGF1c2VkGAogASgIInkKCFNjaGVkdWxlEiUKBHNwZWMYASABKAsyFy5qYXJ2aXMudjEuU2NoZWR1bGVTcGVjEhcKD2xhc3RfcnVuX21pY3JvcxgCIAEoAxIXCg9uZXh0X3J1bl9taWNyb3MYAyABKAMSFAoMbGFzdF90YXNrX2lkGAQgASgJIhwKDlNjaGVkdWxlSGFuZGxlEgoKAmlkGAEgASgJIjYKDFNjaGVkdWxlTGlzdBImCglzY2hlZHVsZXMYASADKAsyEy5qYXJ2aXMudjEuU2NoZWR1bGUyxQsKBkphcnZpcxI3CgRQaW5nEhYuamFydmlzLnYxLlBpbmdSZXF1ZXN0GhcuamFydmlzLnYxLlBpbmdSZXNwb25zZRIzCgNBc2sSFS5qYXJ2aXMudjEuQXNrUmVxdWVzdBoTLmphcnZpcy52MS5Bc2tDaHVuazABEjgKClN1Ym1pdFRhc2sSEy5qYXJ2aXMudjEuVGFza1NwZWMaFS5qYXJ2aXMudjEuVGFza0hhbmRsZRIxCgdHZXRUYXNrEhUuamFydmlzLnYxLlRhc2tIYW5kbGUaDy5qYXJ2aXMudjEuVGFzaxI9CglMaXN0VGFza3MSGy5qYXJ2aXMudjEuTGlzdFRhc2tzUmVxdWVzdBoTLmphcnZpcy52MS5UYXNrTGlzdBI1CgpDYW5jZWxUYXNrEhUuamFydmlzLnYxLlRhc2tIYW5kbGUaEC5qYXJ2aXMudjEuRW1wdHkSQgoMU3RyZWFtRXZlbnRzEh4uamFydmlzLnYxLlN0cmVhbUV2ZW50c1JlcXVlc3QaEC5qYXJ2aXMudjEuRXZlbnQwARI+CglHZXRTdGF0dXMSGC5qYXJ2aXMudjEuU3RhdHVzUmVxdWVzdBoXLmphcnZpcy52MS5EYWVtb25TdGF0dXMSSQoLR2V0VGltZWxpbmUSHS5qYXJ2aXMudjEuR2V0VGltZWxpbmVSZXF1ZXN0GhsuamFydmlzLnYxLlRpbWVsaW5lU25hcHNob3QSOAoLU3RyZWFtRmxlZXQSEC5qYXJ2aXMudjEuRW1wdHkaFS5qYXJ2aXMudjEuRmxlZXRGcmFtZTABEkQKFEdldFRhc2tDb3N0QnJlYWtkb3duEhUuamFydmlzLnYxLlRhc2tIYW5kbGUaFS5qYXJ2aXMudjEuQ29zdFJlcG9ydBJEChFHcm91cERpZmZCeUludGVudBIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhguamFydmlzLnYxLkRpZmZHcm91cExpc3QSSwoLR2V0RmlsZURpZmYSHS5qYXJ2aXMudjEuR2V0RmlsZURpZmZSZXF1ZXN0Gh0uamFydmlzLnYxLkZpbGVEaWZmQ2h1bmtCYXRjaBJDCgtDb21taXRQaGFzZRIdLmphcnZpcy52MS5Db21taXRQaGFzZVJlcXVlc3QaFS5qYXJ2aXMudjEuQ29tbWl0SW5mbxI+CgtSZWplY3RQaGFzZRIdLmphcnZpcy52MS5Db21taXRQaGFzZVJlcXVlc3QaEC5qYXJ2aXMudjEuRW1wdHkSRQoMTGlzdE1lbW9yaWVzEh4uamFydmlzLnYxLkxpc3RNZW1vcmllc1JlcXVlc3QaFS5qYXJ2aXMudjEuTWVtb3J5TGlzdBJDCg1Qcm9tb3RlTWVtb3J5Eh8uamFydmlzLnYxLlByb21vdGVNZW1vcnlSZXF1ZXN0GhEuamFydmlzLnYxLk1lbW9yeRI5CgxGb3JnZXRNZW1vcnkSFy5qYXJ2aXMudjEuTWVtb3J5SGFuZGxlGhAuamFydmlzLnYxLkVtcHR5Ej0KCkVkaXRNZW1vcnkSHC5qYXJ2aXMudjEuRWRpdE1lbW9yeVJlcXVlc3QaES5qYXJ2aXMudjEuTWVtb3J5Ej4KDkNyZWF0ZVNjaGVkdWxlEhcuamFydmlzLnYxLlNjaGVkdWxlU3BlYxoTLmphcnZpcy52MS5TY2hlZHVsZRI6Cg1MaXN0U2NoZWR1bGVzEhAuamFydmlzLnYxLkVtcHR5GhcuamFydmlzLnYxLlNjaGVkdWxlTGlzdBI9Cg5EZWxldGVTY2hlZHVsZRIZLmphcnZpcy52MS5TY2hlZHVsZUhhbmRsZRoQLmphcnZpcy52MS5FbXB0eRJCCg5SdW5TY2hlZHVsZU5vdxIZLmphcnZpcy52MS5TY2hlZHVsZUhhbmRsZRoVLmphcnZpcy52MS5UYXNrSGFuZGxlYgZwcm90bzM");
 
 /**
  * @generated from message jarvis.v1.PingRequest
@@ -786,14 +786,57 @@ export const TimelineSpanSchema: GenMessage<TimelineSpan> = /*@__PURE__*/
   messageDesc(file_jarvis, 19);
 
 /**
- * @generated from message jarvis.v1.FleetUpdate
+ * One frame on the StreamFleet stream. The very first frame on a fresh
+ * subscription is always a `FleetSnapshot`; every subsequent frame is a
+ * `FleetDelta` carrying only what changed since the previous tick.
+ * Empty deltas are not sent — the stream stays silent until the daemon
+ * observes a real change. (M7.1)
+ *
+ * @generated from message jarvis.v1.FleetFrame
  */
-export type FleetUpdate = Message<"jarvis.v1.FleetUpdate"> & {
+export type FleetFrame = Message<"jarvis.v1.FleetFrame"> & {
   /**
-   * Full snapshot. The first message after subscription is always a full
-   * snapshot; subsequent messages may either be full snapshots (cheap
-   * because tasks are bounded) or deltas (TODO M7.1).
+   * Wall-clock micros of when the frame was assembled. Mirrored on both
+   * variants of the oneof to keep clients trivially monotonic.
    *
+   * @generated from field: int64 ts_micros = 1;
+   */
+  tsMicros: bigint;
+
+  /**
+   * @generated from oneof jarvis.v1.FleetFrame.kind
+   */
+  kind: {
+    /**
+     * @generated from field: jarvis.v1.FleetSnapshot snapshot = 2;
+     */
+    value: FleetSnapshot;
+    case: "snapshot";
+  } | {
+    /**
+     * @generated from field: jarvis.v1.FleetDelta delta = 3;
+     */
+    value: FleetDelta;
+    case: "delta";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message jarvis.v1.FleetFrame.
+ * Use `create(FleetFrameSchema)` to create a new message.
+ */
+export const FleetFrameSchema: GenMessage<FleetFrame> = /*@__PURE__*/
+  messageDesc(file_jarvis, 20);
+
+/**
+ * Full state of the fleet at a point in time. Emitted as the first frame
+ * after a client connects and any time the daemon decides a delta would be
+ * larger than a fresh snapshot.
+ *
+ * @generated from message jarvis.v1.FleetSnapshot
+ */
+export type FleetSnapshot = Message<"jarvis.v1.FleetSnapshot"> & {
+  /**
    * @generated from field: repeated jarvis.v1.FleetNode nodes = 1;
    */
   nodes: FleetNode[];
@@ -802,19 +845,58 @@ export type FleetUpdate = Message<"jarvis.v1.FleetUpdate"> & {
    * @generated from field: repeated jarvis.v1.FleetEdge edges = 2;
    */
   edges: FleetEdge[];
-
-  /**
-   * @generated from field: int64 ts_micros = 3;
-   */
-  tsMicros: bigint;
 };
 
 /**
- * Describes the message jarvis.v1.FleetUpdate.
- * Use `create(FleetUpdateSchema)` to create a new message.
+ * Describes the message jarvis.v1.FleetSnapshot.
+ * Use `create(FleetSnapshotSchema)` to create a new message.
  */
-export const FleetUpdateSchema: GenMessage<FleetUpdate> = /*@__PURE__*/
-  messageDesc(file_jarvis, 20);
+export const FleetSnapshotSchema: GenMessage<FleetSnapshot> = /*@__PURE__*/
+  messageDesc(file_jarvis, 21);
+
+/**
+ * Incremental change since the previous frame. The SPA applies these on
+ * top of the snapshot it already holds:
+ *   - merge `added_nodes` and overwrite by task_id with `updated_nodes`
+ *   - remove any node whose id is in `removed_node_ids`
+ *   - merge `added_edges` and drop any edge in `removed_edges`
+ * Updated nodes carry full new state, not a diff of fields.
+ *
+ * @generated from message jarvis.v1.FleetDelta
+ */
+export type FleetDelta = Message<"jarvis.v1.FleetDelta"> & {
+  /**
+   * @generated from field: repeated jarvis.v1.FleetNode added_nodes = 1;
+   */
+  addedNodes: FleetNode[];
+
+  /**
+   * @generated from field: repeated jarvis.v1.FleetNode updated_nodes = 2;
+   */
+  updatedNodes: FleetNode[];
+
+  /**
+   * @generated from field: repeated string removed_node_ids = 3;
+   */
+  removedNodeIds: string[];
+
+  /**
+   * @generated from field: repeated jarvis.v1.FleetEdge added_edges = 4;
+   */
+  addedEdges: FleetEdge[];
+
+  /**
+   * @generated from field: repeated jarvis.v1.FleetEdge removed_edges = 5;
+   */
+  removedEdges: FleetEdge[];
+};
+
+/**
+ * Describes the message jarvis.v1.FleetDelta.
+ * Use `create(FleetDeltaSchema)` to create a new message.
+ */
+export const FleetDeltaSchema: GenMessage<FleetDelta> = /*@__PURE__*/
+  messageDesc(file_jarvis, 22);
 
 /**
  * @generated from message jarvis.v1.FleetNode
@@ -898,7 +980,7 @@ export type FleetNode = Message<"jarvis.v1.FleetNode"> & {
  * Use `create(FleetNodeSchema)` to create a new message.
  */
 export const FleetNodeSchema: GenMessage<FleetNode> = /*@__PURE__*/
-  messageDesc(file_jarvis, 21);
+  messageDesc(file_jarvis, 23);
 
 /**
  * @generated from message jarvis.v1.FleetEdge
@@ -923,7 +1005,7 @@ export type FleetEdge = Message<"jarvis.v1.FleetEdge"> & {
  * Use `create(FleetEdgeSchema)` to create a new message.
  */
 export const FleetEdgeSchema: GenMessage<FleetEdge> = /*@__PURE__*/
-  messageDesc(file_jarvis, 22);
+  messageDesc(file_jarvis, 24);
 
 /**
  * @generated from message jarvis.v1.CostReport
@@ -964,7 +1046,7 @@ export type CostReport = Message<"jarvis.v1.CostReport"> & {
  * Use `create(CostReportSchema)` to create a new message.
  */
 export const CostReportSchema: GenMessage<CostReport> = /*@__PURE__*/
-  messageDesc(file_jarvis, 23);
+  messageDesc(file_jarvis, 25);
 
 /**
  * @generated from message jarvis.v1.ModelSpend
@@ -1005,7 +1087,7 @@ export type ModelSpend = Message<"jarvis.v1.ModelSpend"> & {
  * Use `create(ModelSpendSchema)` to create a new message.
  */
 export const ModelSpendSchema: GenMessage<ModelSpend> = /*@__PURE__*/
-  messageDesc(file_jarvis, 24);
+  messageDesc(file_jarvis, 26);
 
 /**
  * @generated from message jarvis.v1.DiffGroupList
@@ -1035,7 +1117,7 @@ export type DiffGroupList = Message<"jarvis.v1.DiffGroupList"> & {
  * Use `create(DiffGroupListSchema)` to create a new message.
  */
 export const DiffGroupListSchema: GenMessage<DiffGroupList> = /*@__PURE__*/
-  messageDesc(file_jarvis, 25);
+  messageDesc(file_jarvis, 27);
 
 /**
  * @generated from message jarvis.v1.DiffGroup
@@ -1069,9 +1151,8 @@ export type DiffGroup = Message<"jarvis.v1.DiffGroup"> & {
   tsMicros: bigint;
 
   /**
-   * Files touched in this group. Server populates `hunks` lazily — for
-   * large diffs the SPA may receive empty hunks and request them on
-   * expand. (M8.1 will add a separate GetFileDiff RPC.)
+   * Files touched in this group — metadata only. The SPA fetches each
+   * file's unified-diff text on demand via `GetFileDiff`. (M8.1)
    *
    * @generated from field: repeated jarvis.v1.FileDiff files = 5;
    */
@@ -1083,9 +1164,13 @@ export type DiffGroup = Message<"jarvis.v1.DiffGroup"> & {
  * Use `create(DiffGroupSchema)` to create a new message.
  */
 export const DiffGroupSchema: GenMessage<DiffGroup> = /*@__PURE__*/
-  messageDesc(file_jarvis, 26);
+  messageDesc(file_jarvis, 28);
 
 /**
+ * Per-file metadata for a phase's diff. Carries enough for the UI to
+ * render the file list (path, change kind, line counts) but never the
+ * full diff body — large refactors used to balloon the response.
+ *
  * @generated from message jarvis.v1.FileDiff
  */
 export type FileDiff = Message<"jarvis.v1.FileDiff"> & {
@@ -1102,28 +1187,22 @@ export type FileDiff = Message<"jarvis.v1.FileDiff"> & {
   changeKind: string;
 
   /**
-   * Full before / after contents for client-side diff rendering by
-   * @codemirror/merge. Empty `before` for added files, empty `after`
-   * for deleted files.
-   *
-   * @generated from field: string before = 3;
-   */
-  before: string;
-
-  /**
-   * @generated from field: string after = 4;
-   */
-  after: string;
-
-  /**
-   * @generated from field: uint32 lines_added = 5;
+   * @generated from field: uint32 lines_added = 3;
    */
   linesAdded: number;
 
   /**
-   * @generated from field: uint32 lines_removed = 6;
+   * @generated from field: uint32 lines_removed = 4;
    */
   linesRemoved: number;
+
+  /**
+   * Total number of unified-diff lines for this file. Lets the UI show
+   * a progress bar / "load more" affordance without a first round-trip.
+   *
+   * @generated from field: uint32 total_lines = 5;
+   */
+  totalLines: number;
 };
 
 /**
@@ -1131,7 +1210,107 @@ export type FileDiff = Message<"jarvis.v1.FileDiff"> & {
  * Use `create(FileDiffSchema)` to create a new message.
  */
 export const FileDiffSchema: GenMessage<FileDiff> = /*@__PURE__*/
-  messageDesc(file_jarvis, 27);
+  messageDesc(file_jarvis, 29);
+
+/**
+ * Request a chunk of unified-diff lines for one file in one phase. The
+ * SPA paginates by line offset; typical chunk size is ~200 lines.
+ *
+ * @generated from message jarvis.v1.GetFileDiffRequest
+ */
+export type GetFileDiffRequest = Message<"jarvis.v1.GetFileDiffRequest"> & {
+  /**
+   * @generated from field: string task_id = 1;
+   */
+  taskId: string;
+
+  /**
+   * Event id of the decision that authored this file's edits — same
+   * value as `DiffGroup.decision_evt_id`.
+   *
+   * @generated from field: uint64 group_evt_id = 2;
+   */
+  groupEvtId: bigint;
+
+  /**
+   * @generated from field: string path = 3;
+   */
+  path: string;
+
+  /**
+   * First diff line to return, 0-based. Use 0 for the initial chunk.
+   *
+   * @generated from field: uint32 offset_lines = 4;
+   */
+  offsetLines: number;
+
+  /**
+   * Maximum number of diff lines to return in this chunk. Server may
+   * return fewer when the file ends. 0 → server picks a default.
+   *
+   * @generated from field: uint32 max_lines = 5;
+   */
+  maxLines: number;
+};
+
+/**
+ * Describes the message jarvis.v1.GetFileDiffRequest.
+ * Use `create(GetFileDiffRequestSchema)` to create a new message.
+ */
+export const GetFileDiffRequestSchema: GenMessage<GetFileDiffRequest> = /*@__PURE__*/
+  messageDesc(file_jarvis, 30);
+
+/**
+ * @generated from message jarvis.v1.FileDiffChunkBatch
+ */
+export type FileDiffChunkBatch = Message<"jarvis.v1.FileDiffChunkBatch"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: uint32 offset_lines = 2;
+   */
+  offsetLines: number;
+
+  /**
+   * Number of diff lines actually returned in `content`.
+   *
+   * @generated from field: uint32 returned_lines = 3;
+   */
+  returnedLines: number;
+
+  /**
+   * Total diff line count for the file — matches `FileDiff.total_lines`.
+   *
+   * @generated from field: uint32 total_lines = 4;
+   */
+  totalLines: number;
+
+  /**
+   * True when `offset_lines + returned_lines < total_lines`.
+   *
+   * @generated from field: bool has_more = 5;
+   */
+  hasMore: boolean;
+
+  /**
+   * The diff fragment, already formatted as unified-diff text. Lines
+   * are joined with `\n`; the last line is not terminated. Empty when
+   * `total_lines == 0` (no textual diff for this file).
+   *
+   * @generated from field: string content = 6;
+   */
+  content: string;
+};
+
+/**
+ * Describes the message jarvis.v1.FileDiffChunkBatch.
+ * Use `create(FileDiffChunkBatchSchema)` to create a new message.
+ */
+export const FileDiffChunkBatchSchema: GenMessage<FileDiffChunkBatch> = /*@__PURE__*/
+  messageDesc(file_jarvis, 31);
 
 /**
  * @generated from message jarvis.v1.CommitPhaseRequest
@@ -1161,7 +1340,7 @@ export type CommitPhaseRequest = Message<"jarvis.v1.CommitPhaseRequest"> & {
  * Use `create(CommitPhaseRequestSchema)` to create a new message.
  */
 export const CommitPhaseRequestSchema: GenMessage<CommitPhaseRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 28);
+  messageDesc(file_jarvis, 32);
 
 /**
  * @generated from message jarvis.v1.CommitInfo
@@ -1193,7 +1372,7 @@ export type CommitInfo = Message<"jarvis.v1.CommitInfo"> & {
  * Use `create(CommitInfoSchema)` to create a new message.
  */
 export const CommitInfoSchema: GenMessage<CommitInfo> = /*@__PURE__*/
-  messageDesc(file_jarvis, 29);
+  messageDesc(file_jarvis, 33);
 
 /**
  * @generated from message jarvis.v1.Memory
@@ -1268,7 +1447,7 @@ export type Memory = Message<"jarvis.v1.Memory"> & {
  * Use `create(MemorySchema)` to create a new message.
  */
 export const MemorySchema: GenMessage<Memory> = /*@__PURE__*/
-  messageDesc(file_jarvis, 30);
+  messageDesc(file_jarvis, 34);
 
 /**
  * @generated from message jarvis.v1.ListMemoriesRequest
@@ -1304,7 +1483,7 @@ export type ListMemoriesRequest = Message<"jarvis.v1.ListMemoriesRequest"> & {
  * Use `create(ListMemoriesRequestSchema)` to create a new message.
  */
 export const ListMemoriesRequestSchema: GenMessage<ListMemoriesRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 31);
+  messageDesc(file_jarvis, 35);
 
 /**
  * @generated from message jarvis.v1.MemoryList
@@ -1321,7 +1500,7 @@ export type MemoryList = Message<"jarvis.v1.MemoryList"> & {
  * Use `create(MemoryListSchema)` to create a new message.
  */
 export const MemoryListSchema: GenMessage<MemoryList> = /*@__PURE__*/
-  messageDesc(file_jarvis, 32);
+  messageDesc(file_jarvis, 36);
 
 /**
  * @generated from message jarvis.v1.MemoryHandle
@@ -1338,7 +1517,7 @@ export type MemoryHandle = Message<"jarvis.v1.MemoryHandle"> & {
  * Use `create(MemoryHandleSchema)` to create a new message.
  */
 export const MemoryHandleSchema: GenMessage<MemoryHandle> = /*@__PURE__*/
-  messageDesc(file_jarvis, 33);
+  messageDesc(file_jarvis, 37);
 
 /**
  * @generated from message jarvis.v1.PromoteMemoryRequest
@@ -1362,7 +1541,7 @@ export type PromoteMemoryRequest = Message<"jarvis.v1.PromoteMemoryRequest"> & {
  * Use `create(PromoteMemoryRequestSchema)` to create a new message.
  */
 export const PromoteMemoryRequestSchema: GenMessage<PromoteMemoryRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 34);
+  messageDesc(file_jarvis, 38);
 
 /**
  * @generated from message jarvis.v1.EditMemoryRequest
@@ -1399,7 +1578,7 @@ export type EditMemoryRequest = Message<"jarvis.v1.EditMemoryRequest"> & {
  * Use `create(EditMemoryRequestSchema)` to create a new message.
  */
 export const EditMemoryRequestSchema: GenMessage<EditMemoryRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 35);
+  messageDesc(file_jarvis, 39);
 
 /**
  * @generated from message jarvis.v1.ScheduleSpec
@@ -1475,7 +1654,7 @@ export type ScheduleSpec = Message<"jarvis.v1.ScheduleSpec"> & {
  * Use `create(ScheduleSpecSchema)` to create a new message.
  */
 export const ScheduleSpecSchema: GenMessage<ScheduleSpec> = /*@__PURE__*/
-  messageDesc(file_jarvis, 36);
+  messageDesc(file_jarvis, 40);
 
 /**
  * @generated from message jarvis.v1.Schedule
@@ -1512,7 +1691,7 @@ export type Schedule = Message<"jarvis.v1.Schedule"> & {
  * Use `create(ScheduleSchema)` to create a new message.
  */
 export const ScheduleSchema: GenMessage<Schedule> = /*@__PURE__*/
-  messageDesc(file_jarvis, 37);
+  messageDesc(file_jarvis, 41);
 
 /**
  * @generated from message jarvis.v1.ScheduleHandle
@@ -1529,7 +1708,7 @@ export type ScheduleHandle = Message<"jarvis.v1.ScheduleHandle"> & {
  * Use `create(ScheduleHandleSchema)` to create a new message.
  */
 export const ScheduleHandleSchema: GenMessage<ScheduleHandle> = /*@__PURE__*/
-  messageDesc(file_jarvis, 38);
+  messageDesc(file_jarvis, 42);
 
 /**
  * @generated from message jarvis.v1.ScheduleList
@@ -1546,7 +1725,7 @@ export type ScheduleList = Message<"jarvis.v1.ScheduleList"> & {
  * Use `create(ScheduleListSchema)` to create a new message.
  */
 export const ScheduleListSchema: GenMessage<ScheduleList> = /*@__PURE__*/
-  messageDesc(file_jarvis, 39);
+  messageDesc(file_jarvis, 43);
 
 /**
  * Jarvis daemon gRPC API.
@@ -1635,15 +1814,18 @@ export const Jarvis: GenService<{
     output: typeof TimelineSnapshotSchema;
   },
   /**
-   * M7: continuously streamed snapshot of the whole task fleet — current
-   * status, running counts, costs. Drives the fleet DAG dashboard.
+   * M7: continuously streamed view of the whole task fleet. The first frame
+   * on subscription is always a full `FleetSnapshot`; subsequent frames are
+   * `FleetDelta`s carrying only added/updated/removed nodes and edges. This
+   * keeps long-lived dashboards cheap on bandwidth and on SPA re-renders.
+   * (M7.1)
    *
    * @generated from rpc jarvis.v1.Jarvis.StreamFleet
    */
   streamFleet: {
     methodKind: "server_streaming";
     input: typeof EmptySchema;
-    output: typeof FleetUpdateSchema;
+    output: typeof FleetFrameSchema;
   },
   /**
    * M7: aggregated cost breakdown for a task and its descendant subtasks,
@@ -1659,6 +1841,8 @@ export const Jarvis: GenService<{
   /**
    * M8: diff-by-intent — file changes for a task, grouped by the parent
    * `decision` event that authored them. Drives the phase-gated diff UI.
+   * The returned `FileDiff` rows carry metadata only; the SPA lazily
+   * streams the unified-diff text for each file via `GetFileDiff`.
    *
    * @generated from rpc jarvis.v1.Jarvis.GroupDiffByIntent
    */
@@ -1666,6 +1850,19 @@ export const Jarvis: GenService<{
     methodKind: "unary";
     input: typeof TaskHandleSchema;
     output: typeof DiffGroupListSchema;
+  },
+  /**
+   * M8.1: paginated unified-diff for a single file in a phase. The SPA
+   * calls this when the user expands a file in DiffByIntent. Large diffs
+   * (refactors, generated code) used to blow up `GroupDiffByIntent`'s
+   * response; now the heavy bytes are fetched on demand, chunk-by-chunk.
+   *
+   * @generated from rpc jarvis.v1.Jarvis.GetFileDiff
+   */
+  getFileDiff: {
+    methodKind: "unary";
+    input: typeof GetFileDiffRequestSchema;
+    output: typeof FileDiffChunkBatchSchema;
   },
   /**
    * M8: atomic git commit for one diff group. The agent's decision text

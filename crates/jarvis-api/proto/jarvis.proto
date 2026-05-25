@@ -23,9 +23,12 @@ service Jarvis {
   // parent chain so follow-up tasks render as one continuous transcript.
   rpc GetTimeline(GetTimelineRequest) returns (TimelineSnapshot);
 
-  // M7: continuously streamed snapshot of the whole task fleet — current
-  // status, running counts, costs. Drives the fleet DAG dashboard.
-  rpc StreamFleet(Empty) returns (stream FleetUpdate);
+  // M7: continuously streamed view of the whole task fleet. The first frame
+  // on subscription is always a full `FleetSnapshot`; subsequent frames are
+  // `FleetDelta`s carrying only added/updated/removed nodes and edges. This
+  // keeps long-lived dashboards cheap on bandwidth and on SPA re-renders.
+  // (M7.1)
+  rpc StreamFleet(Empty) returns (stream FleetFrame);
 
   // M7: aggregated cost breakdown for a task and its descendant subtasks,
   // grouped by model.
@@ -33,7 +36,15 @@ service Jarvis {
 
   // M8: diff-by-intent — file changes for a task, grouped by the parent
   // `decision` event that authored them. Drives the phase-gated diff UI.
+  // The returned `FileDiff` rows carry metadata only; the SPA lazily
+  // streams the unified-diff text for each file via `GetFileDiff`.
   rpc GroupDiffByIntent(TaskHandle) returns (DiffGroupList);
+
+  // M8.1: paginated unified-diff for a single file in a phase. The SPA
+  // calls this when the user expands a file in DiffByIntent. Large diffs
+  // (refactors, generated code) used to blow up `GroupDiffByIntent`'s
+  // response; now the heavy bytes are fetched on demand, chunk-by-chunk.
+  rpc GetFileDiff(GetFileDiffRequest) returns (FileDiffChunkBatch);
 
   // M8: atomic git commit for one diff group. The agent's decision text
   // becomes the commit message body; the user can edit the subject.
@@ -251,13 +262,41 @@ message TimelineSpan {
 
 // ---------- M7: Fleet + cost ----------
 
-message FleetUpdate {
-  // Full snapshot. The first message after subscription is always a full
-  // snapshot; subsequent messages may either be full snapshots (cheap
-  // because tasks are bounded) or deltas (TODO M7.1).
+// One frame on the StreamFleet stream. The very first frame on a fresh
+// subscription is always a `FleetSnapshot`; every subsequent frame is a
+// `FleetDelta` carrying only what changed since the previous tick.
+// Empty deltas are not sent — the stream stays silent until the daemon
+// observes a real change. (M7.1)
+message FleetFrame {
+  // Wall-clock micros of when the frame was assembled. Mirrored on both
+  // variants of the oneof to keep clients trivially monotonic.
+  int64 ts_micros = 1;
+  oneof kind {
+    FleetSnapshot snapshot = 2;
+    FleetDelta delta = 3;
+  }
+}
+
+// Full state of the fleet at a point in time. Emitted as the first frame
+// after a client connects and any time the daemon decides a delta would be
+// larger than a fresh snapshot.
+message FleetSnapshot {
   repeated FleetNode nodes = 1;
   repeated FleetEdge edges = 2;
-  int64 ts_micros = 3;
+}
+
+// Incremental change since the previous frame. The SPA applies these on
+// top of the snapshot it already holds:
+//   - merge `added_nodes` and overwrite by task_id with `updated_nodes`
+//   - remove any node whose id is in `removed_node_ids`
+//   - merge `added_edges` and drop any edge in `removed_edges`
+// Updated nodes carry full new state, not a diff of fields.
+message FleetDelta {
+  repeated FleetNode added_nodes = 1;
+  repeated FleetNode updated_nodes = 2;
+  repeated string removed_node_ids = 3;
+  repeated FleetEdge added_edges = 4;
+  repeated FleetEdge removed_edges = 5;
 }
 
 message FleetNode {
@@ -323,23 +362,53 @@ message DiffGroup {
   // ordinal heading: "Phase 3 — …".
   uint32 step = 3;
   int64 ts_micros = 4;
-  // Files touched in this group. Server populates `hunks` lazily — for
-  // large diffs the SPA may receive empty hunks and request them on
-  // expand. (M8.1 will add a separate GetFileDiff RPC.)
+  // Files touched in this group — metadata only. The SPA fetches each
+  // file's unified-diff text on demand via `GetFileDiff`. (M8.1)
   repeated FileDiff files = 5;
 }
 
+// Per-file metadata for a phase's diff. Carries enough for the UI to
+// render the file list (path, change kind, line counts) but never the
+// full diff body — large refactors used to balloon the response.
 message FileDiff {
   string path = 1;
   // "added" | "modified" | "deleted"
   string change_kind = 2;
-  // Full before / after contents for client-side diff rendering by
-  // @codemirror/merge. Empty `before` for added files, empty `after`
-  // for deleted files.
-  string before = 3;
-  string after = 4;
-  uint32 lines_added = 5;
-  uint32 lines_removed = 6;
+  uint32 lines_added = 3;
+  uint32 lines_removed = 4;
+  // Total number of unified-diff lines for this file. Lets the UI show
+  // a progress bar / "load more" affordance without a first round-trip.
+  uint32 total_lines = 5;
+}
+
+// Request a chunk of unified-diff lines for one file in one phase. The
+// SPA paginates by line offset; typical chunk size is ~200 lines.
+message GetFileDiffRequest {
+  string task_id = 1;
+  // Event id of the decision that authored this file's edits — same
+  // value as `DiffGroup.decision_evt_id`.
+  uint64 group_evt_id = 2;
+  string path = 3;
+  // First diff line to return, 0-based. Use 0 for the initial chunk.
+  uint32 offset_lines = 4;
+  // Maximum number of diff lines to return in this chunk. Server may
+  // return fewer when the file ends. 0 → server picks a default.
+  uint32 max_lines = 5;
+}
+
+message FileDiffChunkBatch {
+  string path = 1;
+  uint32 offset_lines = 2;
+  // Number of diff lines actually returned in `content`.
+  uint32 returned_lines = 3;
+  // Total diff line count for the file — matches `FileDiff.total_lines`.
+  uint32 total_lines = 4;
+  // True when `offset_lines + returned_lines < total_lines`.
+  bool has_more = 5;
+  // The diff fragment, already formatted as unified-diff text. Lines
+  // are joined with `\n`; the last line is not terminated. Empty when
+  // `total_lines == 0` (no textual diff for this file).
+  string content = 6;
 }
 
 message CommitPhaseRequest {

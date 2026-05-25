@@ -6,12 +6,14 @@ use futures::StreamExt;
 use jarvis_agent::{AgentRun, HookPhase, HookSpec, run_agent};
 use jarvis_api::{
     AskChunk, AskRequest, CommitInfo, CommitPhaseRequest, CostReport, DaemonStatus, DiffGroup,
-    DiffGroupList, EditMemoryRequest, Empty, Event as ApiEvent, FileDiff, FleetEdge, FleetNode,
-    FleetUpdate, ListMemoriesRequest, ListTasksRequest, Memory as ApiMemory, MemoryHandle,
-    MemoryList, ModelSpend, ModelStatus as ApiModelStatus, PingRequest, PingResponse,
-    PromoteMemoryRequest, Schedule as ApiSchedule, ScheduleHandle, ScheduleList, ScheduleSpec,
-    StatusRequest, StreamEventsRequest, Task as ApiTask, TaskHandle, TaskList, TaskSpec,
+    DiffGroupList, EditMemoryRequest, Empty, Event as ApiEvent, FileDiff, FileDiffChunkBatch,
+    FleetDelta, FleetEdge, FleetFrame, FleetNode, FleetSnapshot, GetFileDiffRequest,
+    ListMemoriesRequest, ListTasksRequest, Memory as ApiMemory, MemoryHandle, MemoryList,
+    ModelSpend, ModelStatus as ApiModelStatus, PingRequest, PingResponse, PromoteMemoryRequest,
+    Schedule as ApiSchedule, ScheduleHandle, ScheduleList, ScheduleSpec, StatusRequest,
+    StreamEventsRequest, Task as ApiTask, TaskHandle, TaskList, TaskSpec,
     TimelineEvent as ApiTimelineEvent, TimelineSnapshot, TimelineSpan, UsageStats,
+    fleet_frame::Kind as FleetFrameKind,
     jarvis_server::{Jarvis, JarvisServer},
 };
 use jarvis_config::Config;
@@ -32,7 +34,7 @@ use jarvis_tools::{
     ApplyPatchTool, FsReadTool, FsWriteTool, GlobTool, GrepTool, ShellTool, ToolCtx, ToolRegistry,
     UpdatePlanTool,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -1061,7 +1063,7 @@ impl Jarvis for JarvisService {
     }
 
     type StreamFleetStream =
-        Pin<Box<dyn Stream<Item = std::result::Result<FleetUpdate, Status>> + Send + 'static>>;
+        Pin<Box<dyn Stream<Item = std::result::Result<FleetFrame, Status>> + Send + 'static>>;
 
     #[instrument(skip_all)]
     async fn stream_fleet(
@@ -1070,16 +1072,24 @@ impl Jarvis for JarvisService {
     ) -> std::result::Result<Response<Self::StreamFleetStream>, Status> {
         let ledger = self.ledger.clone();
         let pool = self.pool.clone();
-        let (tx, rx) = mpsc::channel::<std::result::Result<FleetUpdate, Status>>(8);
+        let (tx, rx) = mpsc::channel::<std::result::Result<FleetFrame, Status>>(8);
         let mut live = ledger.subscribe();
 
-        // Send the first snapshot immediately, then any time the ledger
-        // broadcasts a new event we resend a fresh snapshot. SQLite reads are
-        // cheap; for now we don't bother with delta updates.
+        // M7.1: maintain a per-stream `last sent` view of the fleet so each
+        // tick can be emitted as a `FleetDelta` (only what changed) rather
+        // than a full snapshot. The very first frame is always a snapshot;
+        // empty deltas are silently dropped so idle dashboards never wake.
         tokio::spawn(async move {
-            let _ = send_fleet_snapshot(&ledger, &pool, &tx).await;
-            // Re-snapshot when something changes, but cap the rate at 4 Hz so
-            // a flood of llm_chunk events doesn't melt the client.
+            let mut state = FleetState::default();
+            if send_fleet_frame(&ledger, &pool, &tx, &mut state, true)
+                .await
+                .is_err()
+            {
+                return;
+            }
+            // Cap re-evaluations at 4 Hz so a flood of llm_chunk events
+            // doesn't drown the client side; the per-frame delta is cheap
+            // but the SQL read is still ~O(tasks).
             let mut last_send = std::time::Instant::now() - std::time::Duration::from_millis(250);
             loop {
                 match live.recv().await {
@@ -1088,7 +1098,10 @@ impl Jarvis for JarvisService {
                             continue;
                         }
                         last_send = std::time::Instant::now();
-                        if send_fleet_snapshot(&ledger, &pool, &tx).await.is_err() {
+                        if send_fleet_frame(&ledger, &pool, &tx, &mut state, false)
+                            .await
+                            .is_err()
+                        {
                             return;
                         }
                     }
@@ -1214,7 +1227,8 @@ impl Jarvis for JarvisService {
             }
         }
 
-        // Materialise FileDiff with before/after content.
+        // Materialise FileDiff metadata. The diff body itself is fetched
+        // lazily by the SPA via `GetFileDiff` (M8.1).
         let workdir = if !task.worktree_path.is_empty() {
             std::path::PathBuf::from(&task.worktree_path)
         } else {
@@ -1263,6 +1277,73 @@ impl Jarvis for JarvisService {
             task_id: task_id_str,
             groups,
             orphan_paths: orphans,
+        }))
+    }
+
+    async fn get_file_diff(
+        &self,
+        request: Request<GetFileDiffRequest>,
+    ) -> std::result::Result<Response<FileDiffChunkBatch>, Status> {
+        let req = request.into_inner();
+        if req.path.is_empty() {
+            return Err(Status::invalid_argument("path is empty"));
+        }
+        let task_id = parse_task_id(&req.task_id)?;
+        let task = self
+            .ledger
+            .get_task(task_id)
+            .await
+            .map_err(|e| Status::not_found(format!("task: {e}")))?;
+        let workdir = if !task.worktree_path.is_empty() {
+            std::path::PathBuf::from(&task.worktree_path)
+        } else {
+            std::path::PathBuf::from(&task.workdir)
+        };
+        // Reconstruct before/after for this path. We don't strictly
+        // verify that the file actually belongs to `group_evt_id` —
+        // doing so would require a full re-bucket on every chunk; the
+        // SPA only ever asks for paths it just received from
+        // GroupDiffByIntent so the trust boundary is the gRPC caller.
+        let abs = workdir.join(&req.path);
+        let after = std::fs::read_to_string(&abs).unwrap_or_default();
+        let before = read_path_from_head(&workdir, &req.path).unwrap_or_default();
+        let change_kind = match (!before.is_empty(), abs.exists()) {
+            (false, true) => "added",
+            (true, false) => "deleted",
+            _ => "modified",
+        };
+        let diff_text = compute_unified_diff(&before, &after, &req.path, change_kind);
+        // Split into lines; preserve empty lines but drop the implicit
+        // trailing empty after the last `\n`. The client re-joins with
+        // `\n`. This keeps chunk boundaries line-aligned (never inside
+        // a single diff line).
+        let lines: Vec<&str> = if diff_text.is_empty() {
+            Vec::new()
+        } else {
+            diff_text.split('\n').collect()
+        };
+        let total_lines = lines.len() as u32;
+        let default_max: u32 = 200;
+        let max = if req.max_lines == 0 {
+            default_max
+        } else {
+            req.max_lines
+        };
+        let offset = req.offset_lines.min(total_lines);
+        let end = offset.saturating_add(max).min(total_lines);
+        let returned_lines = end - offset;
+        let chunk = if returned_lines == 0 {
+            String::new()
+        } else {
+            lines[offset as usize..end as usize].join("\n")
+        };
+        Ok(Response::new(FileDiffChunkBatch {
+            path: req.path,
+            offset_lines: offset,
+            returned_lines,
+            total_lines,
+            has_more: end < total_lines,
+            content: chunk,
         }))
     }
 
@@ -1763,12 +1844,25 @@ fn format_tool_label(tool: &str, args: &str) -> String {
     }
 }
 
-/// Build and ship one `FleetUpdate` snapshot to the subscriber. Returns Err
-/// when the channel is closed so the caller can break its loop.
-async fn send_fleet_snapshot(
+/// Per-stream `last sent` view of the fleet. Populated by the first
+/// snapshot and updated in-place on every subsequent delta so the next
+/// tick's `compute_fleet_delta` is O(tasks).
+#[derive(Default)]
+struct FleetState {
+    nodes: HashMap<String, FleetNode>,
+    edges: HashSet<(String, String)>,
+}
+
+/// Build the current fleet view from the ledger and either send it as
+/// a full snapshot (first frame, or `force_snapshot=true`) or as a delta
+/// against the caller's `state`. Empty deltas are dropped so idle
+/// dashboards never wake. Returns `Err(())` when the channel is closed.
+async fn send_fleet_frame(
     ledger: &Ledger,
     pool: &Arc<LlmPool>,
-    tx: &mpsc::Sender<std::result::Result<FleetUpdate, Status>>,
+    tx: &mpsc::Sender<std::result::Result<FleetFrame, Status>>,
+    state: &mut FleetState,
+    force_snapshot: bool,
 ) -> std::result::Result<(), ()> {
     let tasks = match ledger.list_tasks(true, 500).await {
         Ok(t) => t,
@@ -1777,49 +1871,132 @@ async fn send_fleet_snapshot(
             return Err(());
         }
     };
-    let mut edges = Vec::new();
-    let mut nodes = Vec::with_capacity(tasks.len());
+    let mut current_nodes: HashMap<String, FleetNode> = HashMap::with_capacity(tasks.len());
+    let mut current_edges: HashSet<(String, String)> = HashSet::new();
     let now = chrono::Utc::now().timestamp_micros();
     let registry = pool.registry();
     for t in &tasks {
         if let Some(parent) = t.parent {
-            edges.push(FleetEdge {
-                parent_task_id: parent.to_string(),
-                child_task_id: t.id.to_string(),
-            });
+            current_edges.insert((parent.to_string(), t.id.to_string()));
         }
-        // Cheap heuristic for needs_attention: the task is in a failed/error
-        // state. A future refinement will look at recent verdict/continuation
-        // events explicitly.
         let needs_attention = t.status == jarvis_ledger::TaskStatus::Failed;
-        // M11.S5: roll up token + cost from per-task events. Cheap because
-        // we already have the ledger query path; we sum only the events
-        // whose payload carries a `usage` block.
         let (tokens_in, tokens_out, cost_usd) = sum_task_usage(ledger, registry, t.id).await;
-        nodes.push(FleetNode {
-            task_id: t.id.to_string(),
-            short_id: t.id.to_string().chars().take(8).collect(),
-            status: t.status.to_string(),
-            goal: t.goal.clone(),
-            workdir: t.workdir.clone(),
-            sandbox: t.sandbox.clone(),
-            tokens_in,
-            tokens_out,
-            estimated_cost_usd: cost_usd,
-            created_at_micros: t.created_at,
-            updated_at_micros: t.completed_at.unwrap_or(t.created_at),
-            needs_attention,
-        });
+        current_nodes.insert(
+            t.id.to_string(),
+            FleetNode {
+                task_id: t.id.to_string(),
+                short_id: t.id.to_string().chars().take(8).collect(),
+                status: t.status.to_string(),
+                goal: t.goal.clone(),
+                workdir: t.workdir.clone(),
+                sandbox: t.sandbox.clone(),
+                tokens_in,
+                tokens_out,
+                estimated_cost_usd: cost_usd,
+                created_at_micros: t.created_at,
+                updated_at_micros: t.completed_at.unwrap_or(t.created_at),
+                needs_attention,
+            },
+        );
     }
-    let snap = FleetUpdate {
-        nodes,
-        edges,
+
+    if force_snapshot {
+        let snapshot = FleetSnapshot {
+            nodes: current_nodes.values().cloned().collect(),
+            edges: current_edges
+                .iter()
+                .map(|(p, c)| FleetEdge {
+                    parent_task_id: p.clone(),
+                    child_task_id: c.clone(),
+                })
+                .collect(),
+        };
+        let frame = FleetFrame {
+            ts_micros: now,
+            kind: Some(FleetFrameKind::Snapshot(snapshot)),
+        };
+        state.nodes = current_nodes;
+        state.edges = current_edges;
+        if tx.send(Ok(frame)).await.is_err() {
+            return Err(());
+        }
+        return Ok(());
+    }
+
+    let delta = compute_fleet_delta(&state.nodes, &state.edges, &current_nodes, &current_edges);
+    // Skip empty ticks — keeps the wire quiet between real changes.
+    if delta_is_empty(&delta) {
+        // Still update bookkeeping so future deltas are computed against
+        // the most-recent state (cost/usage numbers may have shifted by
+        // sub-rounding-error amounts even when nothing visible changed).
+        state.nodes = current_nodes;
+        state.edges = current_edges;
+        return Ok(());
+    }
+    let frame = FleetFrame {
         ts_micros: now,
+        kind: Some(FleetFrameKind::Delta(delta)),
     };
-    if tx.send(Ok(snap)).await.is_err() {
+    state.nodes = current_nodes;
+    state.edges = current_edges;
+    if tx.send(Ok(frame)).await.is_err() {
         return Err(());
     }
     Ok(())
+}
+
+/// Diff the previous-tick fleet against the current one and return a
+/// `FleetDelta`. Updated nodes carry full new state, not field diffs.
+fn compute_fleet_delta(
+    prev_nodes: &HashMap<String, FleetNode>,
+    prev_edges: &HashSet<(String, String)>,
+    cur_nodes: &HashMap<String, FleetNode>,
+    cur_edges: &HashSet<(String, String)>,
+) -> FleetDelta {
+    let mut added_nodes = Vec::new();
+    let mut updated_nodes = Vec::new();
+    let mut removed_node_ids = Vec::new();
+    for (id, node) in cur_nodes {
+        match prev_nodes.get(id) {
+            None => added_nodes.push(node.clone()),
+            Some(prev) if prev != node => updated_nodes.push(node.clone()),
+            Some(_) => {}
+        }
+    }
+    for id in prev_nodes.keys() {
+        if !cur_nodes.contains_key(id) {
+            removed_node_ids.push(id.clone());
+        }
+    }
+    let added_edges: Vec<FleetEdge> = cur_edges
+        .difference(prev_edges)
+        .map(|(p, c)| FleetEdge {
+            parent_task_id: p.clone(),
+            child_task_id: c.clone(),
+        })
+        .collect();
+    let removed_edges: Vec<FleetEdge> = prev_edges
+        .difference(cur_edges)
+        .map(|(p, c)| FleetEdge {
+            parent_task_id: p.clone(),
+            child_task_id: c.clone(),
+        })
+        .collect();
+    FleetDelta {
+        added_nodes,
+        updated_nodes,
+        removed_node_ids,
+        added_edges,
+        removed_edges,
+    }
+}
+
+fn delta_is_empty(d: &FleetDelta) -> bool {
+    d.added_nodes.is_empty()
+        && d.updated_nodes.is_empty()
+        && d.removed_node_ids.is_empty()
+        && d.added_edges.is_empty()
+        && d.removed_edges.is_empty()
 }
 
 /// Sum `(tokens_in, tokens_out, cost_usd)` for a single task by walking its
@@ -1887,9 +2064,11 @@ fn extract_usage(payload: &serde_json::Value) -> (Option<String>, u64, u64) {
     (model, in_t, out_t)
 }
 
-/// Materialise one FileDiff for the given path. Reads the current file from
-/// disk (the "after" state) and reads the same path from HEAD (the "before"
-/// state). Counts added/removed lines via `similar`.
+/// Materialise one FileDiff metadata row for the given path. Reads HEAD
+/// and the working copy, counts added/removed lines, and pre-computes
+/// `total_lines` for the unified-diff representation so the SPA can show
+/// a "0 / 240 lines" affordance before fetching any chunk. The actual
+/// diff text is fetched lazily by `GetFileDiff` (M8.1).
 fn build_file_diff(workdir: &std::path::Path, path: &str) -> FileDiff {
     let abs = workdir.join(path);
     let after = std::fs::read_to_string(&abs).unwrap_or_default();
@@ -1902,14 +2081,41 @@ fn build_file_diff(workdir: &std::path::Path, path: &str) -> FileDiff {
         _ => "modified",
     };
     let (added, removed) = count_added_removed(&before, &after);
+    let total_lines = compute_unified_diff(&before, &after, path, change_kind)
+        .lines()
+        .count() as u32;
     FileDiff {
         path: path.to_string(),
         change_kind: change_kind.to_string(),
-        before,
-        after,
         lines_added: added,
         lines_removed: removed,
+        total_lines,
     }
+}
+
+/// Compute the full unified-diff text for one file change. The output
+/// shape mimics `git diff --no-color`: a `--- a/path` / `+++ b/path`
+/// header followed by `@@ hunk @@` blocks. We use `similar` rather than
+/// shelling out to git so behaviour is identical inside and outside a
+/// repo (and on Windows without a git binary).
+fn compute_unified_diff(before: &str, after: &str, path: &str, change_kind: &str) -> String {
+    let diff = similar::TextDiff::from_lines(before, after);
+    let label_before = if change_kind == "added" {
+        "/dev/null".to_string()
+    } else {
+        format!("a/{path}")
+    };
+    let label_after = if change_kind == "deleted" {
+        "/dev/null".to_string()
+    } else {
+        format!("b/{path}")
+    };
+    // `similar`'s UnifiedDiff::Display already emits the `--- a/...` /
+    // `+++ b/...` header before the first hunk when `header(...)` is set.
+    diff.unified_diff()
+        .context_radius(3)
+        .header(&label_before, &label_after)
+        .to_string()
 }
 
 fn read_path_from_head(workdir: &std::path::Path, path: &str) -> Option<String> {
@@ -2215,5 +2421,123 @@ mod tests {
         let l = format_tool_label("shell", &"a".repeat(100));
         assert!(l.chars().count() <= 40);
         assert!(l.ends_with('…'));
+    }
+
+    fn make_node(id: &str, status: &str) -> FleetNode {
+        FleetNode {
+            task_id: id.to_string(),
+            short_id: id.chars().take(8).collect(),
+            status: status.to_string(),
+            goal: format!("goal-{id}"),
+            workdir: String::new(),
+            sandbox: String::new(),
+            tokens_in: 0,
+            tokens_out: 0,
+            estimated_cost_usd: 0.0,
+            created_at_micros: 0,
+            updated_at_micros: 0,
+            needs_attention: false,
+        }
+    }
+
+    #[test]
+    fn fleet_delta_is_empty_when_state_unchanged() {
+        let mut nodes = HashMap::new();
+        nodes.insert("a".to_string(), make_node("a", "running"));
+        let mut edges = HashSet::new();
+        edges.insert(("root".to_string(), "a".to_string()));
+        let delta = compute_fleet_delta(&nodes, &edges, &nodes.clone(), &edges.clone());
+        assert!(delta_is_empty(&delta));
+    }
+
+    #[test]
+    fn fleet_delta_detects_added_node() {
+        let prev_nodes: HashMap<String, FleetNode> = HashMap::new();
+        let prev_edges: HashSet<(String, String)> = HashSet::new();
+        let mut cur_nodes = HashMap::new();
+        cur_nodes.insert("a".to_string(), make_node("a", "pending"));
+        let cur_edges: HashSet<(String, String)> = HashSet::new();
+        let delta = compute_fleet_delta(&prev_nodes, &prev_edges, &cur_nodes, &cur_edges);
+        assert_eq!(delta.added_nodes.len(), 1);
+        assert_eq!(delta.added_nodes[0].task_id, "a");
+        assert!(delta.updated_nodes.is_empty());
+        assert!(delta.removed_node_ids.is_empty());
+    }
+
+    #[test]
+    fn fleet_delta_detects_updated_node() {
+        let mut prev_nodes = HashMap::new();
+        prev_nodes.insert("a".to_string(), make_node("a", "pending"));
+        let mut cur_nodes = HashMap::new();
+        cur_nodes.insert("a".to_string(), make_node("a", "completed"));
+        let empty: HashSet<(String, String)> = HashSet::new();
+        let delta = compute_fleet_delta(&prev_nodes, &empty, &cur_nodes, &empty);
+        assert!(delta.added_nodes.is_empty());
+        assert_eq!(delta.updated_nodes.len(), 1);
+        assert_eq!(delta.updated_nodes[0].status, "completed");
+        assert!(delta.removed_node_ids.is_empty());
+    }
+
+    #[test]
+    fn fleet_delta_detects_removed_node_and_edges() {
+        let mut prev_nodes = HashMap::new();
+        prev_nodes.insert("a".to_string(), make_node("a", "running"));
+        prev_nodes.insert("b".to_string(), make_node("b", "running"));
+        let mut prev_edges = HashSet::new();
+        prev_edges.insert(("a".to_string(), "b".to_string()));
+        let mut cur_nodes = HashMap::new();
+        cur_nodes.insert("a".to_string(), make_node("a", "running"));
+        let cur_edges: HashSet<(String, String)> = HashSet::new();
+        let delta = compute_fleet_delta(&prev_nodes, &prev_edges, &cur_nodes, &cur_edges);
+        assert!(delta.added_nodes.is_empty());
+        assert_eq!(delta.removed_node_ids, vec!["b".to_string()]);
+        assert_eq!(delta.removed_edges.len(), 1);
+    }
+
+    #[test]
+    fn unified_diff_paginates_by_offset_and_max() {
+        // Build a synthetic diff: 500 lines of `+addedN` so we know the
+        // exact total. We can't easily fabricate the 500-line shape via
+        // `similar` without before/after content of that size; instead we
+        // construct the diff text directly and re-use the line-splitting
+        // logic that `get_file_diff` runs on it.
+        let mut lines: Vec<String> = Vec::with_capacity(500);
+        for i in 0..500 {
+            lines.push(format!("+line {i}"));
+        }
+        let diff_text = lines.join("\n");
+        let split: Vec<&str> = diff_text.split('\n').collect();
+        assert_eq!(split.len(), 500);
+
+        // offset=0, max=200 → 200 lines, has_more
+        let offset: usize = 0;
+        let max: usize = 200;
+        let end = (offset + max).min(split.len());
+        assert_eq!(end - offset, 200);
+        assert!(end < split.len());
+
+        // offset=400, max=200 → 100 lines, no more
+        let offset: usize = 400;
+        let end = (offset + max).min(split.len());
+        assert_eq!(end - offset, 100);
+        assert_eq!(end, split.len());
+    }
+
+    #[test]
+    fn compute_unified_diff_produces_header_and_hunks() {
+        let before = "alpha\nbeta\ngamma\n";
+        let after = "alpha\nBETA\ngamma\n";
+        let out = compute_unified_diff(before, after, "src/foo.rs", "modified");
+        assert!(out.contains("--- a/src/foo.rs"), "header missing: {out}");
+        assert!(out.contains("+++ b/src/foo.rs"), "header missing: {out}");
+        assert!(out.contains("-beta"));
+        assert!(out.contains("+BETA"));
+    }
+
+    #[test]
+    fn compute_unified_diff_added_file_uses_dev_null() {
+        let out = compute_unified_diff("", "new\nfile\n", "src/new.rs", "added");
+        assert!(out.contains("--- /dev/null"), "expected /dev/null: {out}");
+        assert!(out.contains("+++ b/src/new.rs"));
     }
 }
