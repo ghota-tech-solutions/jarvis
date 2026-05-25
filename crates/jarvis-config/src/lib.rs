@@ -348,6 +348,13 @@ pub struct RoutingConfig {
     pub quarantine_after_failures: u32,
     pub quarantine_window_minutes: u32,
     pub quarantine_duration_minutes: u32,
+    /// § T2.3 — Architect/Editor pipeline. When set, the named model is
+    /// used by the `request_edit` tool to regenerate apply_patch envelopes
+    /// from architect-level intent. Format matches the same model-name
+    /// keys used elsewhere (e.g. `"local:gemma"`, `"remote:deepseek"`).
+    /// Empty / unset means the pipeline is disabled and `request_edit`
+    /// fails fast — the agent falls back to writing patches itself.
+    pub editor_model: String,
 }
 
 impl Default for RoutingConfig {
@@ -359,6 +366,7 @@ impl Default for RoutingConfig {
             quarantine_after_failures: 3,
             quarantine_window_minutes: 10,
             quarantine_duration_minutes: 15,
+            editor_model: String::new(),
         }
     }
 }

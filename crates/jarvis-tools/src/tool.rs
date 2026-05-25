@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use jarvis_core::LlmProvider;
 use jarvis_sandbox::{NativeSandbox, NetPolicy, Sandbox};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
@@ -30,6 +31,14 @@ pub struct ToolCtx {
     /// this tool. Used by `SpawnSubagentTool` to attribute children to the
     /// right parent in the FleetDag. Empty for unit-test contexts.
     pub current_task_id: String,
+    /// § T2.3 — Architect/Editor pipeline. When the daemon's `[routing]
+    /// editor_model` is configured, this carries a provider locked to that
+    /// model so tools like `request_edit` can delegate patch-generation
+    /// to a cheap local model while the main agent loop stays on a
+    /// stronger remote architect. `None` when the pipeline is disabled —
+    /// the request_edit tool then errors out with a clear message and
+    /// the agent falls back to `apply_patch` directly.
+    pub editor: Option<Arc<dyn LlmProvider>>,
 }
 
 impl std::fmt::Debug for ToolCtx {
@@ -52,6 +61,7 @@ impl ToolCtx {
             sandbox: Arc::new(NativeSandbox),
             net_policy: NetPolicy::Full,
             current_task_id: String::new(),
+            editor: None,
         }
     }
 

@@ -37,6 +37,17 @@ thinking = false
 default_policy = "auto"
 monthly_remote_usd_cap = 50
 
+# § T2.3 — Architect/Editor pipeline. When set, the named model is used
+# by the `request_edit` tool to translate architect-level prose intent
+# ("rename foo to bar in src/lib.rs") into precise apply_patch
+# envelopes. The architect (your task's primary model — usually a
+# remote, expensive one) stays focused on planning while the editor
+# (cheap local model) handles the mechanical patch generation. Empty
+# or unset disables the pipeline; the agent falls back to `apply_patch`
+# directly. Format: `<kind>:<name>` matching your providers map below
+# (e.g. "local:gemma", "remote:deepseek").
+# editor_model = "local:gemma"
+
 # --- Agent loop tunables --------------------------------------------------
 # § T1.3 — when true, the system prompt's tool catalog is rendered compactly
 # (names + descriptions only, no full JSON schemas). The agent must call

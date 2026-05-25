@@ -437,6 +437,11 @@ async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerSt
     // with a clear error if neither BRAVE_API_KEY nor TAVILY_API_KEY is set,
     // so the agent learns immediately to skip it instead of mid-task.
     r.register(jarvis_tools::WebSearchTool);
+    // § T2.3 — Architect/Editor pipeline. Always registered so the
+    // architect can call it; the tool itself returns a clear
+    // InvalidArgs when no editor is wired in `ToolCtx`, prompting the
+    // agent to fall back to `apply_patch`.
+    r.register(jarvis_tools::RequestEditTool);
     // M11.S3: sub-agents primitive. The tool opens a tonic client back to
     // this daemon (loopback gRPC), so it works without any wiring beyond
     // the standard bearer-token discovery.
@@ -608,6 +613,30 @@ impl JarvisService {
         }
         parse_routing_str(raw)
             .ok_or_else(|| Status::invalid_argument(format!("invalid routing: {raw}")))
+    }
+
+    /// § T2.3 — pick the configured editor provider for the request_edit
+    /// tool. Returns `None` when no editor is configured, when the named
+    /// model isn't registered, or when the pick currently fails (e.g.
+    /// quarantine). Errors are logged at debug — the request_edit tool
+    /// surfaces a clear user-facing error when invoked without an editor.
+    async fn pick_editor_provider(&self) -> Option<Arc<dyn jarvis_core::LlmProvider>> {
+        let name = self.cfg.routing.editor_model.trim();
+        if name.is_empty() {
+            return None;
+        }
+        let policy = parse_routing_str(name)?;
+        let pick_req = jarvis_llm::PickRequest {
+            routing_override: Some(policy),
+            ..jarvis_llm::PickRequest::for_planning()
+        };
+        match self.pool.pick(&pick_req).await {
+            Ok(p) => Some(p.provider),
+            Err(e) => {
+                tracing::debug!(editor = name, error = %e, "editor model pick failed");
+                None
+            }
+        }
     }
 
     #[allow(clippy::result_large_err)]
@@ -895,6 +924,10 @@ impl Jarvis for JarvisService {
             sandbox: sandbox.clone(),
             net_policy: net.clone(),
             current_task_id: task.id.to_string(),
+            // § T2.3 — Architect/Editor pipeline. Pick the editor model
+            // lazily per task (handles model quarantine / config reload).
+            // None when `[routing] editor_model` is empty.
+            editor: self.pick_editor_provider().await,
         };
         // Routing policy / required caps for this run.
         let routing = self.parse_routing(&spec.routing_policy)?;

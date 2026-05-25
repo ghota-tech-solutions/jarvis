@@ -131,6 +131,7 @@ pub async fn run_task(
         sandbox: Arc::new(NativeSandbox),
         net_policy: NetPolicy::Full,
         current_task_id: task_record.id.to_string(),
+        editor: None,
     };
 
     let agent_fut = run_agent(run, pool, ledger.clone(), tools, ctx);
