@@ -72,6 +72,15 @@ service Jarvis {
   // given workdir. v1 is observability only; the agent does not yet
   // auto-preempt running tasks on events.
   rpc WatchWorkdir(WatchWorkdirRequest) returns (stream FsEvent);
+
+  // § T2.2 / F2.3 — self-authored skills CRUD. Skills live as Markdown
+  // files under `<workdir>/.jarvis/skills/{candidates,active,forgotten}/`
+  // and are written there by the post-verdict extractor. These RPCs
+  // expose the on-disk state to the SPA so the user can review +
+  // promote candidates without an `mv` from the shell.
+  rpc ListSkills(ListSkillsRequest) returns (SkillList);
+  rpc PromoteSkill(SkillHandle) returns (Empty);
+  rpc ForgetSkill(SkillHandle) returns (Empty);
 }
 
 // ---------- M1 ----------
@@ -182,6 +191,45 @@ message FsEvent {
   string kind = 2;
   // Wall-clock micros at which the daemon saw the OS notification.
   int64 ts_micros = 3;
+}
+
+// § T2.2 / F2.3 — Skill catalog. Skills are filesystem-backed Markdown
+// files; the gRPC surface exposes them as structured records so the SPA
+// can render + curate without parsing markdown itself.
+message ListSkillsRequest {
+  // Workdir whose `.jarvis/skills/` subtree is enumerated.
+  string workdir = 1;
+}
+
+message Skill {
+  string name = 1;
+  string title = 2;
+  string trigger = 3;
+  // One of "candidate" | "active" | "forgotten" — derived from the
+  // subdirectory the file lives in.
+  string status = 4;
+  // Absolute path on disk. Stable across the file's lifetime within
+  // one status; renames (promote / forget) yield a new path.
+  string path = 5;
+  // Raw markdown body (everything after the frontmatter). Capped at
+  // ~32 KB by the daemon; longer skills are truncated.
+  string body = 6;
+}
+
+message SkillList {
+  repeated Skill candidates = 1;
+  repeated Skill active = 2;
+  repeated Skill forgotten = 3;
+}
+
+message SkillHandle {
+  // Same workdir as the `ListSkills` request that produced the
+  // referenced skill — keeps the daemon honest about which tree it's
+  // touching even if multiple workdirs are open in the SPA.
+  string workdir = 1;
+  // Skill name (the kebab-case slug from the frontmatter, also the
+  // filename stem).
+  string name = 2;
 }
 
 message McpServerStatus {

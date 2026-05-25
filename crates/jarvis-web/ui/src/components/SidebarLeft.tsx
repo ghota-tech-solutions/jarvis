@@ -49,6 +49,12 @@ const SidebarLeft: Component = () => {
         <A href="/schedules" class="nav-link" activeClass="nav-active">
           ⏰ {t().nav.schedules}
         </A>
+        <A href="/recipes" class="nav-link" activeClass="nav-active">
+          📜 {t().nav.recipes}
+        </A>
+        <A href="/skills" class="nav-link" activeClass="nav-active">
+          🎓 {t().nav.skills}
+        </A>
         <A href="/analytics" class="nav-link" activeClass="nav-active">
           📈 {t().nav.analytics}
         </A>

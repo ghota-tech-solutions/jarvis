@@ -9,12 +9,16 @@ const Schedules = lazy(() => import('~/routes/Schedules'));
 const Settings = lazy(() => import('~/routes/Settings'));
 const Analytics = lazy(() => import('~/routes/Analytics'));
 const Mcp = lazy(() => import('~/routes/Mcp'));
+const Recipes = lazy(() => import('~/routes/Recipes'));
+const Skills = lazy(() => import('~/routes/Skills'));
 
 export const routes: RouteDefinition[] = [
   { path: '/', component: Dashboard },
   { path: '/fleet', component: Fleet },
   { path: '/memory', component: Memory },
   { path: '/schedules', component: Schedules },
+  { path: '/recipes', component: Recipes },
+  { path: '/skills', component: Skills },
   { path: '/analytics', component: Analytics },
   { path: '/mcp', component: Mcp },
   { path: '/settings', component: Settings },

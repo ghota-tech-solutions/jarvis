@@ -315,10 +315,17 @@ pub fn parse_active_skill(path: &Path, src: &str) -> Option<ActiveSkill> {
 /// skill. Sorted by name for stable prompt output. Missing dir returns
 /// an empty Vec — never an error.
 pub fn load_active_skills(workdir: &str) -> Vec<ActiveSkill> {
+    load_skills_in_status(workdir, "active")
+}
+
+/// Generic loader: walk `<workdir>/.jarvis/skills/<status>/*.md` and
+/// return parsed skills. Used by the gRPC `ListSkills` impl + by the
+/// `load_active_skills` shortcut above. Missing dir → empty Vec.
+pub fn load_skills_in_status(workdir: &str, status: &str) -> Vec<ActiveSkill> {
     let dir = Path::new(workdir)
         .join(".jarvis")
         .join("skills")
-        .join("active");
+        .join(status);
     if !dir.exists() {
         return Vec::new();
     }
@@ -341,6 +348,99 @@ pub fn load_active_skills(workdir: &str) -> Vec<ActiveSkill> {
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
+}
+
+/// Move a skill file between status subdirectories. Returns the new
+/// path on success. Used by the `PromoteSkill` / `ForgetSkill` RPCs.
+/// `from` and `to` are bare status strings ("candidates", "active",
+/// "forgotten") matching the on-disk directory layout.
+pub fn move_skill(
+    workdir: &str,
+    name: &str,
+    from: &str,
+    to: &str,
+) -> std::io::Result<std::path::PathBuf> {
+    use std::io::{Error, ErrorKind};
+    let safe_name = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !safe_name || name.is_empty() {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            "skill name must be kebab/snake-case alphanumeric",
+        ));
+    }
+    let base = Path::new(workdir).join(".jarvis").join("skills");
+    let target_dir = base.join(to);
+    std::fs::create_dir_all(&target_dir)?;
+    // Find the source file: skill files are written with a
+    // `<timestamp>-<slug>.md` shape so we glob the directory.
+    let src_dir = base.join(from);
+    if !src_dir.exists() {
+        return Err(Error::new(ErrorKind::NotFound, "source status dir missing"));
+    }
+    let mut source: Option<std::path::PathBuf> = None;
+    for entry in std::fs::read_dir(&src_dir)?.flatten() {
+        let p = entry.path();
+        if p.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let Ok(src) = std::fs::read_to_string(&p) else {
+            continue;
+        };
+        if let Some(s) = parse_active_skill(&p, &src)
+            && s.name == name
+        {
+            source = Some(p);
+            break;
+        }
+    }
+    let src_path = source.ok_or_else(|| Error::new(ErrorKind::NotFound, "skill not found"))?;
+    let filename = src_path
+        .file_name()
+        .ok_or_else(|| Error::other("no filename"))?;
+    let dest = target_dir.join(filename);
+    std::fs::rename(&src_path, &dest)?;
+    Ok(dest)
+}
+
+/// Delete a skill file entirely (used by `ForgetSkill` when the user
+/// wants the file gone rather than archived). Scans the status
+/// directories in priority order and removes the first match.
+pub fn delete_skill(workdir: &str, name: &str) -> std::io::Result<std::path::PathBuf> {
+    use std::io::{Error, ErrorKind};
+    let safe_name = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !safe_name || name.is_empty() {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            "skill name must be kebab/snake-case alphanumeric",
+        ));
+    }
+    let base = Path::new(workdir).join(".jarvis").join("skills");
+    for status in ["candidates", "active", "forgotten"] {
+        let dir = base.join(status);
+        if !dir.exists() {
+            continue;
+        }
+        for entry in std::fs::read_dir(&dir)?.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            let Ok(src) = std::fs::read_to_string(&p) else {
+                continue;
+            };
+            if let Some(s) = parse_active_skill(&p, &src)
+                && s.name == name
+            {
+                std::fs::remove_file(&p)?;
+                return Ok(p);
+            }
+        }
+    }
+    Err(Error::new(ErrorKind::NotFound, "skill not found"))
 }
 
 #[cfg(test)]

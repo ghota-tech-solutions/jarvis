@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file jarvis.proto.
  */
 export const file_jarvis: GenFile = /*@__PURE__*/
-  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLkAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCRITCgtyZXN1bWVfZnJvbRgLIAEoCSIPCg1TdGF0dXNSZXF1ZXN0IqcBCgxEYWVtb25TdGF0dXMSDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAxImCgZtb2RlbHMYAyADKAsyFi5qYXJ2aXMudjEuTW9kZWxTdGF0dXMSFQoNcnVubmluZ190YXNrcxgEIAEoDRIvCgttY3Bfc2VydmVycxgFIAMoCzIaLmphcnZpcy52MS5NY3BTZXJ2ZXJTdGF0dXMiJgoTV2F0Y2hXb3JrZGlyUmVxdWVzdBIPCgd3b3JrZGlyGAEgASgJIjgKB0ZzRXZlbnQSDAoEcGF0aBgBIAEoCRIMCgRraW5kGAIgASgJEhEKCXRzX21pY3JvcxgDIAEoAyJQCg9NY3BTZXJ2ZXJTdGF0dXMSDAoEbmFtZRgBIAEoCRIRCgljb25uZWN0ZWQYAiABKAgSDQoFdG9vbHMYAyADKAkSDQoFZXJyb3IYBCABKAki+gEKC01vZGVsU3RhdHVzEgwKBG5hbWUYASABKAkSDAoEa2luZBgCIAEoCRIQCghtb2RlbF9pZBgDIAEoCRIQCghwcmlvcml0eRgEIAEoBRIOCgZvbmxpbmUYBSABKAgSEwoLcXVhcmFudGluZWQYBiABKAgSIAoYcXVhcmFudGluZWRfdW50aWxfbWljcm9zGAcgASgDEhoKEmZhaWx1cmVzX2luX3dpbmRvdxgIIAEoDRIPCgdjdHhfbGVuGAkgASgNEhIKCnRvb2xfY2FsbHMYCiABKAgSEwoLanNvbl9zY2hlbWEYCyABKAgSDgoGdmlzaW9uGAwgASgIIowCCgRUYXNrEgoKAmlkGAEgASgJEgwKBGdvYWwYAiABKAkSDgoGc3RhdHVzGAMgASgJEg8KB3dvcmtkaXIYBCABKAkSEgoKY3JlYXRlZF9hdBgFIAEoAxIZCgxjb21wbGV0ZWRfYXQYBiABKANIAIgBARISCgVlcnJvchgHIAEoCUgBiAEBEg8KB3NhbmRib3gYCCABKAkSEgoKbmV0X3BvbGljeRgJIAEoCRIVCg13b3JrdHJlZV9wYXRoGAogASgJEhcKD3dvcmt0cmVlX2JyYW5jaBgLIAEoCRIWCg5wYXJlbnRfdGFza19pZBgMIAEoCUIPCg1fY29tcGxldGVkX2F0QggKBl9lcnJvciI7ChBMaXN0VGFza3NSZXF1ZXN0EhgKEGluY2x1ZGVfZmluaXNoZWQYASABKAgSDQoFbGltaXQYAiABKA0iKgoIVGFza0xpc3QSHgoFdGFza3MYASADKAsyDy5qYXJ2aXMudjEuVGFzayJjChNTdHJlYW1FdmVudHNSZXF1ZXN0Eg8KB3Rhc2tfaWQYASABKAkSDgoGZm9sbG93GAIgASgIEhAKCHNpbmNlX2lkGAMgASgDEhkKEWluY2x1ZGVfYW5jZXN0b3JzGAQgASgIIpIBCgVFdmVudBIKCgJpZBgBIAEoAxIRCgl0c19taWNyb3MYAiABKAMSDwoHdGFza19pZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIMCgRraW5kGAUgASgJEg8KB3N1YmplY3QYBiABKAkSFAoMcGF5bG9hZF9qc29uGAcgASgJEhIKCnBhcmVudF9ldnQYCCABKAMiowEKEFRpbWVsaW5lU25hcHNob3QSDwoHdGFza19pZBgBIAEoCRIoCgZldmVudHMYAiADKAsyGC5qYXJ2aXMudjEuVGltZWxpbmVFdmVudBImCgVzcGFucxgDIAMoCzIXLmphcnZpcy52MS5UaW1lbGluZVNwYW4SFQoNbWluX3RzX21pY3JvcxgEIAEoAxIVCg1tYXhfdHNfbWljcm9zGAUgASgDIjsKEkdldFRpbWVsaW5lUmVxdWVzdBIKCgJpZBgBIAEoCRIZChFpbmNsdWRlX2FuY2VzdG9ycxgCIAEoCCKaAQoNVGltZWxpbmVFdmVudBIKCgJpZBgBIAEoAxIRCgl0c19taWNyb3MYAiABKAMSDwoHdGFza19pZBgDIAEoCRIQCghhZ2VudF9pZBgEIAEoCRIMCgRraW5kGAUgASgJEg8KB3N1YmplY3QYBiABKAkSFAoMcGF5bG9hZF9qc29uGAcgASgJEhIKCnBhcmVudF9ldnQYCCABKAMilgEKDFRpbWVsaW5lU3BhbhIUCgxzdGFydF9ldnRfaWQYASABKAMSEgoKZW5kX2V2dF9pZBgCIAEoAxIXCg9zdGFydF90c19taWNyb3MYAyABKAMSFQoNZW5kX3RzX21pY3JvcxgEIAEoAxINCgVsYWJlbBgFIAEoCRIMCgRsYW5lGAYgASgJEg8KB291dGNvbWUYByABKAkifQoKRmxlZXRGcmFtZRIRCgl0c19taWNyb3MYASABKAMSLAoIc25hcHNob3QYAiABKAsyGC5qYXJ2aXMudjEuRmxlZXRTbmFwc2hvdEgAEiYKBWRlbHRhGAMgASgLMhUuamFydmlzLnYxLkZsZWV0RGVsdGFIAEIGCgRraW5kIlkKDUZsZWV0U25hcHNob3QSIwoFbm9kZXMYASADKAsyFC5qYXJ2aXMudjEuRmxlZXROb2RlEiMKBWVkZ2VzGAIgAygLMhQuamFydmlzLnYxLkZsZWV0RWRnZSLWAQoKRmxlZXREZWx0YRIpCgthZGRlZF9ub2RlcxgBIAMoCzIULmphcnZpcy52MS5GbGVldE5vZGUSKwoNdXBkYXRlZF9ub2RlcxgCIAMoCzIULmphcnZpcy52MS5GbGVldE5vZGUSGAoQcmVtb3ZlZF9ub2RlX2lkcxgDIAMoCRIpCgthZGRlZF9lZGdlcxgEIAMoCzIULmphcnZpcy52MS5GbGVldEVkZ2USKwoNcmVtb3ZlZF9lZGdlcxgFIAMoCzIULmphcnZpcy52MS5GbGVldEVkZ2UigAIKCUZsZWV0Tm9kZRIPCgd0YXNrX2lkGAEgASgJEhAKCHNob3J0X2lkGAIgASgJEg4KBnN0YXR1cxgDIAEoCRIMCgRnb2FsGAQgASgJEg8KB3dvcmtkaXIYBSABKAkSDwoHc2FuZGJveBgGIAEoCRIRCgl0b2tlbnNfaW4YByABKAQSEgoKdG9rZW5zX291dBgIIAEoBBIaChJlc3RpbWF0ZWRfY29zdF91c2QYCSABKAESGQoRY3JlYXRlZF9hdF9taWNyb3MYCiABKAMSGQoRdXBkYXRlZF9hdF9taWNyb3MYCyABKAMSFwoPbmVlZHNfYXR0ZW50aW9uGAwgASgIIjoKCUZsZWV0RWRnZRIWCg5wYXJlbnRfdGFza19pZBgBIAEoCRIVCg1jaGlsZF90YXNrX2lkGAIgASgJIpEBCgpDb3N0UmVwb3J0Eg8KB3Rhc2tfaWQYASABKAkSFwoPdG90YWxfdG9rZW5zX2luGAIgASgEEhgKEHRvdGFsX3Rva2Vuc19vdXQYAyABKAQSFgoOdG90YWxfY29zdF91c2QYBCABKAESJwoIYnlfbW9kZWwYBSADKAsyFS5qYXJ2aXMudjEuTW9kZWxTcGVuZCJtCgpNb2RlbFNwZW5kEhIKCm1vZGVsX25hbWUYASABKAkSEQoJdG9rZW5zX2luGAIgASgEEhIKCnRva2Vuc19vdXQYAyABKAQSEAoIY29zdF91c2QYBCABKAESEgoKY2FsbF9jb3VudBgFIAEoDSJcCg1EaWZmR3JvdXBMaXN0Eg8KB3Rhc2tfaWQYASABKAkSJAoGZ3JvdXBzGAIgAygLMhQuamFydmlzLnYxLkRpZmZHcm91cBIUCgxvcnBoYW5fcGF0aHMYAyADKAkigAEKCURpZmZHcm91cBIXCg9kZWNpc2lvbl9ldnRfaWQYASABKAMSFQoNZGVjaXNpb25fdGV4dBgCIAEoCRIMCgRzdGVwGAMgASgNEhEKCXRzX21pY3JvcxgEIAEoAxIiCgVmaWxlcxgFIAMoCzITLmphcnZpcy52MS5GaWxlRGlmZiJuCghGaWxlRGlmZhIMCgRwYXRoGAEgASgJEhMKC2NoYW5nZV9raW5kGAIgASgJEhMKC2xpbmVzX2FkZGVkGAMgASgNEhUKDWxpbmVzX3JlbW92ZWQYBCABKA0SEwoLdG90YWxfbGluZXMYBSABKA0icgoSR2V0RmlsZURpZmZSZXF1ZXN0Eg8KB3Rhc2tfaWQYASABKAkSFAoMZ3JvdXBfZXZ0X2lkGAIgASgEEgwKBHBhdGgYAyABKAkSFAoMb2Zmc2V0X2xpbmVzGAQgASgNEhEKCW1heF9saW5lcxgFIAEoDSKIAQoSRmlsZURpZmZDaHVua0JhdGNoEgwKBHBhdGgYASABKAkSFAoMb2Zmc2V0X2xpbmVzGAIgASgNEhYKDnJldHVybmVkX2xpbmVzGAMgASgNEhMKC3RvdGFsX2xpbmVzGAQgASgNEhAKCGhhc19tb3JlGAUgASgIEg8KB2NvbnRlbnQYBiABKAkiTwoSQ29tbWl0UGhhc2VSZXF1ZXN0Eg8KB3Rhc2tfaWQYASABKAkSFwoPZGVjaXNpb25fZXZ0X2lkGAIgASgDEg8KB3N1YmplY3QYAyABKAkiVAoKQ29tbWl0SW5mbxISCgpjb21taXRfc2hhGAEgASgJEg4KBmJyYW5jaBgCIAEoCRIPCgdzdWJqZWN0GAMgASgJEhEKCXRzX21pY3JvcxgEIAEoAyLHAQoGTWVtb3J5EgoKAmlkGAEgASgDEg0KBXNjb3BlGAIgASgJEhMKC3Njb3BlX3ZhbHVlGAMgASgJEgwKBGtpbmQYBCABKAkSDAoEdGV4dBgFIAEoCRIOCgZzdGF0dXMYBiABKAkSFgoOc291cmNlX3Rhc2tfaWQYByABKAkSGQoRY3JlYXRlZF9hdF9taWNyb3MYCCABKAMSGQoRdXBkYXRlZF9hdF9taWNyb3MYCSABKAMSEwoLdXNhZ2VfY291bnQYCiABKA0iWAoTTGlzdE1lbW9yaWVzUmVxdWVzdBINCgVzY29wZRgBIAEoCRITCgtzY29wZV92YWx1ZRgCIAEoCRIOCgZzdGF0dXMYAyABKAkSDQoFbGltaXQYBCABKA0iMQoKTWVtb3J5TGlzdBIjCghtZW1vcmllcxgBIAMoCzIRLmphcnZpcy52MS5NZW1vcnkiGgoMTWVtb3J5SGFuZGxlEgoKAmlkGAEgASgDIjAKFFByb21vdGVNZW1vcnlSZXF1ZXN0EgoKAmlkGAEgASgDEgwKBHRleHQYAiABKAkiXwoRRWRpdE1lbW9yeVJlcXVlc3QSCgoCaWQYASABKAMSDAoEdGV4dBgCIAEoCRINCgVzY29wZRgDIAEoCRITCgtzY29wZV92YWx1ZRgEIAEoCRIMCgRraW5kGAUgASgJIrYBCgxTY2hlZHVsZVNwZWMSCgoCaWQYASABKAkSDAoEY3JvbhgCIAEoCRIMCgRnb2FsGAMgASgJEg8KB3dvcmtkaXIYBCABKAkSDwoHc2FuZGJveBgFIAEoCRISCgpuZXRfcG9saWN5GAYgASgJEhYKDnJvdXRpbmdfcG9saWN5GAcgASgJEhEKCW1heF9zdGVwcxgIIAEoDRINCgVsYWJlbBgJIAEoCRIOCgZwYXVzZWQYCiABKAgieQoIU2NoZWR1bGUSJQoEc3BlYxgBIAEoCzIXLmphcnZpcy52MS5TY2hlZHVsZVNwZWMSFwoPbGFzdF9ydW5fbWljcm9zGAIgASgDEhcKD25leHRfcnVuX21pY3JvcxgDIAEoAxIUCgxsYXN0X3Rhc2tfaWQYBCABKAkiHAoOU2NoZWR1bGVIYW5kbGUSCgoCaWQYASABKAkiNgoMU2NoZWR1bGVMaXN0EiYKCXNjaGVkdWxlcxgBIAMoCzITLmphcnZpcy52MS5TY2hlZHVsZTKLDAoGSmFydmlzEjcKBFBpbmcSFi5qYXJ2aXMudjEuUGluZ1JlcXVlc3QaFy5qYXJ2aXMudjEuUGluZ1Jlc3BvbnNlEjMKA0FzaxIVLmphcnZpcy52MS5Bc2tSZXF1ZXN0GhMuamFydmlzLnYxLkFza0NodW5rMAESOAoKU3VibWl0VGFzaxITLmphcnZpcy52MS5UYXNrU3BlYxoVLmphcnZpcy52MS5UYXNrSGFuZGxlEjEKB0dldFRhc2sSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoPLmphcnZpcy52MS5UYXNrEj0KCUxpc3RUYXNrcxIbLmphcnZpcy52MS5MaXN0VGFza3NSZXF1ZXN0GhMuamFydmlzLnYxLlRhc2tMaXN0EjUKCkNhbmNlbFRhc2sSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoQLmphcnZpcy52MS5FbXB0eRJCCgxTdHJlYW1FdmVudHMSHi5qYXJ2aXMudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBoQLmphcnZpcy52MS5FdmVudDABEj4KCUdldFN0YXR1cxIYLmphcnZpcy52MS5TdGF0dXNSZXF1ZXN0GhcuamFydmlzLnYxLkRhZW1vblN0YXR1cxJJCgtHZXRUaW1lbGluZRIdLmphcnZpcy52MS5HZXRUaW1lbGluZVJlcXVlc3QaGy5qYXJ2aXMudjEuVGltZWxpbmVTbmFwc2hvdBI4CgtTdHJlYW1GbGVldBIQLmphcnZpcy52MS5FbXB0eRoVLmphcnZpcy52MS5GbGVldEZyYW1lMAESRAoUR2V0VGFza0Nvc3RCcmVha2Rvd24SFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoVLmphcnZpcy52MS5Db3N0UmVwb3J0EkQKEUdyb3VwRGlmZkJ5SW50ZW50EhUuamFydmlzLnYxLlRhc2tIYW5kbGUaGC5qYXJ2aXMudjEuRGlmZkdyb3VwTGlzdBJLCgtHZXRGaWxlRGlmZhIdLmphcnZpcy52MS5HZXRGaWxlRGlmZlJlcXVlc3QaHS5qYXJ2aXMudjEuRmlsZURpZmZDaHVua0JhdGNoEkMKC0NvbW1pdFBoYXNlEh0uamFydmlzLnYxLkNvbW1pdFBoYXNlUmVxdWVzdBoVLmphcnZpcy52MS5Db21taXRJbmZvEj4KC1JlamVjdFBoYXNlEh0uamFydmlzLnYxLkNvbW1pdFBoYXNlUmVxdWVzdBoQLmphcnZpcy52MS5FbXB0eRJFCgxMaXN0TWVtb3JpZXMSHi5qYXJ2aXMudjEuTGlzdE1lbW9yaWVzUmVxdWVzdBoVLmphcnZpcy52MS5NZW1vcnlMaXN0EkMKDVByb21vdGVNZW1vcnkSHy5qYXJ2aXMudjEuUHJvbW90ZU1lbW9yeVJlcXVlc3QaES5qYXJ2aXMudjEuTWVtb3J5EjkKDEZvcmdldE1lbW9yeRIXLmphcnZpcy52MS5NZW1vcnlIYW5kbGUaEC5qYXJ2aXMudjEuRW1wdHkSPQoKRWRpdE1lbW9yeRIcLmphcnZpcy52MS5FZGl0TWVtb3J5UmVxdWVzdBoRLmphcnZpcy52MS5NZW1vcnkSPgoOQ3JlYXRlU2NoZWR1bGUSFy5qYXJ2aXMudjEuU2NoZWR1bGVTcGVjGhMuamFydmlzLnYxLlNjaGVkdWxlEjoKDUxpc3RTY2hlZHVsZXMSEC5qYXJ2aXMudjEuRW1wdHkaFy5qYXJ2aXMudjEuU2NoZWR1bGVMaXN0Ej0KDkRlbGV0ZVNjaGVkdWxlEhkuamFydmlzLnYxLlNjaGVkdWxlSGFuZGxlGhAuamFydmlzLnYxLkVtcHR5EkIKDlJ1blNjaGVkdWxlTm93EhkuamFydmlzLnYxLlNjaGVkdWxlSGFuZGxlGhUuamFydmlzLnYxLlRhc2tIYW5kbGUSRAoMV2F0Y2hXb3JrZGlyEh4uamFydmlzLnYxLldhdGNoV29ya2RpclJlcXVlc3QaEi5qYXJ2aXMudjEuRnNFdmVudDABYgZwcm90bzM");
+  fileDesc("CgxqYXJ2aXMucHJvdG8SCWphcnZpcy52MSINCgtQaW5nUmVxdWVzdCI3CgxQaW5nUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAyKAAQoKQXNrUmVxdWVzdBIOCgZwcm9tcHQYASABKAkSEAoIcHJvdmlkZXIYAiABKAkSGAoLdGVtcGVyYXR1cmUYAyABKAJIAIgBARIXCgptYXhfdG9rZW5zGAQgASgNSAGIAQFCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zInwKCEFza0NodW5rEg0KBWRlbHRhGAEgASgJEikKBXVzYWdlGAIgASgLMhUuamFydmlzLnYxLlVzYWdlU3RhdHNIAIgBARIaCg1maW5pc2hfcmVhc29uGAMgASgJSAGIAQFCCAoGX3VzYWdlQhAKDl9maW5pc2hfcmVhc29uIlQKClVzYWdlU3RhdHMSFQoNcHJvbXB0X3Rva2VucxgBIAEoDRIZChFjb21wbGV0aW9uX3Rva2VucxgCIAEoDRIUCgx0b3RhbF90b2tlbnMYAyABKA0iBwoFRW1wdHkiGAoKVGFza0hhbmRsZRIKCgJpZBgBIAEoCSLkAQoIVGFza1NwZWMSDAoEZ29hbBgBIAEoCRIPCgd3b3JrZGlyGAIgASgJEhEKCW1heF9zdGVwcxgDIAEoDRIPCgdzYW5kYm94GAQgASgJEhIKCm5ldF9wb2xpY3kYBSABKAkSFAoMdXNlX3dvcmt0cmVlGAYgASgIEhAKCGJhc2VfcmVmGAcgASgJEhYKDnJvdXRpbmdfcG9saWN5GAggASgJEhQKDHJlcXVpcmVfY2FwcxgJIAMoCRIWCg5wYXJlbnRfdGFza19pZBgKIAEoCRITCgtyZXN1bWVfZnJvbRgLIAEoCSIPCg1TdGF0dXNSZXF1ZXN0IqcBCgxEYWVtb25TdGF0dXMSDwoHdmVyc2lvbhgBIAEoCRIWCg51cHRpbWVfc2Vjb25kcxgCIAEoAxImCgZtb2RlbHMYAyADKAsyFi5qYXJ2aXMudjEuTW9kZWxTdGF0dXMSFQoNcnVubmluZ190YXNrcxgEIAEoDRIvCgttY3Bfc2VydmVycxgFIAMoCzIaLmphcnZpcy52MS5NY3BTZXJ2ZXJTdGF0dXMiJgoTV2F0Y2hXb3JrZGlyUmVxdWVzdBIPCgd3b3JrZGlyGAEgASgJIjgKB0ZzRXZlbnQSDAoEcGF0aBgBIAEoCRIMCgRraW5kGAIgASgJEhEKCXRzX21pY3JvcxgDIAEoAyIkChFMaXN0U2tpbGxzUmVxdWVzdBIPCgd3b3JrZGlyGAEgASgJImEKBVNraWxsEgwKBG5hbWUYASABKAkSDQoFdGl0bGUYAiABKAkSDwoHdHJpZ2dlchgDIAEoCRIOCgZzdGF0dXMYBCABKAkSDAoEcGF0aBgFIAEoCRIMCgRib2R5GAYgASgJIngKCVNraWxsTGlzdBIkCgpjYW5kaWRhdGVzGAEgAygLMhAuamFydmlzLnYxLlNraWxsEiAKBmFjdGl2ZRgCIAMoCzIQLmphcnZpcy52MS5Ta2lsbBIjCglmb3Jnb3R0ZW4YAyADKAsyEC5qYXJ2aXMudjEuU2tpbGwiLAoLU2tpbGxIYW5kbGUSDwoHd29ya2RpchgBIAEoCRIMCgRuYW1lGAIgASgJIlAKD01jcFNlcnZlclN0YXR1cxIMCgRuYW1lGAEgASgJEhEKCWNvbm5lY3RlZBgCIAEoCBINCgV0b29scxgDIAMoCRINCgVlcnJvchgEIAEoCSL6AQoLTW9kZWxTdGF0dXMSDAoEbmFtZRgBIAEoCRIMCgRraW5kGAIgASgJEhAKCG1vZGVsX2lkGAMgASgJEhAKCHByaW9yaXR5GAQgASgFEg4KBm9ubGluZRgFIAEoCBITCgtxdWFyYW50aW5lZBgGIAEoCBIgChhxdWFyYW50aW5lZF91bnRpbF9taWNyb3MYByABKAMSGgoSZmFpbHVyZXNfaW5fd2luZG93GAggASgNEg8KB2N0eF9sZW4YCSABKA0SEgoKdG9vbF9jYWxscxgKIAEoCBITCgtqc29uX3NjaGVtYRgLIAEoCBIOCgZ2aXNpb24YDCABKAgijAIKBFRhc2sSCgoCaWQYASABKAkSDAoEZ29hbBgCIAEoCRIOCgZzdGF0dXMYAyABKAkSDwoHd29ya2RpchgEIAEoCRISCgpjcmVhdGVkX2F0GAUgASgDEhkKDGNvbXBsZXRlZF9hdBgGIAEoA0gAiAEBEhIKBWVycm9yGAcgASgJSAGIAQESDwoHc2FuZGJveBgIIAEoCRISCgpuZXRfcG9saWN5GAkgASgJEhUKDXdvcmt0cmVlX3BhdGgYCiABKAkSFwoPd29ya3RyZWVfYnJhbmNoGAsgASgJEhYKDnBhcmVudF90YXNrX2lkGAwgASgJQg8KDV9jb21wbGV0ZWRfYXRCCAoGX2Vycm9yIjsKEExpc3RUYXNrc1JlcXVlc3QSGAoQaW5jbHVkZV9maW5pc2hlZBgBIAEoCBINCgVsaW1pdBgCIAEoDSIqCghUYXNrTGlzdBIeCgV0YXNrcxgBIAMoCzIPLmphcnZpcy52MS5UYXNrImMKE1N0cmVhbUV2ZW50c1JlcXVlc3QSDwoHdGFza19pZBgBIAEoCRIOCgZmb2xsb3cYAiABKAgSEAoIc2luY2VfaWQYAyABKAMSGQoRaW5jbHVkZV9hbmNlc3RvcnMYBCABKAgikgEKBUV2ZW50EgoKAmlkGAEgASgDEhEKCXRzX21pY3JvcxgCIAEoAxIPCgd0YXNrX2lkGAMgASgJEhAKCGFnZW50X2lkGAQgASgJEgwKBGtpbmQYBSABKAkSDwoHc3ViamVjdBgGIAEoCRIUCgxwYXlsb2FkX2pzb24YByABKAkSEgoKcGFyZW50X2V2dBgIIAEoAyKjAQoQVGltZWxpbmVTbmFwc2hvdBIPCgd0YXNrX2lkGAEgASgJEigKBmV2ZW50cxgCIAMoCzIYLmphcnZpcy52MS5UaW1lbGluZUV2ZW50EiYKBXNwYW5zGAMgAygLMhcuamFydmlzLnYxLlRpbWVsaW5lU3BhbhIVCg1taW5fdHNfbWljcm9zGAQgASgDEhUKDW1heF90c19taWNyb3MYBSABKAMiOwoSR2V0VGltZWxpbmVSZXF1ZXN0EgoKAmlkGAEgASgJEhkKEWluY2x1ZGVfYW5jZXN0b3JzGAIgASgIIpoBCg1UaW1lbGluZUV2ZW50EgoKAmlkGAEgASgDEhEKCXRzX21pY3JvcxgCIAEoAxIPCgd0YXNrX2lkGAMgASgJEhAKCGFnZW50X2lkGAQgASgJEgwKBGtpbmQYBSABKAkSDwoHc3ViamVjdBgGIAEoCRIUCgxwYXlsb2FkX2pzb24YByABKAkSEgoKcGFyZW50X2V2dBgIIAEoAyKWAQoMVGltZWxpbmVTcGFuEhQKDHN0YXJ0X2V2dF9pZBgBIAEoAxISCgplbmRfZXZ0X2lkGAIgASgDEhcKD3N0YXJ0X3RzX21pY3JvcxgDIAEoAxIVCg1lbmRfdHNfbWljcm9zGAQgASgDEg0KBWxhYmVsGAUgASgJEgwKBGxhbmUYBiABKAkSDwoHb3V0Y29tZRgHIAEoCSJ9CgpGbGVldEZyYW1lEhEKCXRzX21pY3JvcxgBIAEoAxIsCghzbmFwc2hvdBgCIAEoCzIYLmphcnZpcy52MS5GbGVldFNuYXBzaG90SAASJgoFZGVsdGEYAyABKAsyFS5qYXJ2aXMudjEuRmxlZXREZWx0YUgAQgYKBGtpbmQiWQoNRmxlZXRTbmFwc2hvdBIjCgVub2RlcxgBIAMoCzIULmphcnZpcy52MS5GbGVldE5vZGUSIwoFZWRnZXMYAiADKAsyFC5qYXJ2aXMudjEuRmxlZXRFZGdlItYBCgpGbGVldERlbHRhEikKC2FkZGVkX25vZGVzGAEgAygLMhQuamFydmlzLnYxLkZsZWV0Tm9kZRIrCg11cGRhdGVkX25vZGVzGAIgAygLMhQuamFydmlzLnYxLkZsZWV0Tm9kZRIYChByZW1vdmVkX25vZGVfaWRzGAMgAygJEikKC2FkZGVkX2VkZ2VzGAQgAygLMhQuamFydmlzLnYxLkZsZWV0RWRnZRIrCg1yZW1vdmVkX2VkZ2VzGAUgAygLMhQuamFydmlzLnYxLkZsZWV0RWRnZSKAAgoJRmxlZXROb2RlEg8KB3Rhc2tfaWQYASABKAkSEAoIc2hvcnRfaWQYAiABKAkSDgoGc3RhdHVzGAMgASgJEgwKBGdvYWwYBCABKAkSDwoHd29ya2RpchgFIAEoCRIPCgdzYW5kYm94GAYgASgJEhEKCXRva2Vuc19pbhgHIAEoBBISCgp0b2tlbnNfb3V0GAggASgEEhoKEmVzdGltYXRlZF9jb3N0X3VzZBgJIAEoARIZChFjcmVhdGVkX2F0X21pY3JvcxgKIAEoAxIZChF1cGRhdGVkX2F0X21pY3JvcxgLIAEoAxIXCg9uZWVkc19hdHRlbnRpb24YDCABKAgiOgoJRmxlZXRFZGdlEhYKDnBhcmVudF90YXNrX2lkGAEgASgJEhUKDWNoaWxkX3Rhc2tfaWQYAiABKAkikQEKCkNvc3RSZXBvcnQSDwoHdGFza19pZBgBIAEoCRIXCg90b3RhbF90b2tlbnNfaW4YAiABKAQSGAoQdG90YWxfdG9rZW5zX291dBgDIAEoBBIWCg50b3RhbF9jb3N0X3VzZBgEIAEoARInCghieV9tb2RlbBgFIAMoCzIVLmphcnZpcy52MS5Nb2RlbFNwZW5kIm0KCk1vZGVsU3BlbmQSEgoKbW9kZWxfbmFtZRgBIAEoCRIRCgl0b2tlbnNfaW4YAiABKAQSEgoKdG9rZW5zX291dBgDIAEoBBIQCghjb3N0X3VzZBgEIAEoARISCgpjYWxsX2NvdW50GAUgASgNIlwKDURpZmZHcm91cExpc3QSDwoHdGFza19pZBgBIAEoCRIkCgZncm91cHMYAiADKAsyFC5qYXJ2aXMudjEuRGlmZkdyb3VwEhQKDG9ycGhhbl9wYXRocxgDIAMoCSKAAQoJRGlmZkdyb3VwEhcKD2RlY2lzaW9uX2V2dF9pZBgBIAEoAxIVCg1kZWNpc2lvbl90ZXh0GAIgASgJEgwKBHN0ZXAYAyABKA0SEQoJdHNfbWljcm9zGAQgASgDEiIKBWZpbGVzGAUgAygLMhMuamFydmlzLnYxLkZpbGVEaWZmIm4KCEZpbGVEaWZmEgwKBHBhdGgYASABKAkSEwoLY2hhbmdlX2tpbmQYAiABKAkSEwoLbGluZXNfYWRkZWQYAyABKA0SFQoNbGluZXNfcmVtb3ZlZBgEIAEoDRITCgt0b3RhbF9saW5lcxgFIAEoDSJyChJHZXRGaWxlRGlmZlJlcXVlc3QSDwoHdGFza19pZBgBIAEoCRIUCgxncm91cF9ldnRfaWQYAiABKAQSDAoEcGF0aBgDIAEoCRIUCgxvZmZzZXRfbGluZXMYBCABKA0SEQoJbWF4X2xpbmVzGAUgASgNIogBChJGaWxlRGlmZkNodW5rQmF0Y2gSDAoEcGF0aBgBIAEoCRIUCgxvZmZzZXRfbGluZXMYAiABKA0SFgoOcmV0dXJuZWRfbGluZXMYAyABKA0SEwoLdG90YWxfbGluZXMYBCABKA0SEAoIaGFzX21vcmUYBSABKAgSDwoHY29udGVudBgGIAEoCSJPChJDb21taXRQaGFzZVJlcXVlc3QSDwoHdGFza19pZBgBIAEoCRIXCg9kZWNpc2lvbl9ldnRfaWQYAiABKAMSDwoHc3ViamVjdBgDIAEoCSJUCgpDb21taXRJbmZvEhIKCmNvbW1pdF9zaGEYASABKAkSDgoGYnJhbmNoGAIgASgJEg8KB3N1YmplY3QYAyABKAkSEQoJdHNfbWljcm9zGAQgASgDIscBCgZNZW1vcnkSCgoCaWQYASABKAMSDQoFc2NvcGUYAiABKAkSEwoLc2NvcGVfdmFsdWUYAyABKAkSDAoEa2luZBgEIAEoCRIMCgR0ZXh0GAUgASgJEg4KBnN0YXR1cxgGIAEoCRIWCg5zb3VyY2VfdGFza19pZBgHIAEoCRIZChFjcmVhdGVkX2F0X21pY3JvcxgIIAEoAxIZChF1cGRhdGVkX2F0X21pY3JvcxgJIAEoAxITCgt1c2FnZV9jb3VudBgKIAEoDSJYChNMaXN0TWVtb3JpZXNSZXF1ZXN0Eg0KBXNjb3BlGAEgASgJEhMKC3Njb3BlX3ZhbHVlGAIgASgJEg4KBnN0YXR1cxgDIAEoCRINCgVsaW1pdBgEIAEoDSIxCgpNZW1vcnlMaXN0EiMKCG1lbW9yaWVzGAEgAygLMhEuamFydmlzLnYxLk1lbW9yeSIaCgxNZW1vcnlIYW5kbGUSCgoCaWQYASABKAMiMAoUUHJvbW90ZU1lbW9yeVJlcXVlc3QSCgoCaWQYASABKAMSDAoEdGV4dBgCIAEoCSJfChFFZGl0TWVtb3J5UmVxdWVzdBIKCgJpZBgBIAEoAxIMCgR0ZXh0GAIgASgJEg0KBXNjb3BlGAMgASgJEhMKC3Njb3BlX3ZhbHVlGAQgASgJEgwKBGtpbmQYBSABKAkitgEKDFNjaGVkdWxlU3BlYxIKCgJpZBgBIAEoCRIMCgRjcm9uGAIgASgJEgwKBGdvYWwYAyABKAkSDwoHd29ya2RpchgEIAEoCRIPCgdzYW5kYm94GAUgASgJEhIKCm5ldF9wb2xpY3kYBiABKAkSFgoOcm91dGluZ19wb2xpY3kYByABKAkSEQoJbWF4X3N0ZXBzGAggASgNEg0KBWxhYmVsGAkgASgJEg4KBnBhdXNlZBgKIAEoCCJ5CghTY2hlZHVsZRIlCgRzcGVjGAEgASgLMhcuamFydmlzLnYxLlNjaGVkdWxlU3BlYxIXCg9sYXN0X3J1bl9taWNyb3MYAiABKAMSFwoPbmV4dF9ydW5fbWljcm9zGAMgASgDEhQKDGxhc3RfdGFza19pZBgEIAEoCSIcCg5TY2hlZHVsZUhhbmRsZRIKCgJpZBgBIAEoCSI2CgxTY2hlZHVsZUxpc3QSJgoJc2NoZWR1bGVzGAEgAygLMhMuamFydmlzLnYxLlNjaGVkdWxlMsANCgZKYXJ2aXMSNwoEUGluZxIWLmphcnZpcy52MS5QaW5nUmVxdWVzdBoXLmphcnZpcy52MS5QaW5nUmVzcG9uc2USMwoDQXNrEhUuamFydmlzLnYxLkFza1JlcXVlc3QaEy5qYXJ2aXMudjEuQXNrQ2h1bmswARI4CgpTdWJtaXRUYXNrEhMuamFydmlzLnYxLlRhc2tTcGVjGhUuamFydmlzLnYxLlRhc2tIYW5kbGUSMQoHR2V0VGFzaxIVLmphcnZpcy52MS5UYXNrSGFuZGxlGg8uamFydmlzLnYxLlRhc2sSPQoJTGlzdFRhc2tzEhsuamFydmlzLnYxLkxpc3RUYXNrc1JlcXVlc3QaEy5qYXJ2aXMudjEuVGFza0xpc3QSNQoKQ2FuY2VsVGFzaxIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhAuamFydmlzLnYxLkVtcHR5EkIKDFN0cmVhbUV2ZW50cxIeLmphcnZpcy52MS5TdHJlYW1FdmVudHNSZXF1ZXN0GhAuamFydmlzLnYxLkV2ZW50MAESPgoJR2V0U3RhdHVzEhguamFydmlzLnYxLlN0YXR1c1JlcXVlc3QaFy5qYXJ2aXMudjEuRGFlbW9uU3RhdHVzEkkKC0dldFRpbWVsaW5lEh0uamFydmlzLnYxLkdldFRpbWVsaW5lUmVxdWVzdBobLmphcnZpcy52MS5UaW1lbGluZVNuYXBzaG90EjgKC1N0cmVhbUZsZWV0EhAuamFydmlzLnYxLkVtcHR5GhUuamFydmlzLnYxLkZsZWV0RnJhbWUwARJEChRHZXRUYXNrQ29zdEJyZWFrZG93bhIVLmphcnZpcy52MS5UYXNrSGFuZGxlGhUuamFydmlzLnYxLkNvc3RSZXBvcnQSRAoRR3JvdXBEaWZmQnlJbnRlbnQSFS5qYXJ2aXMudjEuVGFza0hhbmRsZRoYLmphcnZpcy52MS5EaWZmR3JvdXBMaXN0EksKC0dldEZpbGVEaWZmEh0uamFydmlzLnYxLkdldEZpbGVEaWZmUmVxdWVzdBodLmphcnZpcy52MS5GaWxlRGlmZkNodW5rQmF0Y2gSQwoLQ29tbWl0UGhhc2USHS5qYXJ2aXMudjEuQ29tbWl0UGhhc2VSZXF1ZXN0GhUuamFydmlzLnYxLkNvbW1pdEluZm8SPgoLUmVqZWN0UGhhc2USHS5qYXJ2aXMudjEuQ29tbWl0UGhhc2VSZXF1ZXN0GhAuamFydmlzLnYxLkVtcHR5EkUKDExpc3RNZW1vcmllcxIeLmphcnZpcy52MS5MaXN0TWVtb3JpZXNSZXF1ZXN0GhUuamFydmlzLnYxLk1lbW9yeUxpc3QSQwoNUHJvbW90ZU1lbW9yeRIfLmphcnZpcy52MS5Qcm9tb3RlTWVtb3J5UmVxdWVzdBoRLmphcnZpcy52MS5NZW1vcnkSOQoMRm9yZ2V0TWVtb3J5EhcuamFydmlzLnYxLk1lbW9yeUhhbmRsZRoQLmphcnZpcy52MS5FbXB0eRI9CgpFZGl0TWVtb3J5EhwuamFydmlzLnYxLkVkaXRNZW1vcnlSZXF1ZXN0GhEuamFydmlzLnYxLk1lbW9yeRI+Cg5DcmVhdGVTY2hlZHVsZRIXLmphcnZpcy52MS5TY2hlZHVsZVNwZWMaEy5qYXJ2aXMudjEuU2NoZWR1bGUSOgoNTGlzdFNjaGVkdWxlcxIQLmphcnZpcy52MS5FbXB0eRoXLmphcnZpcy52MS5TY2hlZHVsZUxpc3QSPQoORGVsZXRlU2NoZWR1bGUSGS5qYXJ2aXMudjEuU2NoZWR1bGVIYW5kbGUaEC5qYXJ2aXMudjEuRW1wdHkSQgoOUnVuU2NoZWR1bGVOb3cSGS5qYXJ2aXMudjEuU2NoZWR1bGVIYW5kbGUaFS5qYXJ2aXMudjEuVGFza0hhbmRsZRJECgxXYXRjaFdvcmtkaXISHi5qYXJ2aXMudjEuV2F0Y2hXb3JrZGlyUmVxdWVzdBoSLmphcnZpcy52MS5Gc0V2ZW50MAESQAoKTGlzdFNraWxscxIcLmphcnZpcy52MS5MaXN0U2tpbGxzUmVxdWVzdBoULmphcnZpcy52MS5Ta2lsbExpc3QSOAoMUHJvbW90ZVNraWxsEhYuamFydmlzLnYxLlNraWxsSGFuZGxlGhAuamFydmlzLnYxLkVtcHR5EjcKC0ZvcmdldFNraWxsEhYuamFydmlzLnYxLlNraWxsSGFuZGxlGhAuamFydmlzLnYxLkVtcHR5YgZwcm90bzM");
 
 /**
  * @generated from message jarvis.v1.PingRequest
@@ -381,6 +381,136 @@ export const FsEventSchema: GenMessage<FsEvent> = /*@__PURE__*/
   messageDesc(file_jarvis, 11);
 
 /**
+ * § T2.2 / F2.3 — Skill catalog. Skills are filesystem-backed Markdown
+ * files; the gRPC surface exposes them as structured records so the SPA
+ * can render + curate without parsing markdown itself.
+ *
+ * @generated from message jarvis.v1.ListSkillsRequest
+ */
+export type ListSkillsRequest = Message<"jarvis.v1.ListSkillsRequest"> & {
+  /**
+   * Workdir whose `.jarvis/skills/` subtree is enumerated.
+   *
+   * @generated from field: string workdir = 1;
+   */
+  workdir: string;
+};
+
+/**
+ * Describes the message jarvis.v1.ListSkillsRequest.
+ * Use `create(ListSkillsRequestSchema)` to create a new message.
+ */
+export const ListSkillsRequestSchema: GenMessage<ListSkillsRequest> = /*@__PURE__*/
+  messageDesc(file_jarvis, 12);
+
+/**
+ * @generated from message jarvis.v1.Skill
+ */
+export type Skill = Message<"jarvis.v1.Skill"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string title = 2;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string trigger = 3;
+   */
+  trigger: string;
+
+  /**
+   * One of "candidate" | "active" | "forgotten" — derived from the
+   * subdirectory the file lives in.
+   *
+   * @generated from field: string status = 4;
+   */
+  status: string;
+
+  /**
+   * Absolute path on disk. Stable across the file's lifetime within
+   * one status; renames (promote / forget) yield a new path.
+   *
+   * @generated from field: string path = 5;
+   */
+  path: string;
+
+  /**
+   * Raw markdown body (everything after the frontmatter). Capped at
+   * ~32 KB by the daemon; longer skills are truncated.
+   *
+   * @generated from field: string body = 6;
+   */
+  body: string;
+};
+
+/**
+ * Describes the message jarvis.v1.Skill.
+ * Use `create(SkillSchema)` to create a new message.
+ */
+export const SkillSchema: GenMessage<Skill> = /*@__PURE__*/
+  messageDesc(file_jarvis, 13);
+
+/**
+ * @generated from message jarvis.v1.SkillList
+ */
+export type SkillList = Message<"jarvis.v1.SkillList"> & {
+  /**
+   * @generated from field: repeated jarvis.v1.Skill candidates = 1;
+   */
+  candidates: Skill[];
+
+  /**
+   * @generated from field: repeated jarvis.v1.Skill active = 2;
+   */
+  active: Skill[];
+
+  /**
+   * @generated from field: repeated jarvis.v1.Skill forgotten = 3;
+   */
+  forgotten: Skill[];
+};
+
+/**
+ * Describes the message jarvis.v1.SkillList.
+ * Use `create(SkillListSchema)` to create a new message.
+ */
+export const SkillListSchema: GenMessage<SkillList> = /*@__PURE__*/
+  messageDesc(file_jarvis, 14);
+
+/**
+ * @generated from message jarvis.v1.SkillHandle
+ */
+export type SkillHandle = Message<"jarvis.v1.SkillHandle"> & {
+  /**
+   * Same workdir as the `ListSkills` request that produced the
+   * referenced skill — keeps the daemon honest about which tree it's
+   * touching even if multiple workdirs are open in the SPA.
+   *
+   * @generated from field: string workdir = 1;
+   */
+  workdir: string;
+
+  /**
+   * Skill name (the kebab-case slug from the frontmatter, also the
+   * filename stem).
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message jarvis.v1.SkillHandle.
+ * Use `create(SkillHandleSchema)` to create a new message.
+ */
+export const SkillHandleSchema: GenMessage<SkillHandle> = /*@__PURE__*/
+  messageDesc(file_jarvis, 15);
+
+/**
  * @generated from message jarvis.v1.McpServerStatus
  */
 export type McpServerStatus = Message<"jarvis.v1.McpServerStatus"> & {
@@ -416,7 +546,7 @@ export type McpServerStatus = Message<"jarvis.v1.McpServerStatus"> & {
  * Use `create(McpServerStatusSchema)` to create a new message.
  */
 export const McpServerStatusSchema: GenMessage<McpServerStatus> = /*@__PURE__*/
-  messageDesc(file_jarvis, 12);
+  messageDesc(file_jarvis, 16);
 
 /**
  * @generated from message jarvis.v1.ModelStatus
@@ -490,7 +620,7 @@ export type ModelStatus = Message<"jarvis.v1.ModelStatus"> & {
  * Use `create(ModelStatusSchema)` to create a new message.
  */
 export const ModelStatusSchema: GenMessage<ModelStatus> = /*@__PURE__*/
-  messageDesc(file_jarvis, 13);
+  messageDesc(file_jarvis, 17);
 
 /**
  * @generated from message jarvis.v1.Task
@@ -574,7 +704,7 @@ export type Task = Message<"jarvis.v1.Task"> & {
  * Use `create(TaskSchema)` to create a new message.
  */
 export const TaskSchema: GenMessage<Task> = /*@__PURE__*/
-  messageDesc(file_jarvis, 14);
+  messageDesc(file_jarvis, 18);
 
 /**
  * @generated from message jarvis.v1.ListTasksRequest
@@ -598,7 +728,7 @@ export type ListTasksRequest = Message<"jarvis.v1.ListTasksRequest"> & {
  * Use `create(ListTasksRequestSchema)` to create a new message.
  */
 export const ListTasksRequestSchema: GenMessage<ListTasksRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 15);
+  messageDesc(file_jarvis, 19);
 
 /**
  * @generated from message jarvis.v1.TaskList
@@ -615,7 +745,7 @@ export type TaskList = Message<"jarvis.v1.TaskList"> & {
  * Use `create(TaskListSchema)` to create a new message.
  */
 export const TaskListSchema: GenMessage<TaskList> = /*@__PURE__*/
-  messageDesc(file_jarvis, 16);
+  messageDesc(file_jarvis, 20);
 
 /**
  * @generated from message jarvis.v1.StreamEventsRequest
@@ -656,7 +786,7 @@ export type StreamEventsRequest = Message<"jarvis.v1.StreamEventsRequest"> & {
  * Use `create(StreamEventsRequestSchema)` to create a new message.
  */
 export const StreamEventsRequestSchema: GenMessage<StreamEventsRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 17);
+  messageDesc(file_jarvis, 21);
 
 /**
  * @generated from message jarvis.v1.Event
@@ -718,7 +848,7 @@ export type Event = Message<"jarvis.v1.Event"> & {
  * Use `create(EventSchema)` to create a new message.
  */
 export const EventSchema: GenMessage<Event> = /*@__PURE__*/
-  messageDesc(file_jarvis, 18);
+  messageDesc(file_jarvis, 22);
 
 /**
  * @generated from message jarvis.v1.TimelineSnapshot
@@ -755,7 +885,7 @@ export type TimelineSnapshot = Message<"jarvis.v1.TimelineSnapshot"> & {
  * Use `create(TimelineSnapshotSchema)` to create a new message.
  */
 export const TimelineSnapshotSchema: GenMessage<TimelineSnapshot> = /*@__PURE__*/
-  messageDesc(file_jarvis, 19);
+  messageDesc(file_jarvis, 23);
 
 /**
  * @generated from message jarvis.v1.GetTimelineRequest
@@ -780,7 +910,7 @@ export type GetTimelineRequest = Message<"jarvis.v1.GetTimelineRequest"> & {
  * Use `create(GetTimelineRequestSchema)` to create a new message.
  */
 export const GetTimelineRequestSchema: GenMessage<GetTimelineRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 20);
+  messageDesc(file_jarvis, 24);
 
 /**
  * @generated from message jarvis.v1.TimelineEvent
@@ -836,7 +966,7 @@ export type TimelineEvent = Message<"jarvis.v1.TimelineEvent"> & {
  * Use `create(TimelineEventSchema)` to create a new message.
  */
 export const TimelineEventSchema: GenMessage<TimelineEvent> = /*@__PURE__*/
-  messageDesc(file_jarvis, 21);
+  messageDesc(file_jarvis, 25);
 
 /**
  * @generated from message jarvis.v1.TimelineSpan
@@ -893,7 +1023,7 @@ export type TimelineSpan = Message<"jarvis.v1.TimelineSpan"> & {
  * Use `create(TimelineSpanSchema)` to create a new message.
  */
 export const TimelineSpanSchema: GenMessage<TimelineSpan> = /*@__PURE__*/
-  messageDesc(file_jarvis, 22);
+  messageDesc(file_jarvis, 26);
 
 /**
  * One frame on the StreamFleet stream. The very first frame on a fresh
@@ -936,7 +1066,7 @@ export type FleetFrame = Message<"jarvis.v1.FleetFrame"> & {
  * Use `create(FleetFrameSchema)` to create a new message.
  */
 export const FleetFrameSchema: GenMessage<FleetFrame> = /*@__PURE__*/
-  messageDesc(file_jarvis, 23);
+  messageDesc(file_jarvis, 27);
 
 /**
  * Full state of the fleet at a point in time. Emitted as the first frame
@@ -962,7 +1092,7 @@ export type FleetSnapshot = Message<"jarvis.v1.FleetSnapshot"> & {
  * Use `create(FleetSnapshotSchema)` to create a new message.
  */
 export const FleetSnapshotSchema: GenMessage<FleetSnapshot> = /*@__PURE__*/
-  messageDesc(file_jarvis, 24);
+  messageDesc(file_jarvis, 28);
 
 /**
  * Incremental change since the previous frame. The SPA applies these on
@@ -1006,7 +1136,7 @@ export type FleetDelta = Message<"jarvis.v1.FleetDelta"> & {
  * Use `create(FleetDeltaSchema)` to create a new message.
  */
 export const FleetDeltaSchema: GenMessage<FleetDelta> = /*@__PURE__*/
-  messageDesc(file_jarvis, 25);
+  messageDesc(file_jarvis, 29);
 
 /**
  * @generated from message jarvis.v1.FleetNode
@@ -1090,7 +1220,7 @@ export type FleetNode = Message<"jarvis.v1.FleetNode"> & {
  * Use `create(FleetNodeSchema)` to create a new message.
  */
 export const FleetNodeSchema: GenMessage<FleetNode> = /*@__PURE__*/
-  messageDesc(file_jarvis, 26);
+  messageDesc(file_jarvis, 30);
 
 /**
  * @generated from message jarvis.v1.FleetEdge
@@ -1115,7 +1245,7 @@ export type FleetEdge = Message<"jarvis.v1.FleetEdge"> & {
  * Use `create(FleetEdgeSchema)` to create a new message.
  */
 export const FleetEdgeSchema: GenMessage<FleetEdge> = /*@__PURE__*/
-  messageDesc(file_jarvis, 27);
+  messageDesc(file_jarvis, 31);
 
 /**
  * @generated from message jarvis.v1.CostReport
@@ -1156,7 +1286,7 @@ export type CostReport = Message<"jarvis.v1.CostReport"> & {
  * Use `create(CostReportSchema)` to create a new message.
  */
 export const CostReportSchema: GenMessage<CostReport> = /*@__PURE__*/
-  messageDesc(file_jarvis, 28);
+  messageDesc(file_jarvis, 32);
 
 /**
  * @generated from message jarvis.v1.ModelSpend
@@ -1197,7 +1327,7 @@ export type ModelSpend = Message<"jarvis.v1.ModelSpend"> & {
  * Use `create(ModelSpendSchema)` to create a new message.
  */
 export const ModelSpendSchema: GenMessage<ModelSpend> = /*@__PURE__*/
-  messageDesc(file_jarvis, 29);
+  messageDesc(file_jarvis, 33);
 
 /**
  * @generated from message jarvis.v1.DiffGroupList
@@ -1227,7 +1357,7 @@ export type DiffGroupList = Message<"jarvis.v1.DiffGroupList"> & {
  * Use `create(DiffGroupListSchema)` to create a new message.
  */
 export const DiffGroupListSchema: GenMessage<DiffGroupList> = /*@__PURE__*/
-  messageDesc(file_jarvis, 30);
+  messageDesc(file_jarvis, 34);
 
 /**
  * @generated from message jarvis.v1.DiffGroup
@@ -1274,7 +1404,7 @@ export type DiffGroup = Message<"jarvis.v1.DiffGroup"> & {
  * Use `create(DiffGroupSchema)` to create a new message.
  */
 export const DiffGroupSchema: GenMessage<DiffGroup> = /*@__PURE__*/
-  messageDesc(file_jarvis, 31);
+  messageDesc(file_jarvis, 35);
 
 /**
  * Per-file metadata for a phase's diff. Carries enough for the UI to
@@ -1320,7 +1450,7 @@ export type FileDiff = Message<"jarvis.v1.FileDiff"> & {
  * Use `create(FileDiffSchema)` to create a new message.
  */
 export const FileDiffSchema: GenMessage<FileDiff> = /*@__PURE__*/
-  messageDesc(file_jarvis, 32);
+  messageDesc(file_jarvis, 36);
 
 /**
  * Request a chunk of unified-diff lines for one file in one phase. The
@@ -1368,7 +1498,7 @@ export type GetFileDiffRequest = Message<"jarvis.v1.GetFileDiffRequest"> & {
  * Use `create(GetFileDiffRequestSchema)` to create a new message.
  */
 export const GetFileDiffRequestSchema: GenMessage<GetFileDiffRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 33);
+  messageDesc(file_jarvis, 37);
 
 /**
  * @generated from message jarvis.v1.FileDiffChunkBatch
@@ -1420,7 +1550,7 @@ export type FileDiffChunkBatch = Message<"jarvis.v1.FileDiffChunkBatch"> & {
  * Use `create(FileDiffChunkBatchSchema)` to create a new message.
  */
 export const FileDiffChunkBatchSchema: GenMessage<FileDiffChunkBatch> = /*@__PURE__*/
-  messageDesc(file_jarvis, 34);
+  messageDesc(file_jarvis, 38);
 
 /**
  * @generated from message jarvis.v1.CommitPhaseRequest
@@ -1450,7 +1580,7 @@ export type CommitPhaseRequest = Message<"jarvis.v1.CommitPhaseRequest"> & {
  * Use `create(CommitPhaseRequestSchema)` to create a new message.
  */
 export const CommitPhaseRequestSchema: GenMessage<CommitPhaseRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 35);
+  messageDesc(file_jarvis, 39);
 
 /**
  * @generated from message jarvis.v1.CommitInfo
@@ -1482,7 +1612,7 @@ export type CommitInfo = Message<"jarvis.v1.CommitInfo"> & {
  * Use `create(CommitInfoSchema)` to create a new message.
  */
 export const CommitInfoSchema: GenMessage<CommitInfo> = /*@__PURE__*/
-  messageDesc(file_jarvis, 36);
+  messageDesc(file_jarvis, 40);
 
 /**
  * @generated from message jarvis.v1.Memory
@@ -1557,7 +1687,7 @@ export type Memory = Message<"jarvis.v1.Memory"> & {
  * Use `create(MemorySchema)` to create a new message.
  */
 export const MemorySchema: GenMessage<Memory> = /*@__PURE__*/
-  messageDesc(file_jarvis, 37);
+  messageDesc(file_jarvis, 41);
 
 /**
  * @generated from message jarvis.v1.ListMemoriesRequest
@@ -1593,7 +1723,7 @@ export type ListMemoriesRequest = Message<"jarvis.v1.ListMemoriesRequest"> & {
  * Use `create(ListMemoriesRequestSchema)` to create a new message.
  */
 export const ListMemoriesRequestSchema: GenMessage<ListMemoriesRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 38);
+  messageDesc(file_jarvis, 42);
 
 /**
  * @generated from message jarvis.v1.MemoryList
@@ -1610,7 +1740,7 @@ export type MemoryList = Message<"jarvis.v1.MemoryList"> & {
  * Use `create(MemoryListSchema)` to create a new message.
  */
 export const MemoryListSchema: GenMessage<MemoryList> = /*@__PURE__*/
-  messageDesc(file_jarvis, 39);
+  messageDesc(file_jarvis, 43);
 
 /**
  * @generated from message jarvis.v1.MemoryHandle
@@ -1627,7 +1757,7 @@ export type MemoryHandle = Message<"jarvis.v1.MemoryHandle"> & {
  * Use `create(MemoryHandleSchema)` to create a new message.
  */
 export const MemoryHandleSchema: GenMessage<MemoryHandle> = /*@__PURE__*/
-  messageDesc(file_jarvis, 40);
+  messageDesc(file_jarvis, 44);
 
 /**
  * @generated from message jarvis.v1.PromoteMemoryRequest
@@ -1651,7 +1781,7 @@ export type PromoteMemoryRequest = Message<"jarvis.v1.PromoteMemoryRequest"> & {
  * Use `create(PromoteMemoryRequestSchema)` to create a new message.
  */
 export const PromoteMemoryRequestSchema: GenMessage<PromoteMemoryRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 41);
+  messageDesc(file_jarvis, 45);
 
 /**
  * @generated from message jarvis.v1.EditMemoryRequest
@@ -1688,7 +1818,7 @@ export type EditMemoryRequest = Message<"jarvis.v1.EditMemoryRequest"> & {
  * Use `create(EditMemoryRequestSchema)` to create a new message.
  */
 export const EditMemoryRequestSchema: GenMessage<EditMemoryRequest> = /*@__PURE__*/
-  messageDesc(file_jarvis, 42);
+  messageDesc(file_jarvis, 46);
 
 /**
  * @generated from message jarvis.v1.ScheduleSpec
@@ -1764,7 +1894,7 @@ export type ScheduleSpec = Message<"jarvis.v1.ScheduleSpec"> & {
  * Use `create(ScheduleSpecSchema)` to create a new message.
  */
 export const ScheduleSpecSchema: GenMessage<ScheduleSpec> = /*@__PURE__*/
-  messageDesc(file_jarvis, 43);
+  messageDesc(file_jarvis, 47);
 
 /**
  * @generated from message jarvis.v1.Schedule
@@ -1801,7 +1931,7 @@ export type Schedule = Message<"jarvis.v1.Schedule"> & {
  * Use `create(ScheduleSchema)` to create a new message.
  */
 export const ScheduleSchema: GenMessage<Schedule> = /*@__PURE__*/
-  messageDesc(file_jarvis, 44);
+  messageDesc(file_jarvis, 48);
 
 /**
  * @generated from message jarvis.v1.ScheduleHandle
@@ -1818,7 +1948,7 @@ export type ScheduleHandle = Message<"jarvis.v1.ScheduleHandle"> & {
  * Use `create(ScheduleHandleSchema)` to create a new message.
  */
 export const ScheduleHandleSchema: GenMessage<ScheduleHandle> = /*@__PURE__*/
-  messageDesc(file_jarvis, 45);
+  messageDesc(file_jarvis, 49);
 
 /**
  * @generated from message jarvis.v1.ScheduleList
@@ -1835,7 +1965,7 @@ export type ScheduleList = Message<"jarvis.v1.ScheduleList"> & {
  * Use `create(ScheduleListSchema)` to create a new message.
  */
 export const ScheduleListSchema: GenMessage<ScheduleList> = /*@__PURE__*/
-  messageDesc(file_jarvis, 46);
+  messageDesc(file_jarvis, 50);
 
 /**
  * Jarvis daemon gRPC API.
@@ -2077,6 +2207,36 @@ export const Jarvis: GenService<{
     methodKind: "server_streaming";
     input: typeof WatchWorkdirRequestSchema;
     output: typeof FsEventSchema;
+  },
+  /**
+   * § T2.2 / F2.3 — self-authored skills CRUD. Skills live as Markdown
+   * files under `<workdir>/.jarvis/skills/{candidates,active,forgotten}/`
+   * and are written there by the post-verdict extractor. These RPCs
+   * expose the on-disk state to the SPA so the user can review +
+   * promote candidates without an `mv` from the shell.
+   *
+   * @generated from rpc jarvis.v1.Jarvis.ListSkills
+   */
+  listSkills: {
+    methodKind: "unary";
+    input: typeof ListSkillsRequestSchema;
+    output: typeof SkillListSchema;
+  },
+  /**
+   * @generated from rpc jarvis.v1.Jarvis.PromoteSkill
+   */
+  promoteSkill: {
+    methodKind: "unary";
+    input: typeof SkillHandleSchema;
+    output: typeof EmptySchema;
+  },
+  /**
+   * @generated from rpc jarvis.v1.Jarvis.ForgetSkill
+   */
+  forgetSkill: {
+    methodKind: "unary";
+    input: typeof SkillHandleSchema;
+    output: typeof EmptySchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_jarvis, 0);

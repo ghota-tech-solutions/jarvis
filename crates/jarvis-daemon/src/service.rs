@@ -1762,6 +1762,95 @@ impl Jarvis for JarvisService {
         };
         Ok(Response::new(Box::pin(stream) as Self::WatchWorkdirStream))
     }
+
+    // § T2.2 / F2.3 — Skills curation RPCs.
+    #[instrument(skip_all)]
+    async fn list_skills(
+        &self,
+        request: Request<jarvis_api::ListSkillsRequest>,
+    ) -> std::result::Result<Response<jarvis_api::SkillList>, Status> {
+        let workdir = request.into_inner().workdir;
+        if workdir.is_empty() {
+            return Err(Status::invalid_argument("workdir is empty"));
+        }
+        let to_api =
+            |s: jarvis_agent::skill_extractor::ActiveSkill, status: &str| jarvis_api::Skill {
+                name: s.name,
+                title: s.title,
+                trigger: s.trigger,
+                status: status.to_string(),
+                path: s.path.display().to_string(),
+                body: jarvis_core::clip(&s.body, 32 * 1024).to_string(),
+            };
+        let candidates =
+            jarvis_agent::skill_extractor::load_skills_in_status(&workdir, "candidates")
+                .into_iter()
+                .map(|s| to_api(s, "candidate"))
+                .collect();
+        let active = jarvis_agent::skill_extractor::load_skills_in_status(&workdir, "active")
+            .into_iter()
+            .map(|s| to_api(s, "active"))
+            .collect();
+        let forgotten = jarvis_agent::skill_extractor::load_skills_in_status(&workdir, "forgotten")
+            .into_iter()
+            .map(|s| to_api(s, "forgotten"))
+            .collect();
+        Ok(Response::new(jarvis_api::SkillList {
+            candidates,
+            active,
+            forgotten,
+        }))
+    }
+
+    #[instrument(skip_all)]
+    async fn promote_skill(
+        &self,
+        request: Request<jarvis_api::SkillHandle>,
+    ) -> std::result::Result<Response<Empty>, Status> {
+        let h = request.into_inner();
+        if h.workdir.is_empty() || h.name.is_empty() {
+            return Err(Status::invalid_argument("workdir and name are required"));
+        }
+        jarvis_agent::skill_extractor::move_skill(&h.workdir, &h.name, "candidates", "active")
+            .map_err(|e| Status::not_found(format!("promote: {e}")))?;
+        Ok(Response::new(Empty {}))
+    }
+
+    #[instrument(skip_all)]
+    async fn forget_skill(
+        &self,
+        request: Request<jarvis_api::SkillHandle>,
+    ) -> std::result::Result<Response<Empty>, Status> {
+        let h = request.into_inner();
+        if h.workdir.is_empty() || h.name.is_empty() {
+            return Err(Status::invalid_argument("workdir and name are required"));
+        }
+        // Move to the `forgotten/` archive rather than deleting outright
+        // so the user can recover a dismissed skill by hand if needed.
+        // Source can be either candidates or active.
+        let from = if std::path::Path::new(&h.workdir)
+            .join(".jarvis")
+            .join("skills")
+            .join("active")
+            .join(format!("{}.md", h.name))
+            .exists()
+        {
+            "active"
+        } else {
+            "candidates"
+        };
+        match jarvis_agent::skill_extractor::move_skill(&h.workdir, &h.name, from, "forgotten") {
+            Ok(_) => Ok(Response::new(Empty {})),
+            Err(_) => {
+                // Best-effort: the file might live under a different
+                // filename stem (the skill `name` is in the frontmatter,
+                // not necessarily the filename). Fall back to scanning.
+                jarvis_agent::skill_extractor::delete_skill(&h.workdir, &h.name)
+                    .map_err(|e| Status::not_found(format!("forget: {e}")))?;
+                Ok(Response::new(Empty {}))
+            }
+        }
+    }
 }
 
 fn schedule_to_api(r: &jarvis_ledger::ScheduleRecord) -> ApiSchedule {

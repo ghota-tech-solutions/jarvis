@@ -32,6 +32,8 @@ type Dict = {
     | 'fleet'
     | 'memory'
     | 'schedules'
+    | 'recipes'
+    | 'skills'
     | 'analytics'
     | 'mcp'
     | 'settings',
@@ -103,6 +105,8 @@ export const en: Dict = {
     fleet: 'Fleet',
     memory: 'Memory',
     schedules: 'Schedules',
+    recipes: 'Recipes',
+    skills: 'Skills',
     analytics: 'Analytics',
     mcp: 'MCP',
     settings: 'Settings',
@@ -188,6 +192,8 @@ export const fr: Dict = {
     fleet: 'Flotte',
     memory: 'Mémoire',
     schedules: 'Planifications',
+    recipes: 'Recettes',
+    skills: 'Compétences',
     analytics: 'Analyses',
     mcp: 'MCP',
     settings: 'Paramètres',

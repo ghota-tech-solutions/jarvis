@@ -18,6 +18,7 @@ import Timeline from '~/features/timeline/Timeline';
 import DiffByIntent from '~/features/diff/DiffByIntent';
 import TerminalLogs from '~/components/TerminalLogs';
 import Telemetry from '~/components/Telemetry';
+import WorkdirWatch from '~/features/workdir/WorkdirWatch';
 import AppErrorBoundary from '~/components/ErrorBoundary';
 import { SkeletonList } from '~/components/Skeleton';
 import {
@@ -40,7 +41,9 @@ const Task: Component = () => {
   const [submitting, setSubmitting] = createSignal(false);
   const [view, setView] = createSignal<'timeline' | 'transcript' | 'both' | 'diff'>('both');
   const [selectedEvtId, setSelectedEvtId] = createSignal(0);
-  const [activeTab, setActiveTab] = createSignal<'files' | 'terminal' | 'telemetry'>('files');
+  const [activeTab, setActiveTab] = createSignal<
+    'files' | 'terminal' | 'telemetry' | 'workdir'
+  >('files');
   // § C UX — goal text per task id, populated lazily from getTask so the
   // transcript can label each follow-up turn. The leaf (latest task in
   // the chain) is what new follow-ups attach to.
@@ -373,6 +376,14 @@ const Task: Component = () => {
                     >
                       📊 telemetry
                     </button>
+                    <button
+                      type="button"
+                      class={`workspace-tab ${activeTab() === 'workdir' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('workdir')}
+                      title="Live workdir filesystem events"
+                    >
+                      🛰 workdir
+                    </button>
                   </div>
 
                   <div class="workspace-content">
@@ -384,6 +395,18 @@ const Task: Component = () => {
                     </Show>
                     <Show when={activeTab() === 'telemetry'}>
                       <Telemetry taskId={params.id} />
+                    </Show>
+                    <Show when={activeTab() === 'workdir'}>
+                      <Show
+                        when={taskQ.data?.workdir}
+                        fallback={
+                          <p class="dim" style="font-size: 12px; padding: 1rem">
+                            task workdir not yet available
+                          </p>
+                        }
+                      >
+                        <WorkdirWatch workdir={taskQ.data!.workdir} />
+                      </Show>
                     </Show>
                   </div>
                 </div>
