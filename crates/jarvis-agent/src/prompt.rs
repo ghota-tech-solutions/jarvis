@@ -3,6 +3,7 @@
 use jarvis_core::{ChatMessage, ChatRole, ToolDialect};
 use jarvis_ledger::{EventKind, EventRecord};
 use jarvis_tools::ToolSchema;
+use std::sync::LazyLock;
 
 /// § C.M-B — return the system prompt tailored for a given dialect.
 /// All variants describe the same JSON contract; the differences are
@@ -15,6 +16,9 @@ pub fn system_prompt_for(dialect: ToolDialect) -> &'static str {
         // strict variant because the model is producing JSON-content-text
         // anyway (the special tokens come from the chat template).
         ToolDialect::Gemma4Strict | ToolDialect::Gemma4Native => SYSTEM_PROMPT_GEMMA4_STRICT,
+        ToolDialect::HermesXml => &SYSTEM_PROMPT_HERMES_XML,
+        ToolDialect::LlamaPython => &SYSTEM_PROMPT_LLAMA_PYTHON,
+        ToolDialect::ToolCodeBlock => &SYSTEM_PROMPT_TOOL_CODE_BLOCK,
     }
 }
 
@@ -82,7 +86,7 @@ grep` floods your context with noise and is platform-specific.
 **Verification hooks (post-tool).**
 After tools like `apply_patch` or `fs_write`, the daemon may auto-run
 project-configured hooks (e.g. `cargo check`). Their output arrives as an
-observation with `tool: "hook:<label>"`. If a hook reports `exit != 0`
+observation with `tool: "hook:<phase>:<label>"` (phase ∈ `pre`/`post`/`on_error`). If a hook reports `exit != 0`
 or any error in stderr, treat it as a HARD signal that your last edit
 broke something — fix it before continuing. Do not declare `done` while
 a hook is failing.
@@ -207,7 +211,7 @@ Both automatically skip `.gitignore`'d paths, hidden dirs, and binary files.
 **Verification hooks (post-tool).**
 After tools like `apply_patch` or `fs_write`, the daemon may auto-run
 project-configured hooks (e.g. `cargo check`). Their output arrives as an
-observation with `tool: "hook:<label>"`. If a hook reports `exit != 0` or
+observation with `tool: "hook:<phase>:<label>"` (phase ∈ `pre`/`post`/`on_error`). If a hook reports `exit != 0` or
 any error in stderr, treat it as a HARD signal that your last edit broke
 something — fix it before continuing. Do not declare `done` while a hook
 is failing.
@@ -231,6 +235,214 @@ your prompt as a system message — you do NOT need to restate the plan in
 REMEMBER: ONE JSON object per reply. Nothing outside the JSON. EVER.
 "##;
 
+/// § T1.8 — shared body for the non-JSON dialect prompts.
+///
+/// Holds the platform / verification / planning / rules sections used by the
+/// non-JSON dialect prompts. Composed into each dialect prompt via `format!()`
+/// so each variant keeps its envelope-specific header + footer.
+pub const COMMON_DIALECT_SECTIONS: &str = r#"# Decide before you act
+First, ask yourself: does this goal actually require touching the file
+system or running shell commands?
+
+- **Informational / general-knowledge questions** ("What is …", "Explain
+  …", "How would you …", a request for weather, news, travel advice,
+  trivia, code that doesn't reference any file in the workdir): answer
+  directly from your training knowledge. Emit the "done" envelope on the
+  FIRST turn. Do NOT call any tool. The workdir is irrelevant to these
+  questions — scanning it is wasted work.
+
+- **Workdir tasks** ("read X", "edit Y", "run the tests", "what's in
+  this repo", anything that names a file/dir/command in this project):
+  use tools. Read before you write. Prefer small, verifiable steps.
+
+If you are unsure, default to answering directly. The user can always ask
+a follow-up that explicitly says "look at the files" or "run that command",
+and then you switch into tool mode.
+
+# Platform awareness
+The workdir lives on the host where the daemon runs; treat the OS as
+unknown unless told otherwise. On Windows, `ls` is not a built-in — use
+`dir`. On Unix-like systems, `dir` and `ls` are both available. When you
+hit "command not recognised", try the equivalent of the OTHER platform
+before assuming the goal is impossible.
+
+**Reading file content: ALWAYS use `fs_read`, never shell.**
+On Windows specifically, `powershell Get-Content`, `type`, and `cat`
+corrupt UTF-8 files via the system ANSI codepage (CP1252). `fs_read`
+reads bytes directly through Rust's UTF-8 decoder and is safe.
+
+**Searching: use `grep` and `glob`, not shell.**
+Both automatically skip `.gitignore`'d paths, hidden dirs, and binary files.
+
+**Verification hooks (lifecycle).**
+The daemon may auto-run project-configured hooks around tool invocations
+(e.g. `cargo check` post `apply_patch`). Their output arrives as an
+observation with `tool: "hook:<phase>:<label>"` (phase ∈ `pre`/`post`/
+`on_error`). If a hook reports `exit != 0` or any error in stderr, treat
+it as a HARD signal that your last edit broke something — fix it before
+continuing. Do not declare done while a hook is failing.
+
+**Multi-step work: use `update_plan`.**
+For tasks with > 2 distinct steps, call `update_plan` at the start with
+the plan, then again to advance status as you finish each step. The
+harness renders the plan in the sidebar and pins the current state to
+your prompt as a system message — you do NOT need to restate the plan in
+`thought` or `message`. At most ONE step `in_progress` at any time.
+
+# Rules
+- Take ONE action per turn. Wait for the observation before deciding the next step.
+- Stay inside the workdir. Never read/write paths above it.
+- Prefer small, verifiable steps.
+- For **edits**, prefer `apply_patch` over `fs_write` for cheaper diffs.
+- When the goal is achieved, finalize with a "done" envelope carrying the summary.
+- When the goal is impossible or unsafe, finalize with a "fail" envelope carrying the reason.
+- Available tools and their JSON-schema args are listed below.
+"#;
+
+/// § T1.8 — Hermes / Qwen 2.5/3 / Mistral fine-tune XML dialect.
+///
+/// The model wraps a JSON tool call in `<tool_call>...</tool_call>`. The
+/// preprocessor (`rewrite_hermes_xml`) translates it into the universal
+/// JSON envelope before the parser sees it.
+pub static SYSTEM_PROMPT_HERMES_XML: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "{header}{common}{footer}",
+        header = HERMES_XML_HEADER,
+        common = COMMON_DIALECT_SECTIONS,
+        footer = "\nREMEMBER: ONE <tool_call> envelope per reply. Nothing outside the envelope.\n",
+    )
+});
+
+const HERMES_XML_HEADER: &str = r#"You are Jarvis, an autonomous coding agent. You operate by emitting ONE structured action per turn.
+
+# Output format — Hermes / Qwen XML
+
+To call a tool, reply with EXACTLY ONE `<tool_call>` envelope wrapping a JSON object:
+
+<tool_call>
+{"name": "<tool name>", "arguments": { ... }}
+</tool_call>
+
+No prose outside the envelope. The JSON object inside MUST have a `name`
+field and an `arguments` object (use `{}` when the tool takes no args).
+
+To finalize, reply with EXACTLY ONE `<tool_call>` envelope where `name` is
+`done` (or `fail`) and `arguments` carries the user-facing summary:
+
+<tool_call>
+{"name": "done", "arguments": {"message": "<final answer in markdown>"}}
+</tool_call>
+
+The `message` field accepts markdown (bullets, headers, `code`); JSON
+strings need real newlines escaped as `\n`.
+
+Examples (copy the SHAPE, not the contents):
+
+<tool_call>
+{"name": "fs_read", "arguments": {"path": "src/main.rs"}}
+</tool_call>
+
+<tool_call>
+{"name": "done", "arguments": {"message": "Added a paragraph to README §API. File: README.md lines 42-48."}}
+</tool_call>
+
+"#;
+
+/// § T1.8 — Llama 3.1+ python-tag dialect.
+///
+/// The model emits `<|python_tag|>fn(args)<|eom_id|>`. The preprocessor
+/// (`rewrite_llama_python`) translates it into the universal JSON envelope.
+pub static SYSTEM_PROMPT_LLAMA_PYTHON: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "{header}{common}{footer}",
+        header = LLAMA_PYTHON_HEADER,
+        common = COMMON_DIALECT_SECTIONS,
+        footer =
+            "\nREMEMBER: ONE <|python_tag|> envelope per reply. Nothing outside the envelope.\n",
+    )
+});
+
+const LLAMA_PYTHON_HEADER: &str = r#"You are Jarvis, an autonomous coding agent. You operate by emitting ONE structured action per turn.
+
+# Output format — Llama python-tag
+
+To call a tool, reply with EXACTLY ONE `<|python_tag|>` envelope wrapping a
+Python-style call expression and terminated by `<|eom_id|>`:
+
+<|python_tag|>fn_name(arg1="value", arg2=42, flag=true)<|eom_id|>
+
+No prose outside the envelope. Argument values use Python literals:
+strings in double or single quotes, integers, floats, `true` / `false`,
+`None`. The function name is the tool name.
+
+To finalize, call the special tool `done` (or `fail`) with the user-facing
+summary as the `message` argument:
+
+<|python_tag|>done(message="Added a paragraph to README §API. File: README.md lines 42-48.")<|eom_id|>
+
+The `message` value accepts markdown (bullets, headers, `code`); use `\n`
+inside the quoted string for newlines.
+
+Examples (copy the SHAPE, not the contents):
+
+<|python_tag|>fs_read(path="src/main.rs")<|eom_id|>
+<|python_tag|>done(message="All tests pass: cargo test reports 47 passed, 0 failed.")<|eom_id|>
+
+"#;
+
+/// § T1.8 — Generic tool_code fenced-block dialect.
+///
+/// The model emits a fenced code block tagged `tool_code` (preferred) or
+/// `python` (accepted as a fallback when the body is a call expression).
+/// The preprocessor (`rewrite_tool_code_block`) translates it into the
+/// universal JSON envelope.
+pub static SYSTEM_PROMPT_TOOL_CODE_BLOCK: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "{header}{common}{footer}",
+        header = TOOL_CODE_BLOCK_HEADER,
+        common = COMMON_DIALECT_SECTIONS,
+        footer =
+            "\nREMEMBER: ONE ```tool_code fenced block per reply. Nothing outside the fence.\n",
+    )
+});
+
+const TOOL_CODE_BLOCK_HEADER: &str = r#"You are Jarvis, an autonomous coding agent. You operate by emitting ONE structured action per turn.
+
+# Output format — tool_code fenced block
+
+To call a tool, reply with EXACTLY ONE fenced code block tagged `tool_code`
+wrapping a Python-style call expression:
+
+```tool_code
+fn_name(arg1="value", arg2=42, flag=true)
+```
+
+No prose outside the fence. Argument values use Python literals: strings in
+double or single quotes, integers, floats, `true` / `false`, `None`. The
+function name is the tool name.
+
+To finalize, call the special tool `done` (or `fail`) with the user-facing
+summary as the `message` argument:
+
+```tool_code
+done(message="Added a paragraph to README §API. File: README.md lines 42-48.")
+```
+
+The `message` value accepts markdown (bullets, headers, `code`); use `\n`
+inside the quoted string for newlines.
+
+Examples (copy the SHAPE, not the contents):
+
+```tool_code
+fs_read(path="src/main.rs")
+```
+
+```tool_code
+done(message="All tests pass: cargo test reports 47 passed, 0 failed.")
+```
+
+"#;
+
 fn estimate_tokens(s: &str) -> usize {
     s.len() / 3
 }
@@ -246,6 +458,7 @@ pub fn build_messages(
     ancestor_goals: &[String],
     thinking: bool,
     ctx_len: u32,
+    lazy_tool_catalog: bool,
 ) -> Vec<ChatMessage> {
     // Dynamic sliding window context budget: limit overall context to 80% of Picked Model's capacity
     let budget = (ctx_len as usize * 80) / 100;
@@ -256,7 +469,11 @@ pub fn build_messages(
         system_prompt_for(dialect).to_string()
     };
 
-    let catalog = render_tool_catalog(tools);
+    let catalog = if lazy_tool_catalog {
+        render_tool_catalog_compact(tools)
+    } else {
+        render_tool_catalog(tools)
+    };
 
     let agents_md = try_load_agents_md(workdir).unwrap_or_default();
 
@@ -445,6 +662,34 @@ fn render_tool_catalog(tools: &[ToolSchema]) -> String {
     s
 }
 
+/// § T1.3 — compact catalog: only names + descriptions, no full JSON schemas.
+/// The agent must call `search_tools(query)` to retrieve the full args schema
+/// of any tool it wants to invoke. Trades ~3–5 k tokens / turn against one
+/// extra round-trip on first use of an unfamiliar tool. Always renders
+/// `search_tools` itself in full so the model knows how to query.
+fn render_tool_catalog_compact(tools: &[ToolSchema]) -> String {
+    let mut s = String::from(
+        "# Available tools (compact catalog)\n\n\
+         Only tool names + descriptions are shown below. To learn the full \
+         JSON-schema `args` of any tool, call `search_tools(query=\"<name or \
+         keyword>\")` — it returns the matching schemas you need to invoke \
+         the tool correctly.\n\n",
+    );
+    for t in tools {
+        if t.name == "search_tools" {
+            // Always render `search_tools` in full so the model can call it
+            // without a chicken-and-egg search.
+            s.push_str(&format!("## {}\n{}\n", t.name, t.description));
+            s.push_str("args schema:\n```json\n");
+            s.push_str(&serde_json::to_string_pretty(&t.args_schema).unwrap_or_default());
+            s.push_str("\n```\n\n");
+        } else {
+            s.push_str(&format!("- **{}** — {}\n", t.name, t.description));
+        }
+    }
+    s
+}
+
 /// Render a past decision for the conversation history.
 ///
 /// § C.M-E — the Gemma 4 model card is explicit: "in multi-turn
@@ -545,39 +790,153 @@ fn render_memories(memories: &[jarvis_ledger::MemoryRecord]) -> Option<String> {
     Some(out)
 }
 
-/// Cap on the AGENTS.md-style guidance file we inject as a system message.
-/// 8 KB is enough for a dense conventions doc (tooling preferences, code style,
-/// test commands, no-go zones) without rotting the model's context budget.
+/// Cap on the AGENTS.md-style guidance we inject as a system message.
+/// 8 KB total budget across the whole cascade (repo root → workdir).
 const AGENTS_MD_MAX_BYTES: usize = 8 * 1024;
 
-/// Filenames we'll auto-load from the workdir root, in priority order. First
-/// match wins — we never stack two (would double-bill the token budget).
-const AGENTS_MD_FILENAMES: &[&str] = &[
-    "AGENTS.md",
-    "CLAUDE.md",
-    ".claude/CLAUDE.md",
-    ".cursor/rules",
-];
+/// Fallback filenames checked at the workdir level when no `AGENTS.md` exists
+/// anywhere in the cascade. Order matters: first match wins.
+const AGENTS_MD_FALLBACK_FILENAMES: &[&str] = &["CLAUDE.md", ".claude/CLAUDE.md", ".cursor/rules"];
 
-pub fn try_load_agents_md(workdir: &str) -> Option<String> {
-    let root = std::path::Path::new(workdir);
-    for name in AGENTS_MD_FILENAMES {
-        let p = root.join(name);
-        if let Ok(mut content) = std::fs::read_to_string(&p) {
-            let truncated = content.len() > AGENTS_MD_MAX_BYTES;
-            if truncated {
-                content.truncate(AGENTS_MD_MAX_BYTES);
-                while !content.is_char_boundary(content.len()) {
-                    content.pop();
-                }
-                content.push_str("\n…[truncated to 8 KB]");
-            }
-            return Some(format!(
-                "# Project guidance loaded from `{name}` (workdir-level conventions — follow these unless the goal says otherwise)\n\n{content}",
-            ));
+/// Walk parents from `start` upward looking for a `.git` entry. Returns the
+/// first directory that contains one, or `None` if the walk exits the
+/// filesystem without finding a repo.
+fn find_repo_root(start: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut current = start.to_path_buf();
+    loop {
+        if current.join(".git").exists() {
+            return Some(current);
+        }
+        if !current.pop() {
+            return None;
         }
     }
-    None
+}
+
+/// Build the cascade path: every directory from `repo_root` down to `workdir`
+/// inclusive. When `workdir` is not under `repo_root` (or there is no repo),
+/// the cascade reduces to `[workdir]`.
+fn cascade_dirs(repo_root: &std::path::Path, workdir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut dirs = vec![repo_root.to_path_buf()];
+    if let Ok(rel) = workdir.strip_prefix(repo_root) {
+        let mut p = repo_root.to_path_buf();
+        for comp in rel.components() {
+            p.push(comp);
+            // Deduplicate: when workdir == repo_root, `rel` is empty and we
+            // never enter the loop. When it differs, every push yields a
+            // distinct directory.
+            dirs.push(p.clone());
+        }
+    } else if workdir != repo_root {
+        dirs.push(workdir.to_path_buf());
+    }
+    dirs
+}
+
+/// § T1.1 — load AGENTS.md hierarchically (repo root → subdirs → workdir) and
+/// concatenate the chain into a single system message, capped at
+/// [`AGENTS_MD_MAX_BYTES`]. Later (more specific) sections appear last so
+/// they take precedence in the model's read order.
+///
+/// Behaviour:
+/// - Walks up from `workdir` to locate the git repo root (`.git/`). When the
+///   workdir is not in a repo, the workdir itself is the only level.
+/// - At each level, looks for `AGENTS.md`. Each hit becomes a section
+///   labelled by its repo-relative path.
+/// - If the cascade is empty, falls back to `CLAUDE.md`,
+///   `.claude/CLAUDE.md`, `.cursor/rules` at the workdir level only — the
+///   pre-existing single-file behaviour for projects that haven't adopted
+///   AGENTS.md yet.
+/// - Total output is capped at 8 KB. Sections are truncated in order; once
+///   the budget runs out, subsequent (more specific) sections are skipped
+///   with an explicit notice.
+pub fn try_load_agents_md(workdir: &str) -> Option<String> {
+    let workdir_path = std::path::Path::new(workdir);
+    let repo_root = find_repo_root(workdir_path).unwrap_or_else(|| workdir_path.to_path_buf());
+
+    let dirs = cascade_dirs(&repo_root, workdir_path);
+    let mut sections: Vec<(String, String)> = Vec::new();
+    for dir in &dirs {
+        let candidate = dir.join("AGENTS.md");
+        if let Ok(content) = std::fs::read_to_string(&candidate) {
+            let label = candidate
+                .strip_prefix(&repo_root)
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| candidate.display().to_string());
+            // Normalize separators for stable rendering across platforms.
+            let label = label.replace('\\', "/");
+            sections.push((label, content));
+        }
+    }
+
+    if sections.is_empty() {
+        for name in AGENTS_MD_FALLBACK_FILENAMES {
+            let p = workdir_path.join(name);
+            if let Ok(content) = std::fs::read_to_string(&p) {
+                sections.push(((*name).to_string(), content));
+                break;
+            }
+        }
+    }
+
+    if sections.is_empty() {
+        return None;
+    }
+
+    let header = if sections.len() == 1 {
+        format!(
+            "# Project guidance loaded from `{}` (follow these unless the goal says otherwise)\n\n",
+            sections[0].0
+        )
+    } else {
+        String::from(
+            "# Project guidance (AGENTS.md cascade — repo root to most specific; later sections override earlier ones)\n\n",
+        )
+    };
+    let mut out = header;
+    let mut remaining = AGENTS_MD_MAX_BYTES.saturating_sub(out.len());
+    let total_sections = sections.len();
+    let mut emitted = 0usize;
+    for (label, content) in sections.into_iter() {
+        let section_header = if total_sections == 1 {
+            String::new()
+        } else {
+            format!("\n## `{label}`\n\n")
+        };
+        // Need room for the header plus a meaningful body slice; otherwise
+        // bail out — the remaining sections won't fit either.
+        if remaining <= section_header.len() + 64 {
+            break;
+        }
+        out.push_str(&section_header);
+        remaining = remaining.saturating_sub(section_header.len());
+
+        if content.len() <= remaining {
+            out.push_str(&content);
+            remaining = remaining.saturating_sub(content.len());
+            if !out.ends_with('\n') {
+                out.push('\n');
+                remaining = remaining.saturating_sub(1);
+            }
+        } else {
+            let mut clipped_end = remaining;
+            while clipped_end > 0 && !content.is_char_boundary(clipped_end) {
+                clipped_end -= 1;
+            }
+            out.push_str(&content[..clipped_end]);
+            out.push_str("\n…[truncated to 8 KB]");
+            remaining = 0;
+        }
+        emitted += 1;
+    }
+    if emitted < total_sections {
+        out.push_str(&format!(
+            "\n…[skipped {} more section(s) — over 8 KB budget]\n",
+            total_sections - emitted
+        ));
+    }
+
+    Some(out)
 }
 
 fn render_continuation(ev: &EventRecord) -> String {
@@ -640,6 +999,99 @@ mod tests {
         assert!(try_load_agents_md(&dir.path().display().to_string()).is_none());
     }
 
+    // § T1.1 — AGENTS.md hierarchical cascade tests.
+
+    #[test]
+    fn agents_md_cascade_combines_repo_and_subdir() {
+        // Repo layout:
+        //   <root>/.git/
+        //   <root>/AGENTS.md         ← repo-wide conventions
+        //   <root>/crates/foo/
+        //   <root>/crates/foo/AGENTS.md   ← crate-specific conventions
+        // Workdir = <root>/crates/foo. Both sections must appear, in cascade
+        // order (root first, most-specific last).
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        std::fs::write(
+            root.join("AGENTS.md"),
+            "Always run `cargo fmt` before commit.\n",
+        )
+        .unwrap();
+        let subdir = root.join("crates").join("foo");
+        std::fs::create_dir_all(&subdir).unwrap();
+        std::fs::write(subdir.join("AGENTS.md"), "This crate forbids `unwrap()`.\n").unwrap();
+
+        let got = try_load_agents_md(&subdir.display().to_string()).unwrap();
+        // Cascade header is used when more than one section is present.
+        assert!(got.contains("AGENTS.md cascade"), "got: {got}");
+        // Both labels appear, with the deeper one labelled relative to repo.
+        assert!(got.contains("`AGENTS.md`"), "got: {got}");
+        assert!(got.contains("crates/foo/AGENTS.md"), "got: {got}");
+        // Both bodies are present.
+        assert!(got.contains("cargo fmt"));
+        assert!(got.contains("forbids `unwrap()`"));
+        // Root section appears before the subdir section (so the more
+        // specific guidance is read last and takes precedence).
+        let root_pos = got.find("Always run").unwrap();
+        let sub_pos = got.find("forbids").unwrap();
+        assert!(root_pos < sub_pos, "root must precede subdir in cascade");
+    }
+
+    #[test]
+    fn agents_md_cascade_single_repo_level_keeps_single_header() {
+        // Only one AGENTS.md exists in the cascade → behaves like the
+        // workdir-level case: the single-section header is used, not the
+        // cascade header.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        let subdir = root.join("crates").join("foo");
+        std::fs::create_dir_all(&subdir).unwrap();
+        std::fs::write(root.join("AGENTS.md"), "Top-level rule.\n").unwrap();
+
+        let got = try_load_agents_md(&subdir.display().to_string()).unwrap();
+        assert!(got.starts_with("# Project guidance loaded from `AGENTS.md`"));
+        assert!(!got.contains("cascade"));
+        assert!(got.contains("Top-level rule"));
+    }
+
+    #[test]
+    fn agents_md_cascade_skips_sections_over_budget() {
+        // Two AGENTS.md, the first one alone consumes the entire 8 KB
+        // budget → the second one is reported as skipped, not silently
+        // dropped.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        std::fs::write(root.join("AGENTS.md"), "x".repeat(20 * 1024)).unwrap();
+        let subdir = root.join("sub");
+        std::fs::create_dir_all(&subdir).unwrap();
+        std::fs::write(subdir.join("AGENTS.md"), "This will be skipped.\n").unwrap();
+
+        let got = try_load_agents_md(&subdir.display().to_string()).unwrap();
+        assert!(got.contains("[truncated to 8 KB]"));
+        assert!(got.contains("skipped 1 more section"));
+        assert!(!got.contains("This will be skipped"));
+    }
+
+    #[test]
+    fn agents_md_workdir_only_no_repo() {
+        // Only an AGENTS.md at the workdir level. The label may be
+        // `AGENTS.md` (no `.git` in any ancestor of the tempdir) or a
+        // relative path under whatever ancestor `.git` happens to exist on
+        // the host — either way, exactly one section is rendered and its
+        // body shows up.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("AGENTS.md"), "Workdir-only rule.\n").unwrap();
+        let got = try_load_agents_md(&dir.path().display().to_string()).unwrap();
+        assert!(got.contains("AGENTS.md"));
+        assert!(got.contains("Workdir-only rule"));
+        // Single section → no cascade banner and no skip notice.
+        assert!(!got.contains("AGENTS.md cascade"));
+        assert!(!got.contains("skipped"));
+    }
+
     // § C.M-B — dialect prompt selection tests.
 
     #[test]
@@ -680,5 +1132,58 @@ mod tests {
             system_prompt_for(ToolDialect::Gemma4Native),
             SYSTEM_PROMPT_GEMMA4_STRICT
         );
+    }
+
+    // § T1.8 — open-weights dialect prompt selection.
+
+    #[test]
+    fn system_prompt_for_hermes_xml_returns_hermes_prompt() {
+        assert_eq!(
+            system_prompt_for(ToolDialect::HermesXml),
+            SYSTEM_PROMPT_HERMES_XML.as_str()
+        );
+    }
+
+    #[test]
+    fn system_prompt_for_llama_python_returns_llama_prompt() {
+        assert_eq!(
+            system_prompt_for(ToolDialect::LlamaPython),
+            SYSTEM_PROMPT_LLAMA_PYTHON.as_str()
+        );
+    }
+
+    #[test]
+    fn system_prompt_for_tool_code_block_returns_tool_code_prompt() {
+        assert_eq!(
+            system_prompt_for(ToolDialect::ToolCodeBlock),
+            SYSTEM_PROMPT_TOOL_CODE_BLOCK.as_str()
+        );
+    }
+
+    #[test]
+    fn open_weights_prompts_carry_format_specific_markers() {
+        // Each prompt MUST describe the envelope the corresponding
+        // rewriter recognises — otherwise the model is briefed for one
+        // dialect and parsed as another.
+        assert!(SYSTEM_PROMPT_HERMES_XML.contains("<tool_call>"));
+        assert!(SYSTEM_PROMPT_HERMES_XML.contains("</tool_call>"));
+        assert!(SYSTEM_PROMPT_LLAMA_PYTHON.contains("<|python_tag|>"));
+        assert!(SYSTEM_PROMPT_LLAMA_PYTHON.contains("<|eom_id|>"));
+        assert!(SYSTEM_PROMPT_TOOL_CODE_BLOCK.contains("```tool_code"));
+    }
+
+    #[test]
+    fn open_weights_prompts_share_common_sections() {
+        // All three reuse the shared body so the operational guidance
+        // (planning, verification hooks, platform awareness) stays in sync.
+        for p in [
+            SYSTEM_PROMPT_HERMES_XML.as_str(),
+            SYSTEM_PROMPT_LLAMA_PYTHON.as_str(),
+            SYSTEM_PROMPT_TOOL_CODE_BLOCK.as_str(),
+        ] {
+            assert!(p.contains("# Decide before you act"));
+            assert!(p.contains("# Platform awareness"));
+            assert!(p.contains("update_plan"));
+        }
     }
 }

@@ -327,6 +327,339 @@ fn split_top_level_commas(body: &str) -> Vec<&str> {
     out
 }
 
+/// § T1.8 — Hermes / Qwen / Mistral XML-wrapped JSON envelope.
+///
+/// The model emits:
+/// ```text
+/// <tool_call>{"name":"get_weather","arguments":{"location":"London"}}</tool_call>
+/// ```
+///
+/// Variants accepted: `<tool_call>`, `<|tool_call|>` and trivial whitespace
+/// drift around the JSON payload. Returns `None` when the envelope is absent
+/// or when the inner payload is not valid JSON / does not carry `name`.
+pub fn rewrite_hermes_xml(raw: &str) -> Option<String> {
+    // Find an opening marker. We scan for `tool_call` then walk back/forward
+    // for the surrounding angle bracket so we accept both `<tool_call>` and
+    // `<|tool_call|>`.
+    let (after_open_idx, _open_end) = find_hermes_open(raw)?;
+    let rest = &raw[after_open_idx..];
+    // Closing marker: `</tool_call>` or `<|/tool_call|>` or `<tool_call|>`.
+    let close_rel = find_hermes_close(rest)?;
+    let inner = rest[..close_rel].trim();
+    // The inner payload is a JSON object — extract the first balanced one.
+    let json_slice = extract_json(inner)?;
+    let parsed: Json = serde_json::from_str(json_slice).ok()?;
+    let obj = parsed.as_object()?;
+    let name = obj.get("name").and_then(|v| v.as_str())?.trim();
+    if name.is_empty() {
+        return None;
+    }
+    let args = obj
+        .get("arguments")
+        .cloned()
+        .or_else(|| obj.get("args").cloned())
+        .unwrap_or_else(|| Json::Object(serde_json::Map::new()));
+    let rewritten = serde_json::json!({
+        "action": "call_tool",
+        "tool": name,
+        "args": args,
+    });
+    Some(rewritten.to_string())
+}
+
+/// Locate a Hermes opening tag (`<tool_call>` or `<|tool_call|>`).
+/// Returns the byte index just past the closing `>` of the opener and the
+/// byte index just past the opener itself (same value, exposed for symmetry).
+fn find_hermes_open(raw: &str) -> Option<(usize, usize)> {
+    let key = raw.find("tool_call")?;
+    // Walk backwards to find the `<` that introduces the tag, accepting
+    // up to a single `|` between `<` and `tool_call`.
+    let before = &raw[..key];
+    let lt = before.rfind('<')?;
+    let between = &raw[lt + 1..key];
+    if !between.is_empty() && between != "|" {
+        return None;
+    }
+    // Walk forward from `key` to the closing `>`.
+    let after = &raw[key + "tool_call".len()..];
+    let gt_rel = after.find('>')?;
+    let middle = &after[..gt_rel];
+    // Accept `>`, `|>` ; reject any other inner chars (this would mean we
+    // tripped over a closing tag instead).
+    if !middle.is_empty() && middle != "|" {
+        return None;
+    }
+    let end = key + "tool_call".len() + gt_rel + 1;
+    Some((end, end))
+}
+
+/// Locate the closing Hermes tag and return its relative byte offset.
+fn find_hermes_close(rest: &str) -> Option<usize> {
+    // Look for `</tool_call>`, `<|/tool_call|>`, `<tool_call|>` (some
+    // models drop the `/`), in that order of preference.
+    let candidates = ["</tool_call>", "<|/tool_call|>", "<tool_call|>"];
+    candidates.iter().filter_map(|tag| rest.find(tag)).min()
+}
+
+/// § T1.8 — Llama 3.1+ python-tag envelope.
+///
+/// The model emits:
+/// ```text
+/// <|python_tag|>fn_name(arg1="value", arg2=42, arg3=true)<|eom_id|>
+/// ```
+///
+/// `<|eom_id|>` may be absent (some backends strip it as a stop token); we
+/// accept that and read to end of string. Returns `None` when the opener is
+/// missing or when the body does not parse as a call expression.
+pub fn rewrite_llama_python(raw: &str) -> Option<String> {
+    let start = raw.find("<|python_tag|>")? + "<|python_tag|>".len();
+    let after = &raw[start..];
+    let end = after
+        .find("<|eom_id|>")
+        .or_else(|| after.find("<|eot_id|>"))
+        .unwrap_or(after.len());
+    let body = after[..end].trim();
+    parse_python_call(body).map(|v| v.to_string())
+}
+
+/// § T1.8 — generic ` ```tool_code ` / ` ```python ` fenced tool call.
+///
+/// `tool_code` is the preferred marker. `python` is accepted as a fallback
+/// only when the fenced body actually looks like a function call (contains
+/// `(` and `)`), to avoid swallowing real code samples.
+pub fn rewrite_tool_code_block(raw: &str) -> Option<String> {
+    // Prefer the `tool_code` marker; only fall back to `python` when present.
+    let (body, _strict) = extract_fenced_body(raw, "tool_code")
+        .map(|b| (b, true))
+        .or_else(|| extract_fenced_body(raw, "python").map(|b| (b, false)))?;
+    let body = body.trim();
+    if body.is_empty() {
+        return None;
+    }
+    // For `python` blocks (fallback), require call shape so we don't grab
+    // an arbitrary script the model included as documentation.
+    if !body.contains('(') || !body.contains(')') {
+        return None;
+    }
+    parse_python_call(body).map(|v| v.to_string())
+}
+
+/// Extract the body of a ` ```<marker> ... ``` ` fenced block.
+/// Returns `None` if no such block exists.
+fn extract_fenced_body<'a>(raw: &'a str, marker: &str) -> Option<&'a str> {
+    let needle_owned = format!("```{marker}");
+    let start = raw.find(needle_owned.as_str())?;
+    let after = &raw[start + needle_owned.len()..];
+    // Skip an optional newline after the marker.
+    let after = after
+        .strip_prefix("\r\n")
+        .or_else(|| after.strip_prefix('\n'))
+        .unwrap_or(after);
+    let end = after.find("```")?;
+    Some(&after[..end])
+}
+
+/// Parse a Python-style function call `fn(arg1="value", arg2=42, flag=true)`
+/// into the JSON envelope `{"action":"call_tool","tool":fn,"args":{...}}`.
+fn parse_python_call(body: &str) -> Option<Json> {
+    let body = body.trim();
+    let paren = body.find('(')?;
+    let name = body[..paren].trim();
+    if name.is_empty() || !is_ident(name) {
+        return None;
+    }
+    // Find the matching closing paren — we expect the call to end the body.
+    let after_open = &body[paren + 1..];
+    let close = find_matching_paren(after_open)?;
+    let args_src = &after_open[..close];
+
+    let mut args = serde_json::Map::new();
+    if !args_src.trim().is_empty() {
+        for piece in split_python_args(args_src) {
+            let piece = piece.trim();
+            if piece.is_empty() {
+                continue;
+            }
+            let eq = piece.find('=')?;
+            let key = piece[..eq].trim();
+            if key.is_empty() || !is_ident(key) {
+                return None;
+            }
+            let value_src = piece[eq + 1..].trim();
+            let value = parse_python_literal(value_src)?;
+            args.insert(key.to_string(), value);
+        }
+    }
+
+    Some(serde_json::json!({
+        "action": "call_tool",
+        "tool": name,
+        "args": Json::Object(args),
+    }))
+}
+
+fn is_ident(s: &str) -> bool {
+    let mut chars = s.chars();
+    let first = match chars.next() {
+        Some(c) => c,
+        None => return false,
+    };
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Return the byte index (within `s`) of the `)` that matches an implicit
+/// opening `(` placed *before* `s`. Respects nested parens, square brackets,
+/// curly braces, and string literals (single or double quotes, with backslash
+/// escapes).
+fn find_matching_paren(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut depth = 0i32;
+    let mut bracket = 0i32;
+    let mut brace = 0i32;
+    let mut quote: Option<u8> = None;
+    let mut escape = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        if let Some(q) = quote {
+            if escape {
+                escape = false;
+                continue;
+            }
+            match b {
+                b'\\' => escape = true,
+                x if x == q => quote = None,
+                _ => {}
+            }
+            continue;
+        }
+        match b {
+            b'"' | b'\'' => quote = Some(b),
+            b'(' => depth += 1,
+            b'[' => bracket += 1,
+            b']' => bracket -= 1,
+            b'{' => brace += 1,
+            b'}' => brace -= 1,
+            b')' => {
+                if depth == 0 && bracket == 0 && brace == 0 {
+                    return Some(i);
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Split a Python argument list on top-level commas, respecting quoted
+/// strings and nested brackets / braces / parens.
+fn split_python_args(body: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let bytes = body.as_bytes();
+    let mut depth = 0i32;
+    let mut bracket = 0i32;
+    let mut brace = 0i32;
+    let mut quote: Option<u8> = None;
+    let mut escape = false;
+    let mut start = 0usize;
+    for (i, &b) in bytes.iter().enumerate() {
+        if let Some(q) = quote {
+            if escape {
+                escape = false;
+                continue;
+            }
+            match b {
+                b'\\' => escape = true,
+                x if x == q => quote = None,
+                _ => {}
+            }
+            continue;
+        }
+        match b {
+            b'"' | b'\'' => quote = Some(b),
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            b'[' => bracket += 1,
+            b']' => bracket -= 1,
+            b'{' => brace += 1,
+            b'}' => brace -= 1,
+            b',' if depth == 0 && bracket == 0 && brace == 0 => {
+                out.push(&body[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(&body[start..]);
+    out
+}
+
+/// Parse a single Python literal: quoted string, integer, float, bool, None.
+/// Falls back to a JSON string when the value is not otherwise recognised.
+fn parse_python_literal(s: &str) -> Option<Json> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    // String literals: `"..."` or `'...'`. Support basic backslash escapes.
+    if (s.starts_with('"') && s.ends_with('"') && s.len() >= 2)
+        || (s.starts_with('\'') && s.ends_with('\'') && s.len() >= 2)
+    {
+        let inner = &s[1..s.len() - 1];
+        return Some(Json::String(unescape_python_string(inner)));
+    }
+    if s.eq_ignore_ascii_case("true") {
+        return Some(Json::Bool(true));
+    }
+    if s.eq_ignore_ascii_case("false") {
+        return Some(Json::Bool(false));
+    }
+    if s == "None" || s.eq_ignore_ascii_case("null") {
+        return Some(Json::Null);
+    }
+    if let Ok(n) = s.parse::<i64>() {
+        return Some(Json::from(n));
+    }
+    if let Ok(f) = s.parse::<f64>() {
+        return Some(Json::from(f));
+    }
+    // JSON object / array literal — try to parse as-is.
+    if ((s.starts_with('[') && s.ends_with(']')) || (s.starts_with('{') && s.ends_with('}')))
+        && let Ok(v) = serde_json::from_str::<Json>(s)
+    {
+        return Some(v);
+    }
+    // Last resort: pass through as a string.
+    Some(Json::String(s.to_string()))
+}
+
+fn unescape_python_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('n') => out.push('\n'),
+                Some('t') => out.push('\t'),
+                Some('r') => out.push('\r'),
+                Some('\\') => out.push('\\'),
+                Some('"') => out.push('"'),
+                Some('\'') => out.push('\''),
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// § C thinking mode — strip Gemma 4's reflection channel.
 ///
 /// When thinking mode is on, Gemma 4 emits its reasoning inside a
@@ -393,6 +726,18 @@ pub fn preprocess_response(
     match dialect {
         ToolDialect::Json | ToolDialect::Gemma4Strict => dethought,
         ToolDialect::Gemma4Native => match rewrite_gemma4_native(&dethought) {
+            Some(rewritten) => std::borrow::Cow::Owned(rewritten),
+            None => dethought,
+        },
+        ToolDialect::HermesXml => match rewrite_hermes_xml(&dethought) {
+            Some(rewritten) => std::borrow::Cow::Owned(rewritten),
+            None => dethought,
+        },
+        ToolDialect::LlamaPython => match rewrite_llama_python(&dethought) {
+            Some(rewritten) => std::borrow::Cow::Owned(rewritten),
+            None => dethought,
+        },
+        ToolDialect::ToolCodeBlock => match rewrite_tool_code_block(&dethought) {
             Some(rewritten) => std::borrow::Cow::Owned(rewritten),
             None => dethought,
         },
@@ -659,5 +1004,186 @@ mod tests {
             reply.args.as_ref().unwrap()["q"],
             serde_json::Value::String("tonic 0.13".to_string())
         );
+    }
+
+    // § T1.8 — Hermes / Qwen XML tests.
+
+    #[test]
+    fn rewrite_hermes_xml_simple() {
+        let raw =
+            r#"<tool_call>{"name":"get_weather","arguments":{"location":"London"}}</tool_call>"#;
+        let rewritten = rewrite_hermes_xml(raw).expect("should rewrite");
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["action"], "call_tool");
+        assert_eq!(v["tool"], "get_weather");
+        assert_eq!(v["args"]["location"], "London");
+    }
+
+    #[test]
+    fn rewrite_hermes_xml_accepts_pipe_variant() {
+        let raw =
+            r#"<|tool_call|>{"name":"fs_read","arguments":{"path":"src/main.rs"}}<|/tool_call|>"#;
+        let rewritten = rewrite_hermes_xml(raw).expect("should rewrite");
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["tool"], "fs_read");
+        assert_eq!(v["args"]["path"], "src/main.rs");
+    }
+
+    #[test]
+    fn rewrite_hermes_xml_returns_none_on_absent_envelope() {
+        assert!(rewrite_hermes_xml(r#"{"action":"done"}"#).is_none());
+        assert!(rewrite_hermes_xml("plain prose").is_none());
+        assert!(rewrite_hermes_xml("").is_none());
+    }
+
+    #[test]
+    fn rewrite_hermes_xml_returns_none_on_malformed_payload() {
+        // Missing closing tag.
+        assert!(rewrite_hermes_xml(r#"<tool_call>{"name":"foo"}"#).is_none());
+        // Malformed JSON.
+        assert!(rewrite_hermes_xml(r#"<tool_call>{not json}</tool_call>"#).is_none());
+        // Missing name.
+        assert!(rewrite_hermes_xml(r#"<tool_call>{"arguments":{}}</tool_call>"#).is_none());
+        // Empty name.
+        assert!(
+            rewrite_hermes_xml(r#"<tool_call>{"name":"","arguments":{}}</tool_call>"#).is_none()
+        );
+    }
+
+    #[test]
+    fn preprocess_hermes_xml_round_trips_via_parse_reply() {
+        let raw =
+            r#"<tool_call>{"name":"grep","arguments":{"pattern":"TODO","path":"."}}</tool_call>"#;
+        let cooked = preprocess_response(raw, jarvis_core::ToolDialect::HermesXml);
+        let reply = parse_reply(&cooked).unwrap();
+        assert_eq!(reply.action, ActionKind::Tool);
+        assert_eq!(reply.tool.as_deref(), Some("grep"));
+        let args = reply.args.as_ref().unwrap();
+        assert_eq!(args["pattern"], "TODO");
+        assert_eq!(args["path"], ".");
+    }
+
+    // § T1.8 — Llama python-tag tests.
+
+    #[test]
+    fn rewrite_llama_python_simple() {
+        let raw = r#"<|python_tag|>get_weather(location="London", units="celsius")<|eom_id|>"#;
+        let rewritten = rewrite_llama_python(raw).expect("should rewrite");
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["action"], "call_tool");
+        assert_eq!(v["tool"], "get_weather");
+        assert_eq!(v["args"]["location"], "London");
+        assert_eq!(v["args"]["units"], "celsius");
+    }
+
+    #[test]
+    fn rewrite_llama_python_handles_numbers_and_bools() {
+        let raw =
+            r#"<|python_tag|>fs_read(path="src/main.rs", start_line=42, follow=true)<|eom_id|>"#;
+        let rewritten = rewrite_llama_python(raw).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["tool"], "fs_read");
+        assert_eq!(v["args"]["path"], "src/main.rs");
+        assert_eq!(v["args"]["start_line"], 42);
+        assert_eq!(v["args"]["follow"], true);
+    }
+
+    #[test]
+    fn rewrite_llama_python_accepts_missing_eom() {
+        let raw = r#"<|python_tag|>shell(cmd="ls")"#;
+        let rewritten = rewrite_llama_python(raw).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["tool"], "shell");
+        assert_eq!(v["args"]["cmd"], "ls");
+    }
+
+    #[test]
+    fn rewrite_llama_python_returns_none_on_garbage() {
+        assert!(rewrite_llama_python("plain prose").is_none());
+        assert!(rewrite_llama_python(r#"{"action":"done"}"#).is_none());
+        assert!(rewrite_llama_python("").is_none());
+        // Opener present but body has no parens.
+        assert!(rewrite_llama_python("<|python_tag|>not a call<|eom_id|>").is_none());
+    }
+
+    #[test]
+    fn preprocess_llama_python_round_trips_via_parse_reply() {
+        let raw = r#"<|python_tag|>web_search(q="rust 2024 edition")<|eom_id|>"#;
+        let cooked = preprocess_response(raw, jarvis_core::ToolDialect::LlamaPython);
+        let reply = parse_reply(&cooked).unwrap();
+        assert_eq!(reply.action, ActionKind::Tool);
+        assert_eq!(reply.tool.as_deref(), Some("web_search"));
+        assert_eq!(reply.args.as_ref().unwrap()["q"], "rust 2024 edition");
+    }
+
+    // § T1.8 — generic tool_code fenced block tests.
+
+    #[test]
+    fn rewrite_tool_code_block_simple() {
+        let raw = "```tool_code\nget_weather(location=\"Paris\")\n```";
+        let rewritten = rewrite_tool_code_block(raw).expect("should rewrite");
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["action"], "call_tool");
+        assert_eq!(v["tool"], "get_weather");
+        assert_eq!(v["args"]["location"], "Paris");
+    }
+
+    #[test]
+    fn rewrite_tool_code_block_accepts_python_fallback() {
+        let raw =
+            "Sure, here's the call:\n```python\nfs_write(path=\"x.txt\", content=\"hi\")\n```\n";
+        let rewritten = rewrite_tool_code_block(raw).expect("should rewrite");
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["tool"], "fs_write");
+        assert_eq!(v["args"]["path"], "x.txt");
+        assert_eq!(v["args"]["content"], "hi");
+    }
+
+    #[test]
+    fn rewrite_tool_code_block_python_without_call_shape_returns_none() {
+        // No parens — almost certainly real documentation, not a call.
+        let raw = "```python\nx = 1\nprint(x)\n```";
+        // This DOES contain parens (the print). Use a stricter example.
+        let raw2 = "```python\nx = 1\ny = 2\n```";
+        assert!(rewrite_tool_code_block(raw2).is_none());
+        // The first one with parens at least gets attempted; it should fail
+        // because `x = 1\nprint(x)` doesn't match `name(args)` shape.
+        assert!(rewrite_tool_code_block(raw).is_none());
+    }
+
+    #[test]
+    fn rewrite_tool_code_block_returns_none_on_absent_envelope() {
+        assert!(rewrite_tool_code_block("just text").is_none());
+        assert!(rewrite_tool_code_block(r#"{"action":"done"}"#).is_none());
+        assert!(rewrite_tool_code_block("```\nfn()\n```").is_none());
+    }
+
+    #[test]
+    fn rewrite_tool_code_block_prefers_tool_code_over_python() {
+        let raw = "```tool_code\nfn_a(x=1)\n```\n```python\nfn_b(y=2)\n```";
+        let rewritten = rewrite_tool_code_block(raw).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&rewritten).unwrap();
+        assert_eq!(v["tool"], "fn_a");
+    }
+
+    #[test]
+    fn preprocess_tool_code_block_round_trips_via_parse_reply() {
+        let raw = "```tool_code\ngrep(pattern=\"TODO\", path=\".\")\n```";
+        let cooked = preprocess_response(raw, jarvis_core::ToolDialect::ToolCodeBlock);
+        let reply = parse_reply(&cooked).unwrap();
+        assert_eq!(reply.action, ActionKind::Tool);
+        assert_eq!(reply.tool.as_deref(), Some("grep"));
+        assert_eq!(reply.args.as_ref().unwrap()["pattern"], "TODO");
+    }
+
+    // § T1.8 — channel stripping still happens for all new dialects.
+
+    #[test]
+    fn preprocess_strips_think_channel_for_hermes() {
+        let raw = "<|channel>thought\nreasoning<channel|><tool_call>{\"name\":\"shell\",\"arguments\":{\"cmd\":\"ls\"}}</tool_call>";
+        let cooked = preprocess_response(raw, jarvis_core::ToolDialect::HermesXml);
+        let reply = parse_reply(&cooked).unwrap();
+        assert_eq!(reply.action, ActionKind::Tool);
+        assert_eq!(reply.tool.as_deref(), Some("shell"));
     }
 }

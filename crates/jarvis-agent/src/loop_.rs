@@ -40,9 +40,13 @@ pub struct AgentRun {
     /// audit catches premature completion; subsequent ones catch the model
     /// re-declaring `done` without new evidence. 0 = no autopilot.
     pub continuation_budget: u32,
-    /// Post-tool verification hooks. Each hook's regex is matched against the
-    /// tool name; matches run via the sandbox and their output is fed back to
-    /// the agent as a synthetic `tool_result` (tool name = `hook:<label>`).
+    /// Lifecycle hooks. Each hook carries a [`HookPhase`] (Pre / Post /
+    /// OnError) and a regex matched against the tool name; matches run via
+    /// the sandbox and their output is fed back to the agent as a synthetic
+    /// `tool_result` (tool name = `hook:<phase>:<label>` — e.g.
+    /// `hook:post:cargo check`). Pre hooks run before `invoke()`, Post hooks
+    /// run after a successful invocation (regardless of `is_error` payload),
+    /// OnError hooks run only when the tool failed to execute at all.
     pub hooks: Vec<HookSpec>,
     /// What the agent is allowed to do. In `ReadOnly`, any tool with
     /// `side_effects = true` is blocked before invocation and the agent gets
@@ -52,6 +56,13 @@ pub struct AgentRun {
     /// agent's `done` is double-checked by a second LLM call; NACK injects
     /// one more Continuation. Capped to avoid loops.
     pub validation: ValidationSpec,
+    /// § T1.3 — when true, the tool catalog renders names + descriptions
+    /// only (no full JSON schemas). The agent must call `search_tools(query)`
+    /// to discover full argument schemas on demand. Saves ~3–5 k tokens per
+    /// turn on registries with 12+ tools but costs one extra round-trip
+    /// the first time the model uses an unfamiliar tool. Default: false
+    /// (eager — preserves pre-T1.3 behaviour).
+    pub lazy_tool_catalog: bool,
 }
 
 /// Plain mirror of `jarvis_config::ValidationConfig` so the agent crate
@@ -68,10 +79,40 @@ pub struct ValidationSpec {
     pub use_subagent: bool,
 }
 
-/// Compiled post-tool hook. Construct once at task-dispatch time so the regex
+/// When a [`HookSpec`] fires relative to a tool invocation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HookPhase {
+    /// Before `tool.invoke()`. Use for pre-flight checks, secret redaction,
+    /// snapshot/backup of state, or anything that should observe inputs
+    /// without mutating them.
+    Pre,
+    /// After `tool.invoke()` returns `Ok` — regardless of whether the
+    /// payload's `is_error` flag is set. Use for verification (`cargo
+    /// check`, lint), incremental indexing, or autosave.
+    Post,
+    /// After `tool.invoke()` returns `Err` (the tool itself failed to run
+    /// — sandbox error, schema rejection, missing binary). Use for
+    /// incident logging, alerts, or auto-replan triggers.
+    OnError,
+}
+
+impl HookPhase {
+    /// Slug used in the synthetic tool name (`hook:<slug>:<label>`) and in
+    /// the event payload `phase` field. Stable string contract.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pre => "pre",
+            Self::Post => "post",
+            Self::OnError => "on_error",
+        }
+    }
+}
+
+/// Compiled lifecycle hook. Construct once at task-dispatch time so the regex
 /// cost amortizes across all subsequent tool invocations.
 #[derive(Clone)]
 pub struct HookSpec {
+    pub phase: HookPhase,
     pub label: String,
     pub matcher: regex::Regex,
     pub cmd: String,
@@ -82,6 +123,7 @@ pub struct HookSpec {
 impl std::fmt::Debug for HookSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HookSpec")
+            .field("phase", &self.phase)
             .field("label", &self.label)
             .field("matcher", &self.matcher.as_str())
             .field("cmd", &self.cmd)
@@ -250,6 +292,7 @@ pub async fn run_agent(
                 &ancestor_goals,
                 picked.thinking,
                 picked.ctx_len,
+                run.lazy_tool_catalog,
             );
             log_event(
                 &ledger,
@@ -740,8 +783,26 @@ async fn run_tool_step(
         return Ok(());
     }
 
+    // Hooks. Skip the whole machinery for synthetic `hook:*` events — they
+    // are themselves emitted by `run_one_hook` and must not re-trigger.
+    let hooks_active = !run.hooks.is_empty() && !tool_name.starts_with("hook:");
+
+    // Pre-tool hooks fire AFTER the ReadOnly gate (which has already returned
+    // above) and BEFORE the actual invocation. Use for snapshot/backup,
+    // secret redaction, audit logging — anything that should observe inputs
+    // without mutating them.
+    if hooks_active {
+        for hook in run.hooks.iter().filter(|h| h.phase == HookPhase::Pre) {
+            if !hook.matcher.is_match(tool_name) {
+                continue;
+            }
+            run_one_hook(ledger, ctx, run, hook).await?;
+        }
+    }
+
     let args_for_result = args.clone();
     let result = tools.invoke(tool_name, args, ctx).await;
+    let invocation_ok = result.is_ok();
     let event = match result {
         Ok(out) => {
             // A tool that ran and returned a non-zero exit code (or set
@@ -777,12 +838,17 @@ async fn run_tool_step(
     }
     ledger.append(event).await?;
 
-    // Post-tool hooks. Each matching hook runs via the sandbox and emits its
-    // own synthetic tool_result so the next agent turn sees the verification
-    // outcome inline with the other observations. We never run hooks for
-    // synthetic hook events themselves (the tool_name prefix prevents that).
-    if !run.hooks.is_empty() && !tool_name.starts_with("hook:") {
-        for hook in &run.hooks {
+    // Post-tool hooks (Ok path) OR OnError hooks (Err path). Each matching
+    // hook runs via the sandbox and emits its own synthetic tool_result so
+    // the next agent turn sees the outcome inline with the other
+    // observations.
+    if hooks_active {
+        let fired_phase = if invocation_ok {
+            HookPhase::Post
+        } else {
+            HookPhase::OnError
+        };
+        for hook in run.hooks.iter().filter(|h| h.phase == fired_phase) {
             if !hook.matcher.is_match(tool_name) {
                 continue;
             }
@@ -807,21 +873,23 @@ async fn run_one_hook(
         timeout: hook.timeout,
         net: ctx.net_policy.clone(),
     };
-    let synth_name = format!("hook:{}", hook.label);
+    let phase_slug = hook.phase.as_str();
+    let synth_name = format!("hook:{phase_slug}:{}", hook.label);
     let outcome = ctx.sandbox.exec(spec).await;
     let event = match outcome {
         Ok(out) => {
             let is_error = out.exit_code != 0 || out.timed_out;
             let summary = if out.timed_out {
-                format!("{} · timed out", hook.label)
+                format!("{} · {phase_slug} · timed out", hook.label)
             } else {
-                format!("{} · exit {}", hook.label, out.exit_code)
+                format!("{} · {phase_slug} · exit {}", hook.label, out.exit_code)
             };
             NewEvent::new(
                 run.task_id,
                 EventKind::ToolResult,
                 json!({
                     "tool": synth_name,
+                    "phase": phase_slug,
                     "args": { "cmd": hook.cmd },
                     "summary": summary,
                     "data": {
@@ -840,8 +908,9 @@ async fn run_one_hook(
             EventKind::ToolResult,
             json!({
                 "tool": synth_name,
+                "phase": phase_slug,
                 "args": { "cmd": hook.cmd },
-                "summary": format!("{} failed to spawn", hook.label),
+                "summary": format!("{} · {phase_slug} · failed to spawn", hook.label),
                 "data": { "error": e.to_string() },
                 "is_error": true,
             }),

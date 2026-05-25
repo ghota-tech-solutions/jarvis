@@ -45,15 +45,26 @@ docker_memory = "2g"
 docker_cpus = 2.0
 docker_autopull = true
 
-# --- Post-tool hooks: auto-verification after the agent runs a tool ---------
-# Each entry runs after `tool_result` lands in the ledger, and its output is
-# fed back to the agent as a synthetic observation on the next turn. The point:
-# the agent can no longer LIE about success — `cargo check` either passes or
-# returns errors the next turn must address.
+# --- Lifecycle hooks: pre/post/on_error around tool invocations -------------
+# Three phases are wired into the agent loop:
+#   • [[hooks.pre_tool]]  — runs BEFORE `invoke()`. Use for snapshot, audit,
+#     secret redaction, pre-flight checks. Observability only — does NOT gate.
+#   • [[hooks.post_tool]] — runs AFTER a successful invocation (the Ok branch),
+#     regardless of `is_error` inside the payload. Use for verification
+#     (`cargo check`, lint), incremental indexing, autosave.
+#   • [[hooks.on_error]]  — runs AFTER a FAILED invocation (the Err branch:
+#     sandbox error, schema rejection, missing binary). Use for incident
+#     logging, alerts, auto-replan triggers.
+#
+# Every hook entry has the same shape (match/cmd/workdir/timeout_s/label).
+# Hook output is fed back to the agent as a synthetic observation on the next
+# turn — tool name = `hook:<phase>:<label>` (e.g. `hook:post:cargo-check`).
+# The point: the agent can no longer LIE about success — `cargo check` either
+# passes or returns errors the next turn must address.
 #
 # `match` is a regex on the tool name. Multiple hooks can match the same tool;
-# they all fire in declaration order. Hooks DO NOT trigger other hooks
-# (synthetic `hook:*` events are skipped).
+# they all fire in declaration order, per phase. Hooks DO NOT trigger other
+# hooks (synthetic `hook:*` events are skipped).
 #
 # Rust example: type-check after every patch / write.
 # [[hooks.post_tool]]
@@ -67,6 +78,18 @@ docker_autopull = true
 # match = "apply_patch|fs_write"
 # cmd = "npx tsc --noEmit"
 # label = "tsc"
+#
+# Pre-hook example: snapshot the workdir before every destructive op.
+# [[hooks.pre_tool]]
+# match = "apply_patch|fs_write|shell"
+# cmd = "git stash push -u -m \"jarvis:pre-tool\""
+# label = "snapshot"
+#
+# On-error hook example: log every tool failure to a file the user can tail.
+# [[hooks.on_error]]
+# match = ".*"
+# cmd = "date >> .jarvis/tool-failures.log"
+# label = "log-failure"
 #
 # Run unit tests after the agent says "done" (matches the `done`-marker tool
 # name some agents use — adapt to your verb of choice):

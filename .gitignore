@@ -16,3 +16,4 @@ Cargo.lock.bak
 Thumbs.db
 /jarvis-tui.log
 .serena
+.claude/

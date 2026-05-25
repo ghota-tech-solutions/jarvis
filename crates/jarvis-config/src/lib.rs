@@ -32,6 +32,22 @@ pub struct Config {
     pub hooks: HooksConfig,
     #[serde(default)]
     pub validation: ValidationConfig,
+    #[serde(default)]
+    pub agent: AgentConfig,
+}
+
+/// § T1.3 — agent loop tunables that don't fit into routing / sandbox /
+/// validation buckets.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentConfig {
+    /// When true, the system prompt's tool catalog is rendered compactly
+    /// (names + descriptions only). The agent must call `search_tools(query)`
+    /// to retrieve full JSON-schema args. Saves ~3–5 k tokens per turn on
+    /// registries with 12+ tools but costs one extra round-trip the first
+    /// time the model uses an unfamiliar tool. Default: false (eager —
+    /// preserves pre-T1.3 behaviour).
+    pub lazy_tool_catalog: bool,
 }
 
 /// M11.S6 + M12.S4 — verdict validation. When the agent emits `done`,
@@ -78,15 +94,32 @@ impl Default for ValidationConfig {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HooksConfig {
-    /// Runs after a tool's `tool_result` lands in the ledger. Multiple hooks
-    /// can match the same tool — they all run, in declaration order.
+    /// Runs BEFORE a tool's `invoke()` (the agent's decision to call this tool
+    /// has just landed). Use for pre-flight checks, secret redaction, or
+    /// snapshotting state. Multiple hooks can match the same tool — they all
+    /// run, in declaration order.
     #[serde(default)]
-    pub post_tool: Vec<PostToolHook>,
+    pub pre_tool: Vec<HookConfig>,
+    /// Runs AFTER a tool's `tool_result` lands in the ledger (successful
+    /// invocation, regardless of `is_error` inside the payload). Multiple
+    /// hooks can match the same tool — they all run, in declaration order.
+    #[serde(default)]
+    pub post_tool: Vec<HookConfig>,
+    /// Runs ONLY when a tool fails to execute at all (the `invoke()` call
+    /// returns `Err` — e.g. sandbox error, schema validation rejection).
+    /// Use for incident logging, alerting, or auto-replan triggers.
+    /// Multiple hooks can match the same tool — they all run, in declaration
+    /// order.
+    #[serde(default)]
+    pub on_error: Vec<HookConfig>,
 }
 
+/// One entry in `[[hooks.pre_tool]]`, `[[hooks.post_tool]]`, or
+/// `[[hooks.on_error]]`. The shape is identical across phases — the phase is
+/// determined by which list the entry lives in.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PostToolHook {
+pub struct HookConfig {
     /// Regex matched against the tool name (e.g. `apply_patch|fs_write`).
     pub r#match: String,
     /// Shell command to run. Resolved by `jarvis-sandbox::native::shell_cmd` so
@@ -103,6 +136,9 @@ pub struct PostToolHook {
     #[serde(default)]
     pub label: Option<String>,
 }
+
+/// Backwards-compatible alias for code that still spells the old name.
+pub type PostToolHook = HookConfig;
 
 fn default_hook_timeout() -> u64 {
     60

@@ -62,8 +62,53 @@ impl Ledger {
     }
 
     async fn migrate(pool: &SqlitePool) -> Result<(), LedgerError> {
-        // We embed our schema inline (no sqlx-migrate dir) to keep deployment simple.
-        sqlx::query(SCHEMA_SQL).execute(pool).await?;
+        // Ensure the bookkeeping table exists before we can ask "what's
+        // already applied?". `IF NOT EXISTS` is safe on fresh and existing
+        // databases — pre-versioning ledgers (where every CREATE … IF NOT
+        // EXISTS statement of 0001 is already a no-op) get this table added
+        // without re-running the schema.
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS schema_migrations (\
+                version    INTEGER PRIMARY KEY,\
+                applied_at TEXT NOT NULL\
+             )",
+        )
+        .execute(pool)
+        .await?;
+
+        let applied: std::collections::HashSet<u32> =
+            sqlx::query("SELECT version FROM schema_migrations")
+                .fetch_all(pool)
+                .await?
+                .iter()
+                .filter_map(|row| {
+                    let v: i64 = row.try_get("version").ok()?;
+                    u32::try_from(v).ok()
+                })
+                .collect();
+
+        for (version, sql) in MIGRATIONS {
+            if applied.contains(version) {
+                continue;
+            }
+            // Per-migration transaction: either every statement of this
+            // migration is applied and the version is recorded, or nothing
+            // is. Idempotent CREATE/INDEX/TRIGGER statements (used
+            // throughout) make this safe even if a previous boot crashed
+            // mid-migration before the version row was inserted.
+            let mut tx = pool.begin().await?;
+            sqlx::query(sql).execute(&mut *tx).await?;
+            sqlx::query(
+                "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+            )
+            .bind(i64::from(*version))
+            .bind(Utc::now().to_rfc3339())
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
+            info!(version, "ledger migration applied");
+        }
+
         Ok(())
     }
 
@@ -790,96 +835,15 @@ fn now_micros() -> i64 {
     Utc::now().timestamp_micros()
 }
 
-/// Embedded schema. Single-statement-per-`execute` is fine because sqlx
-/// supports multi-statement query strings on SQLite.
-const SCHEMA_SQL: &str = r#"
-CREATE TABLE IF NOT EXISTS tasks (
-    id BLOB PRIMARY KEY NOT NULL,
-    parent BLOB REFERENCES tasks(id),
-    goal TEXT NOT NULL,
-    status TEXT NOT NULL,
-    workdir TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    completed_at INTEGER,
-    error TEXT,
-    sandbox TEXT NOT NULL DEFAULT '',
-    net_policy TEXT NOT NULL DEFAULT '',
-    worktree_path TEXT NOT NULL DEFAULT '',
-    worktree_branch TEXT NOT NULL DEFAULT ''
-);
-
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, created_at);
-
-CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts INTEGER NOT NULL,
-    task_id BLOB NOT NULL REFERENCES tasks(id),
-    agent_id BLOB,
-    kind TEXT NOT NULL,
-    subject TEXT,
-    payload TEXT NOT NULL,
-    parent_evt INTEGER REFERENCES events(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id, id);
-CREATE INDEX IF NOT EXISTS idx_events_subject ON events(subject) WHERE subject IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_events_kind_ts ON events(kind, ts);
-
--- Append-only enforcement.
-CREATE TRIGGER IF NOT EXISTS events_no_update
-BEFORE UPDATE ON events
-BEGIN
-    SELECT RAISE(ABORT, 'events table is append-only');
-END;
-
-CREATE TRIGGER IF NOT EXISTS events_no_delete
-BEFORE DELETE ON events
-BEGIN
-    SELECT RAISE(ABORT, 'events table is append-only');
-END;
-
--- M9: long-term memories. Unlike events, this table is mutable —
--- promote/forget/edit are first-class CRUD operations.
-CREATE TABLE IF NOT EXISTS memories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    scope TEXT NOT NULL,                   -- 'workdir' | 'global'
-    scope_value TEXT NOT NULL DEFAULT '',  -- workdir path; '' for global
-    kind TEXT NOT NULL,                    -- 'pattern' | 'preference' | 'fact'
-    text TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'candidate', -- 'candidate' | 'active' | 'forgotten'
-    source_task_id BLOB REFERENCES tasks(id),
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    usage_count INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, scope_value, status);
-CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status, updated_at);
-
--- M12.S1: scheduled tasks. Cron string is validated server-side before
--- insert. last_task_id is the most recent enqueued child for UI display;
--- next_run_micros is cached for ordering ("upcoming runs" panel) but
--- recomputed each tick to survive cron-spec changes.
-CREATE TABLE IF NOT EXISTS schedules (
-    id TEXT PRIMARY KEY NOT NULL,        -- UUID v4 string
-    cron TEXT NOT NULL,
-    goal TEXT NOT NULL,
-    workdir TEXT NOT NULL DEFAULT '',
-    sandbox TEXT NOT NULL DEFAULT '',
-    net_policy TEXT NOT NULL DEFAULT '',
-    routing_policy TEXT NOT NULL DEFAULT '',
-    max_steps INTEGER NOT NULL DEFAULT 0,
-    label TEXT NOT NULL DEFAULT '',
-    paused INTEGER NOT NULL DEFAULT 0,    -- 0=active, 1=paused
-    last_run_micros INTEGER NOT NULL DEFAULT 0,
-    next_run_micros INTEGER NOT NULL DEFAULT 0,
-    last_task_id TEXT NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_schedules_active
-    ON schedules(paused, next_run_micros);
-"#;
+/// Ordered list of versioned schema migrations. Each entry is `(version, sql)`
+/// where `sql` is one or more SQLite statements bundled via `include_str!`.
+/// New migrations must be appended with a strictly increasing version number;
+/// the runner applies any version not present in `schema_migrations` inside
+/// its own transaction (see `Ledger::migrate`).
+const MIGRATIONS: &[(u32, &str)] = &[
+    (1, include_str!("../migrations/0001_initial.sql")),
+    (2, include_str!("../migrations/0002_indexes.sql")),
+];
 
 #[cfg(test)]
 mod tests {
@@ -1019,5 +983,60 @@ mod tests {
         let phantom = TaskId(Uuid::new_v4());
         let timeline = l.timeline_events(phantom).await.unwrap();
         assert!(timeline.is_empty());
+    }
+
+    #[tokio::test]
+    async fn migrations_are_recorded_and_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("migrate.sqlite");
+
+        // First open applies all migrations from scratch.
+        {
+            let l = Ledger::open(&path).await.unwrap();
+            let rows = sqlx::query("SELECT version FROM schema_migrations ORDER BY version ASC")
+                .fetch_all(&l.pool)
+                .await
+                .unwrap();
+            let versions: Vec<i64> = rows.iter().map(|r| r.try_get("version").unwrap()).collect();
+            assert_eq!(
+                versions,
+                (1..=MIGRATIONS.len() as i64).collect::<Vec<_>>(),
+                "every bundled migration must be recorded"
+            );
+
+            // Sanity-check that 0002's new indexes really exist.
+            let idx: Vec<String> = sqlx::query(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%'",
+            )
+            .fetch_all(&l.pool)
+            .await
+            .unwrap()
+            .iter()
+            .map(|r| r.try_get::<String, _>("name").unwrap())
+            .collect();
+            for expected in [
+                "idx_events_parent_evt",
+                "idx_memories_scope_status",
+                "idx_tasks_parent",
+            ] {
+                assert!(
+                    idx.iter().any(|n| n == expected),
+                    "missing index {expected}; have {idx:?}"
+                );
+            }
+        }
+
+        // Second open re-uses the same file: migrations must not re-run nor fail.
+        {
+            let l = Ledger::open(&path).await.unwrap();
+            let count: i64 =
+                sqlx::query("SELECT COUNT(*) AS c FROM schema_migrations WHERE version = 1")
+                    .fetch_one(&l.pool)
+                    .await
+                    .unwrap()
+                    .try_get("c")
+                    .unwrap();
+            assert_eq!(count, 1, "version 1 must not be re-inserted on second open");
+        }
     }
 }

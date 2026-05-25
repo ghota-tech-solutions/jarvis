@@ -21,6 +21,13 @@
 //!   a preprocessor rewrites them to the JSON contract before the parser
 //!   sees them. Only useful with backends that expose those special
 //!   tokens (Ollama `gemma4:*`, vLLM with `--tool-call-parser gemma4`).
+//! - `HermesXml` — Hermes / Qwen 2.5/3 / some Mistral fine-tunes wrap a
+//!   JSON tool call in `<tool_call>{"name":"fn","arguments":{...}}</tool_call>`.
+//! - `LlamaPython` — Llama 3.1+ "python-tag" envelope:
+//!   `<|python_tag|>fn(arg1="value", arg2=42)<|eom_id|>`.
+//! - `ToolCodeBlock` — generic code-block dialect:
+//!   ` ```tool_code\nfn(arg1="value")\n``` ` (also accepts ` ```python ` as
+//!   a fallback when the body looks like a tool call).
 
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +38,9 @@ pub enum ToolDialect {
     Json,
     Gemma4Strict,
     Gemma4Native,
+    HermesXml,
+    LlamaPython,
+    ToolCodeBlock,
 }
 
 impl ToolDialect {
@@ -39,6 +49,9 @@ impl ToolDialect {
             Self::Json => "json",
             Self::Gemma4Strict => "gemma4_strict",
             Self::Gemma4Native => "gemma4_native",
+            Self::HermesXml => "hermes_xml",
+            Self::LlamaPython => "llama_python",
+            Self::ToolCodeBlock => "tool_code_block",
         }
     }
 }
@@ -73,5 +86,35 @@ mod tests {
         let s = "\"gemma4_native\"";
         let d: ToolDialect = serde_json::from_str(s).unwrap();
         assert_eq!(d, ToolDialect::Gemma4Native);
+    }
+
+    #[test]
+    fn serde_roundtrip_hermes_xml() {
+        let d = ToolDialect::HermesXml;
+        let json = serde_json::to_string(&d).unwrap();
+        assert_eq!(json, "\"hermes_xml\"");
+        let back: ToolDialect = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, d);
+        assert_eq!(d.as_str(), "hermes_xml");
+    }
+
+    #[test]
+    fn serde_roundtrip_llama_python() {
+        let d = ToolDialect::LlamaPython;
+        let json = serde_json::to_string(&d).unwrap();
+        assert_eq!(json, "\"llama_python\"");
+        let back: ToolDialect = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, d);
+        assert_eq!(d.as_str(), "llama_python");
+    }
+
+    #[test]
+    fn serde_roundtrip_tool_code_block() {
+        let d = ToolDialect::ToolCodeBlock;
+        let json = serde_json::to_string(&d).unwrap();
+        assert_eq!(json, "\"tool_code_block\"");
+        let back: ToolDialect = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, d);
+        assert_eq!(d.as_str(), "tool_code_block");
     }
 }

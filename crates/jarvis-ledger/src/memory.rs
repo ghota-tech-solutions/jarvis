@@ -3,7 +3,7 @@
 //! (plus all `scope='global'` memories) and injects them into the system
 //! prompt at the start of every task.
 //!
-//! Schema is defined inline in `store.rs::SCHEMA_SQL`. Status transitions:
+//! Schema lives in `migrations/0001_initial.sql` (`memories` table). Status transitions:
 //!   `candidate` → user calls PromoteMemory → `active`
 //!   `active`    → user calls ForgetMemory  → `forgotten`
 //!   `candidate` → user calls ForgetMemory  → `forgotten`

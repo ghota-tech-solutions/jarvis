@@ -1,0 +1,31 @@
+suite: basic
+description: "Mini-suite v0 — sanity checks for the bench harness."
+defaults:
+  max_steps: 10
+  timeout_s: 120
+
+tasks:
+  - id: write-hello
+    goal: "Create a file `hello.txt` in the working directory containing exactly the text `hi`."
+    fixtures: {}
+    success:
+      type: file_equals
+      path: hello.txt
+      content: "hi"
+
+  - id: rename-fn
+    goal: "Rename the function `foo` to `bar` in src/lib.rs. Keep the rest of the file intact."
+    fixtures:
+      "src/lib.rs": |
+        pub fn foo() -> i32 { 42 }
+    success:
+      type: file_contains
+      path: src/lib.rs
+      pattern: "pub fn bar"
+
+  - id: shell-check
+    goal: "Print 'done' and exit. Do not modify any files."
+    fixtures: {}
+    success:
+      type: shell_exits_zero
+      cmd: "echo done"

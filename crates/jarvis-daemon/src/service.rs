@@ -3,7 +3,7 @@
 
 use anyhow::{Context, Result, anyhow};
 use futures::StreamExt;
-use jarvis_agent::{AgentRun, HookSpec, run_agent};
+use jarvis_agent::{AgentRun, HookPhase, HookSpec, run_agent};
 use jarvis_api::{
     AskChunk, AskRequest, CommitInfo, CommitPhaseRequest, CostReport, DaemonStatus, DiffGroup,
     DiffGroupList, EditMemoryRequest, Empty, Event as ApiEvent, FileDiff, FleetEdge, FleetNode,
@@ -317,21 +317,35 @@ pub struct McpServerStatus {
     pub error: Option<String>,
 }
 
-/// Compile `[hooks.post_tool]` config entries into runtime `HookSpec`s.
-/// Invalid regex or empty match patterns are logged and skipped — we never
-/// fail task dispatch because of a typo'd hook.
+/// Compile every `[[hooks.pre_tool]]`, `[[hooks.post_tool]]`, and
+/// `[[hooks.on_error]]` config entry into runtime `HookSpec`s tagged with
+/// their `HookPhase`. Invalid regex or empty match patterns are logged and
+/// skipped — we never fail task dispatch because of a typo'd hook.
 pub fn compile_hooks(cfg: &jarvis_config::HooksConfig) -> Vec<HookSpec> {
-    let mut out = Vec::with_capacity(cfg.post_tool.len());
-    for h in &cfg.post_tool {
+    let total = cfg.pre_tool.len() + cfg.post_tool.len() + cfg.on_error.len();
+    let mut out = Vec::with_capacity(total);
+    compile_phase(&cfg.pre_tool, HookPhase::Pre, "pre_tool", &mut out);
+    compile_phase(&cfg.post_tool, HookPhase::Post, "post_tool", &mut out);
+    compile_phase(&cfg.on_error, HookPhase::OnError, "on_error", &mut out);
+    out
+}
+
+fn compile_phase(
+    entries: &[jarvis_config::HookConfig],
+    phase: HookPhase,
+    section: &'static str,
+    out: &mut Vec<HookSpec>,
+) {
+    for h in entries {
         let pat = h.r#match.trim();
         if pat.is_empty() {
-            warn!("hooks.post_tool: skipping entry with empty `match`");
+            warn!(section, "hooks: skipping entry with empty `match`");
             continue;
         }
         let re = match regex::Regex::new(pat) {
             Ok(r) => r,
             Err(e) => {
-                warn!(pattern = pat, error = %e, "hooks.post_tool: invalid regex — skipping");
+                warn!(section, pattern = pat, error = %e, "hooks: invalid regex — skipping");
                 continue;
             }
         };
@@ -341,6 +355,7 @@ pub fn compile_hooks(cfg: &jarvis_config::HooksConfig) -> Vec<HookSpec> {
             .or_else(|| h.cmd.split_whitespace().next().map(|s| s.to_string()))
             .unwrap_or_else(|| "hook".to_string());
         out.push(HookSpec {
+            phase,
             label,
             matcher: re,
             cmd: h.cmd.clone(),
@@ -348,7 +363,6 @@ pub fn compile_hooks(cfg: &jarvis_config::HooksConfig) -> Vec<HookSpec> {
             timeout: std::time::Duration::from_secs(h.timeout_s),
         });
     }
-    out
 }
 
 async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerStatus>>) {
@@ -432,6 +446,11 @@ async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerSt
         }
     }
     statuses.sort_by(|a, b| a.name.cmp(&b.name));
+
+    // § T1.3 — register the `search_tools` meta-tool last so it sees every
+    // built-in + every MCP-imported tool in its frozen catalog.
+    r.register_search_tools();
+
     (r, Arc::new(statuses))
 }
 
@@ -854,6 +873,7 @@ impl Jarvis for JarvisService {
             hooks: compile_hooks(&self.cfg.hooks),
             sandbox_mode,
             validation,
+            lazy_tool_catalog: self.cfg.agent.lazy_tool_catalog,
         };
 
         let pool = self.pool.clone();

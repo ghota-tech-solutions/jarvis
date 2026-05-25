@@ -15,6 +15,8 @@ members = [
     "crates/jarvis-tui",
     "crates/jarvis-web",
     "crates/jarvis-desktop",
+    "crates/jarvis-repomap",
+    "crates/jarvis-bench",
 ]
 
 [workspace.package]
