@@ -1054,11 +1054,22 @@ impl Jarvis for JarvisService {
             })
             .collect();
         let running = self.running.lock().await.len() as u32;
+        let mcp_servers = self
+            .mcp_status
+            .iter()
+            .map(|s| jarvis_api::McpServerStatus {
+                name: s.name.clone(),
+                connected: s.connected,
+                tools: s.tools.clone(),
+                error: s.error.clone().unwrap_or_default(),
+            })
+            .collect();
         Ok(Response::new(DaemonStatus {
             version: env!("CARGO_PKG_VERSION").to_string(),
             uptime_seconds: self.started.elapsed().as_secs() as i64,
             models: api_models,
             running_tasks: running,
+            mcp_servers,
         }))
     }
 

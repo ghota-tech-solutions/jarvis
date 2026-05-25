@@ -20,6 +20,11 @@ import TerminalLogs from '~/components/TerminalLogs';
 import Telemetry from '~/components/Telemetry';
 import AppErrorBoundary from '~/components/ErrorBoundary';
 import { SkeletonList } from '~/components/Skeleton';
+import {
+  downloadBlob,
+  taskToJson,
+  taskToMarkdown,
+} from '~/lib/export';
 
 const Task: Component = () => {
   const params = useParams<{ id: string }>();
@@ -250,6 +255,42 @@ const Task: Component = () => {
                       onClick={() => setView('diff')}
                     >
                       diff
+                    </button>
+                    {/* § F2.9 — export current task to .md or .json. */}
+                    <span style="flex: 1" />
+                    <button
+                      type="button"
+                      class="btn ghost"
+                      title="Export transcript as Markdown"
+                      onClick={() => {
+                        const task = taskQ.data;
+                        if (!task) return;
+                        const slug = task.id.slice(0, 8);
+                        downloadBlob(
+                          `jarvis-task-${slug}.md`,
+                          taskToMarkdown(task, events()),
+                          'text/markdown',
+                        );
+                      }}
+                    >
+                      ⬇ .md
+                    </button>
+                    <button
+                      type="button"
+                      class="btn ghost"
+                      title="Export raw events as JSON"
+                      onClick={() => {
+                        const task = taskQ.data;
+                        if (!task) return;
+                        const slug = task.id.slice(0, 8);
+                        downloadBlob(
+                          `jarvis-task-${slug}.json`,
+                          taskToJson(task, events()),
+                          'application/json',
+                        );
+                      }}
+                    >
+                      ⬇ .json
                     </button>
                   </div>
                   

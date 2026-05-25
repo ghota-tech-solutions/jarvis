@@ -149,6 +149,20 @@ message DaemonStatus {
   int64 uptime_seconds = 2;
   repeated ModelStatus models = 3;
   uint32 running_tasks = 4;
+  // § F2.7 — connected MCP servers + their tool catalogs, so the SPA's
+  // MCP Tool Explorer can render the inventory without a separate RPC.
+  repeated McpServerStatus mcp_servers = 5;
+}
+
+message McpServerStatus {
+  string name = 1;
+  bool connected = 2;
+  // Auto-qualified tool names already prefixed by `<server>.` so they
+  // match what the agent loop sees.
+  repeated string tools = 3;
+  // Empty when the server connected cleanly; populated with the
+  // initialise / tools-list error otherwise.
+  string error = 4;
 }
 
 message ModelStatus {

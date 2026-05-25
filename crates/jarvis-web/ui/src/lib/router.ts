@@ -8,6 +8,7 @@ const Memory = lazy(() => import('~/routes/Memory'));
 const Schedules = lazy(() => import('~/routes/Schedules'));
 const Settings = lazy(() => import('~/routes/Settings'));
 const Analytics = lazy(() => import('~/routes/Analytics'));
+const Mcp = lazy(() => import('~/routes/Mcp'));
 
 export const routes: RouteDefinition[] = [
   { path: '/', component: Dashboard },
@@ -15,6 +16,7 @@ export const routes: RouteDefinition[] = [
   { path: '/memory', component: Memory },
   { path: '/schedules', component: Schedules },
   { path: '/analytics', component: Analytics },
+  { path: '/mcp', component: Mcp },
   { path: '/settings', component: Settings },
   { path: '/task/:id', component: Task },
 ];

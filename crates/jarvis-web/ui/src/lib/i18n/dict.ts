@@ -28,7 +28,13 @@ type Dict = {
     string
   >;
   nav: Record<
-    'dashboard' | 'fleet' | 'memory' | 'schedules' | 'analytics' | 'settings',
+    | 'dashboard'
+    | 'fleet'
+    | 'memory'
+    | 'schedules'
+    | 'analytics'
+    | 'mcp'
+    | 'settings',
     string
   >;
   common: Record<
@@ -98,6 +104,7 @@ export const en: Dict = {
     memory: 'Memory',
     schedules: 'Schedules',
     analytics: 'Analytics',
+    mcp: 'MCP',
     settings: 'Settings',
   },
   common: {
@@ -182,6 +189,7 @@ export const fr: Dict = {
     memory: 'Mémoire',
     schedules: 'Planifications',
     analytics: 'Analyses',
+    mcp: 'MCP',
     settings: 'Paramètres',
   },
   common: {
