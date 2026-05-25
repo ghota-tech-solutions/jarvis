@@ -127,13 +127,17 @@ time; steps stay short and imperative; statuses are `pending` /
   ```
 - When the goal is achieved, emit { "action": "done", "message": "<what was done>" }.
 - When the goal is impossible or unsafe, emit { "action": "fail", "message": "<why>" }.
-- **OPTIONAL:** add a top-level `"phase"` field to ANY reply to declare
-  the lifecycle phase the next step belongs to. Accepted values:
-  `"plan"` (read-only exploration), `"act"` (writing changes),
-  `"verify"` (running tests / hooks), `"ship"` (final commit /
-  publish). When you switch phase, set it on that turn's reply; the
-  SPA renders phase transitions on the timeline. The previous phase
-  carries over when `phase` is omitted.
+- **OPTIONAL but ENFORCED:** add a top-level `"phase"` field to ANY reply
+  to declare the lifecycle phase the next step belongs to. Accepted
+  values: `"plan"` (read-only exploration), `"act"` (writing changes),
+  `"verify"` (running tests / hooks), `"ship"` (final commit / publish).
+  When you switch phase, set it on that turn's reply; the previous phase
+  carries over when `phase` is omitted. The SPA renders phase transitions
+  on the timeline. **While the current phase is `plan`, any tool that has
+  side-effects (apply_patch, fs_write, shell, …) is refused** with an
+  observation; switch phase to `act` on the next decision to unlock
+  writes. Read-only tools (fs_read, grep, glob, repo_map, web_search, …)
+  are always allowed.
 - Available tools and their JSON-schema args are listed below.
 "#;
 

@@ -2,7 +2,7 @@
 
 use crate::prompt;
 use crate::protocol::{
-    ActionKind, AgentError, AgentReply, Outcome, parse_reply, preprocess_response,
+    ActionKind, AgentError, AgentReply, Outcome, Phase, parse_reply, preprocess_response,
     recover_from_parse_failure,
 };
 use futures_util::StreamExt;
@@ -166,6 +166,12 @@ pub async fn run_agent(
     // retries. See `check_and_record_loop` below.
     let mut tool_call_log: std::collections::VecDeque<u64> =
         std::collections::VecDeque::with_capacity(LOOP_WINDOW);
+
+    // § T2.7 v1 — sticky-forward phase tracker. Updated whenever a
+    // decision carries an explicit `phase`; consumed by the tool gate
+    // below to reject side-effecting calls while the agent is still in
+    // `plan` (research) phase. Mirrors the SPA's currentPhase memo.
+    let mut current_phase: Option<Phase> = None;
 
     for step in 1..=run.max_steps {
         if run.cancel.is_cancelled() {
@@ -496,6 +502,14 @@ pub async fn run_agent(
         )
         .await?;
 
+        // § T2.7 v1 — update the sticky phase tracker. Any decision that
+        // declares an explicit phase updates the agent's "current" phase
+        // for subsequent tool-gate checks. Decisions without `phase` keep
+        // the prior value intact (sticky-forward).
+        if let Some(p) = reply.phase {
+            current_phase = Some(p);
+        }
+
         // 4) Act.
         match reply.action {
             ActionKind::Done => {
@@ -696,6 +710,38 @@ pub async fn run_agent(
                     .await?;
                     continue;
                 }
+                // § T2.7 v1 — phase gate. In `plan` the agent is in
+                // research-only mode: any tool whose schema declares
+                // `side_effects=true` (apply_patch, fs_write, shell, …)
+                // is refused with a synthetic observation that tells the
+                // model how to progress. Read-only tools (fs_read, grep,
+                // glob, web_search, …) pass through untouched so plan
+                // work can still gather context.
+                let tool_side_effects = reply
+                    .tool
+                    .as_deref()
+                    .and_then(|t| tools.get(t))
+                    .map(|t| t.schema().side_effects)
+                    .unwrap_or(false);
+                if phase_blocks_tool(current_phase, tool_side_effects) {
+                    log_event(
+                        &ledger,
+                        &run,
+                        EventKind::Observation,
+                        json!({
+                            "kind": "phase_gate_blocked",
+                            "phase": "plan",
+                            "tool": reply.tool,
+                            "summary": format!(
+                                "blocked: tool '{}' has side-effects but the agent is in `plan` phase",
+                                reply.tool.as_deref().unwrap_or("?"),
+                            ),
+                            "hint": "in `plan` phase only read-only tools (fs_read, grep, glob, repo_map, web_search, …) are allowed. To execute writes, emit a decision whose `phase` is `act` and then re-issue the tool call.",
+                        }),
+                    )
+                    .await?;
+                    continue;
+                }
                 run_tool_step(&ledger, &tools, &ctx, &run, &reply).await?;
             }
         }
@@ -729,6 +775,20 @@ fn check_and_record_loop(log: &mut std::collections::VecDeque<u64>, reply: &Agen
     }
     log.push_back(sig);
     false
+}
+
+/// § T2.7 v1 — pure decision for the phase gate. Extracted from the
+/// loop body so the rule is unit-testable without spinning up a tool
+/// registry. Returns `true` when the call must be refused with a
+/// synthetic observation.
+///
+/// Rule: refuse iff the agent declared phase `plan` AND the tool has
+/// `side_effects == true`. Any other phase (act/verify/ship) or any
+/// read-only tool passes through. A `None` phase (the agent has never
+/// declared one) also passes through — enforcement only kicks in once
+/// the model opts into the FSM.
+pub(crate) fn phase_blocks_tool(phase: Option<Phase>, side_effects: bool) -> bool {
+    phase == Some(Phase::Plan) && side_effects
 }
 
 fn hash_signature(tool: &str, args: &serde_json::Value) -> u64 {
@@ -1048,6 +1108,36 @@ mod loop_detector_tests {
         assert!(!check_and_record_loop(&mut log, &a));
         assert!(!check_and_record_loop(&mut log, &b));
         assert!(!check_and_record_loop(&mut log, &a));
+    }
+
+    #[test]
+    fn phase_gate_blocks_writes_in_plan() {
+        // Plan + side-effects → refused.
+        assert!(phase_blocks_tool(Some(Phase::Plan), true));
+    }
+
+    #[test]
+    fn phase_gate_allows_reads_in_plan() {
+        // Plan + read-only tool → passes through.
+        assert!(!phase_blocks_tool(Some(Phase::Plan), false));
+    }
+
+    #[test]
+    fn phase_gate_allows_writes_in_act_verify_ship() {
+        for p in [Phase::Act, Phase::Verify, Phase::Ship] {
+            assert!(
+                !phase_blocks_tool(Some(p), true),
+                "phase {:?} must allow writes",
+                p,
+            );
+        }
+    }
+
+    #[test]
+    fn phase_gate_inactive_until_phase_declared() {
+        // No phase ever set → no enforcement, FSM stays opt-in.
+        assert!(!phase_blocks_tool(None, true));
+        assert!(!phase_blocks_tool(None, false));
     }
 
     #[test]
