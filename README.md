@@ -80,11 +80,14 @@ Hermes, and Codex on four axes that nobody else tackles properly:
 | `jarvis-config` | TOML + env loader (figment, `${VAR}` interpolation and `$$` escape). | Stable |
 | `jarvis-ledger` | SQLite WAL, append-only event store, **memories table** (mutable), broadcast bus. | Stable |
 | `jarvis-llm` | `LlmProvider` trait, OpenAI-compatible client, `ModelRegistry`, `LlmPool`, `pricing`. | Stable |
-| `jarvis-tools` | `Tool` trait + 12 builtins: `fs_read`, `fs_write`, `shell`, `apply_patch`, `grep`, `glob`, `update_plan`, `web_search`, `spawn_subagent`, `gh.pr_list`, `gh.pr_view`, `gh.pr_comment`, `gh.pr_create`. | Stable |
+| `jarvis-tools` | `Tool` trait + 14 builtins: `fs_read`, `fs_write`, `shell`, `apply_patch`, `grep`, `glob`, `update_plan`, `web_search`, `spawn_subagent`, **`search_tools`** (meta-tool with lazy catalog support), `gh.pr_list`, `gh.pr_view`, `gh.pr_comment`, `gh.pr_create`. Args validated against each tool's JSON-Schema before invoke. | Stable |
 | `jarvis-sandbox` | `NativeSandbox`, `DockerSandbox`, **`WslSandbox`** (Windows), `WorktreeManager`. | Stable |
 | `jarvis-mcp` | MCP client + tool adapter — plugs in external MCP servers (stdio). | Stable |
-| `jarvis-agent` | Plan-act-observe loop, tolerant JSON parser, **loop detector**, **memory extractor**, system-prompt assembly with memories + AGENTS.md. | Stable |
-| `jarvis-daemon` | `jarvis-daemon` binary. gRPC + tonic-web auth, orchestrator, 19 RPCs. | Stable |
+| `jarvis-mcp-server` | **`jarvis-mcp-server` binary** — exposes Jarvis as an MCP server over stdio. 7 tools (`jarvis_ping`, `jarvis_ask`, `jarvis_submit_task`, …) wrap the daemon gRPC. Lets Claude Code / Codex / Cline drive Jarvis as a sub-routine. | Stable |
+| `jarvis-agent` | Plan-act-observe loop, tolerant JSON parser, **loop detector**, **memory extractor**, system-prompt assembly with memories + **hierarchical AGENTS.md cascade**. Lifecycle hooks (pre/post/on_error). Six tool-call dialects: `json`, `gemma4_strict`, `gemma4_native`, **`hermes_xml`**, **`llama_python`**, **`tool_code_block`**. | Stable |
+| `jarvis-repomap` | **Tree-sitter ranked repo map** — extracts symbols + reference graph, ranks by PageRank, fits the top-K into a token budget. Default-context-provider candidate. CLI: `repomap <path> [--budget N]`. | Stable (Rust extraction; Python/JS/TS parsers wired, queries pending) |
+| `jarvis-bench` | **Reproducible task harness** — YAML suite + tempdir-per-task runner + scorecard JSON. Includes `benches/basic.yaml` mini-suite + stub provider fallback. The linchpin for measuring evolution impact. | Stable |
+| `jarvis-daemon` | `jarvis-daemon` binary. gRPC + tonic-web auth, orchestrator, 19 RPCs. Ledger now uses **versioned migrations** under `crates/jarvis-ledger/migrations/`. | Stable |
 | `jarvis-cli` | `jarvis` binary — scriptable gRPC client. Auto-loads token. | Stable |
 | `jarvis-tui` | `jarvis-tui` binary — ratatui front-end, OpenCode-style. Auto-loads token. | Stable |
 | `jarvis-web` | Axum crate: bearer-token auth, static SPA (rust-embed), SolidJS bundle in `ui/`. | Stable |
@@ -532,6 +535,16 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full development workflow.
 - [x] **M10** — gRPC bearer-token auth + CI workflows + WSL2 sandbox + loop detector + resume_from
 - [x] **M11** (partial) — Cmd+K palette · `web_search` · `spawn_subagent` (explorer/worker/reviewer) · per-turn cost streaming · multi-model verdict validator
 - [x] **M12** — Cron/scheduling (`/schedules`) · GitHub PR via `gh` · audit replay UI (▶/2×/4×/8×) · auto reviewer sub-agent · GitHub Actions release matrix
+- [x] **M13** — Tier 1 strategic evolutions (see `~/.claude/plans/analyse-le-projet-en-snappy-marble.md` for full plan):
+  - **Hierarchical AGENTS.md cascade** — repo → subdirs → workdir, accumulated under an 8 KB budget
+  - **Lifecycle hooks** — `pre/post/on_error` phases with `hook:<phase>:<label>` synth events
+  - **Tool-call dialects** — `hermes_xml`, `llama_python`, `tool_code_block` (any open-weights model becomes pluggable)
+  - **`search_tools` meta-tool** + opt-in compact catalog rendering ([agent].lazy_tool_catalog) — saves 3-5 k tokens/turn
+  - **JSON-Schema args enforcement** — invalid tool args rejected before invoke, with clear errors the model can self-correct against
+  - **Versioned ledger migrations** — `crates/jarvis-ledger/migrations/` + new indexes (parent_evt, memories, tasks.parent)
+  - **`jarvis-repomap`** — tree-sitter ranked symbol map, the default-context-provider candidate
+  - **`jarvis-bench`** — YAML-suite + scorecard JSON harness, the linchpin for measuring evolution impact
+  - **`jarvis-mcp-server`** — Jarvis becomes an MCP server (7 tools wrapping the daemon RPCs); Claude Code/Codex/Cline can drive Jarvis as a sub-routine
 - [ ] **M11** (remaining) — image read + generation · browser sidecar (chromiumoxide)
 
 ---

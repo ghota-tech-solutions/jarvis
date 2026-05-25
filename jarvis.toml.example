@@ -37,6 +37,16 @@ thinking = false
 default_policy = "auto"
 monthly_remote_usd_cap = 50
 
+# --- Agent loop tunables --------------------------------------------------
+# § T1.3 — when true, the system prompt's tool catalog is rendered compactly
+# (names + descriptions only, no full JSON schemas). The agent must call
+# `search_tools(query="…")` to retrieve full args schemas. Saves ~3-5 k tokens
+# per turn on registries with 12+ tools (incl. MCP imports) but costs one
+# extra round-trip the first time the model uses an unfamiliar tool.
+# Default: false (eager — preserves pre-T1.3 behaviour).
+[agent]
+lazy_tool_catalog = false
+
 [sandbox]
 default_backend = "native"          # native | docker
 default_net_policy = "egress_only"  # none | egress_only | full (docker only)
