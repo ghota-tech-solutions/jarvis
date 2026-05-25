@@ -479,6 +479,8 @@ pub fn build_messages(
 
     let mem_msg = render_memories(memories).unwrap_or_default();
 
+    let skills_msg = render_active_skills(workdir);
+
     let plan_msg = render_latest_plan(history).unwrap_or_default();
 
     let user_turn = if ancestor_goals.is_empty() {
@@ -498,6 +500,7 @@ pub fn build_messages(
         + estimate_tokens(&catalog)
         + estimate_tokens(&agents_md)
         + estimate_tokens(&mem_msg)
+        + estimate_tokens(&skills_msg)
         + estimate_tokens(&plan_msg)
         + estimate_tokens(&user_turn);
 
@@ -549,6 +552,13 @@ pub fn build_messages(
         msgs.push(ChatMessage {
             role: ChatRole::System,
             content: agents_md,
+        });
+    }
+
+    if !skills_msg.is_empty() {
+        msgs.push(ChatMessage {
+            role: ChatRole::System,
+            content: skills_msg,
         });
     }
 
@@ -831,6 +841,63 @@ fn cascade_dirs(repo_root: &std::path::Path, workdir: &std::path::Path) -> Vec<s
         dirs.push(workdir.to_path_buf());
     }
     dirs
+}
+
+/// § T2.2 — render the active self-authored skills as a single system
+/// message. Each skill contributes its title + trigger + body, framed
+/// so the agent treats them as "things YOU figured out before; reuse
+/// them when the trigger fires". Active skills live under
+/// `<workdir>/.jarvis/skills/active/*.md` — see `skill_extractor` for
+/// the format. Returns empty when no skills are active.
+const SKILLS_MAX_BYTES: usize = 16 * 1024;
+
+fn render_active_skills(workdir: &str) -> String {
+    let skills = crate::skill_extractor::load_active_skills(workdir);
+    if skills.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from(
+        "# Active skills (self-authored from past tasks in this workdir — reuse them when the trigger matches)\n",
+    );
+    let mut remaining = SKILLS_MAX_BYTES.saturating_sub(out.len());
+    let total = skills.len();
+    let mut emitted = 0;
+    for s in skills.into_iter() {
+        let header = format!(
+            "\n## `{name}` — {title}\n**Trigger:** {trigger}\n\n",
+            name = s.name,
+            title = s.title,
+            trigger = s.trigger,
+        );
+        if remaining <= header.len() + 64 {
+            break;
+        }
+        out.push_str(&header);
+        remaining = remaining.saturating_sub(header.len());
+        if s.body.len() <= remaining {
+            out.push_str(&s.body);
+            if !out.ends_with('\n') {
+                out.push('\n');
+            }
+            remaining = remaining.saturating_sub(s.body.len() + 1);
+        } else {
+            let mut clip = remaining;
+            while clip > 0 && !s.body.is_char_boundary(clip) {
+                clip -= 1;
+            }
+            out.push_str(&s.body[..clip]);
+            out.push_str("\n…[skill body truncated]\n");
+            remaining = 0;
+        }
+        emitted += 1;
+    }
+    if emitted < total {
+        out.push_str(&format!(
+            "\n…[skipped {} more skill(s) — over budget]\n",
+            total - emitted
+        ));
+    }
+    out
 }
 
 /// § T1.1 — load AGENTS.md hierarchically (repo root → subdirs → workdir) and

@@ -13,6 +13,7 @@ mod loop_;
 pub mod memory_extractor;
 mod prompt;
 mod protocol;
+pub mod skill_extractor;
 pub mod validator;
 
 pub use loop_::{AgentRun, HookPhase, HookSpec, ValidationSpec, run_agent};

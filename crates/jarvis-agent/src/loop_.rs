@@ -649,7 +649,7 @@ pub async fn run_agent(
                     };
                     let ids = crate::memory_extractor::extract_for_task(
                         &ledger_clone,
-                        provider,
+                        provider.clone(),
                         task_id,
                         &workdir,
                         &goal,
@@ -657,6 +657,21 @@ pub async fn run_agent(
                     .await;
                     if !ids.is_empty() {
                         info!(count = ids.len(), task = %task_id, "memory candidates proposed");
+                    }
+                    // § T2.2 — best-effort skill extraction. Same gating as
+                    // memory (passed verdict only), but writes to disk under
+                    // `<workdir>/.jarvis/skills/candidates/` and is no-op on
+                    // short / unsuccessful tasks.
+                    if let Some(path) = crate::skill_extractor::extract_for_task(
+                        &ledger_clone,
+                        provider,
+                        task_id,
+                        &workdir,
+                        &goal,
+                    )
+                    .await
+                    {
+                        info!(path = %path.display(), task = %task_id, "skill candidate written");
                     }
                 });
                 return Ok(Outcome::Done);
