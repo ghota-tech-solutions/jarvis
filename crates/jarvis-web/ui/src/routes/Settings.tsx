@@ -23,6 +23,7 @@ import {
   type DefaultRouting,
 } from '~/lib/settings';
 import { requestNotificationPermission } from '~/lib/notify';
+import { $locale, SUPPORTED_LOCALES, useT, type Locale } from '~/lib/i18n';
 
 // --- Generic helpers -----------------------------------------------------
 
@@ -296,17 +297,41 @@ const AboutSection: Component = () => {
   );
 };
 
+const LanguageSection: Component = () => {
+  const t = useT();
+  const locale = useStore($locale);
+
+  const opts: ReadonlyArray<RadioOption<Locale>> = SUPPORTED_LOCALES.map(
+    (l) => ({ value: l.code, label: l.label }),
+  );
+
+  return (
+    <Section title={t().settings.language} desc={t().settings.language_desc}>
+      <Row label={t().settings.language}>
+        <RadioGroup
+          name="locale"
+          value={locale()}
+          options={opts}
+          onChange={(v) => $locale.set(v)}
+        />
+      </Row>
+    </Section>
+  );
+};
+
 // --- Page ----------------------------------------------------------------
 
 const Settings: Component = () => {
+  const t = useT();
   return (
     <section class="settings-page">
       <header class="settings-header">
-        <h2 class="heading" style="margin: 0">Settings</h2>
+        <h2 class="heading" style="margin: 0">{t().settings.title}</h2>
         <p class="dim" style="margin: 0.2rem 0 0 0; font-size: 12px">
-          Preferences are saved automatically and persist across reloads.
+          {t().settings.desc}
         </p>
       </header>
+      <LanguageSection />
       <AppearanceSection />
       <DefaultsSection />
       <NotificationsSection />

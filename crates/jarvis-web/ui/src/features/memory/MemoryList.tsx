@@ -6,6 +6,7 @@ import { SkeletonList } from '~/components/Skeleton';
 import { EmptyState } from '~/components/EmptyState';
 import BulkActionsBar from '~/components/BulkActionsBar';
 import { createBulkSelect } from '~/lib/bulk-select';
+import { useT } from '~/lib/i18n';
 
 const STATUS_LABEL: Record<string, string> = {
   candidate: 'pending',
@@ -141,6 +142,7 @@ const MemoryRow: Component<{ m: Memory; onChange: () => void }> = (p) => {
 };
 
 const MemoryList: Component<{ workdirFilter?: string }> = (p) => {
+  const t = useT();
   const q = createQuery(() => ({
     queryKey: ['memories', p.workdirFilter ?? null],
     queryFn: async () => {
@@ -210,15 +212,15 @@ const MemoryList: Component<{ workdirFilter?: string }> = (p) => {
                 busy={bulkBusy()}
                 actions={[
                   {
-                    label: bulkBusy() ? 'Promoting…' : 'Promote selected',
+                    label: bulkBusy() ? t().memory.bulk_promote_busy : t().memory.bulk_promote,
                     variant: 'primary',
                     onClick: () => runBulk('promote'),
                   },
                   {
-                    label: bulkBusy() ? 'Forgetting…' : 'Forget selected',
+                    label: bulkBusy() ? t().memory.bulk_forget_busy : t().memory.bulk_forget,
                     variant: 'danger',
                     onClick: () => runBulk('forget'),
-                    confirm: 'Forget the selected candidate memories?',
+                    confirm: t().memory.bulk_forget_confirm,
                   },
                 ]}
               />
@@ -234,8 +236,8 @@ const MemoryList: Component<{ workdirFilter?: string }> = (p) => {
                   }
                 >
                   {bulk.count() === grouped().candidate.length
-                    ? 'Select none'
-                    : 'Select all'}
+                    ? t().common.select_none
+                    : t().common.select_all}
                 </button>
               </div>
               <ul class="memory-list">
@@ -264,8 +266,8 @@ const MemoryList: Component<{ workdirFilter?: string }> = (p) => {
               when={grouped().active.length > 0}
               fallback={
                 <EmptyState
-                  title="No active memories"
-                  hint="When jarvis completes a task, it proposes patterns and facts it learned. Promote them here to keep them in mind for future tasks."
+                  title={t().empty.no_memories_title}
+                  hint={t().empty.no_memories_hint}
                 />
               }
             >

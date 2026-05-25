@@ -7,6 +7,7 @@ import {
   type ParentComponent,
 } from 'solid-js';
 import { useLocation } from '@solidjs/router';
+import { useT } from '~/lib/i18n';
 
 type Props = {
   /** Optional label rendered as a chip in the fallback so the user/dev
@@ -43,6 +44,7 @@ const DefaultFallback: ParentComponent<{
   name?: string;
 }> = (props) => {
   const loc = useLocation();
+  const t = useT();
   // Auto-reset whenever the route changes. The ErrorBoundary fallback only
   // mounts after a throw, so this effect captures the path AT THE TIME OF
   // THE ERROR; any subsequent pathname change calls `reset()`. We pass
@@ -61,7 +63,7 @@ const DefaultFallback: ParentComponent<{
   return (
     <div class="error-boundary-fallback" role="alert" aria-live="polite">
       <div class="row" style="align-items: center; gap: 0.5rem">
-        <h3 class="heading" style="margin: 0">Something went wrong</h3>
+        <h3 class="heading" style="margin: 0">{t().error.title}</h3>
         <Show when={props.name}>
           <span class="pill error">{props.name}</span>
         </Show>
@@ -78,14 +80,14 @@ const DefaultFallback: ParentComponent<{
           class="btn"
           onClick={() => window.location.reload()}
         >
-          Reload
+          {t().common.reload}
         </button>
         <button
           type="button"
           class="btn ghost"
           onClick={() => props.reset()}
         >
-          Reset
+          {t().common.reset}
         </button>
       </div>
     </div>

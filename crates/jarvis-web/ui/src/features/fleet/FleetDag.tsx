@@ -3,6 +3,7 @@ import { A } from '@solidjs/router';
 import { useFleetStream } from '~/lib/api/streams';
 import { defaultLayoutOptions, layoutFleet, type PositionedNode } from './layout';
 import { EmptyState } from '~/components/EmptyState';
+import { useT } from '~/lib/i18n';
 
 const statusColor = (s: string): string => {
   switch (s) {
@@ -80,6 +81,7 @@ const Node: Component<{ pn: PositionedNode }> = (p) => {
 };
 
 const FleetDag: Component = () => {
+  const t = useT();
   const stream = useFleetStream();
 
   const layout = createMemo(() => {
@@ -111,10 +113,10 @@ const FleetDag: Component = () => {
             when={l().nodes.length > 0}
             fallback={
               <EmptyState
-                title="No fleet activity"
-                hint="The fleet graph appears once you have running or recently completed tasks with parent/child relationships."
+                title={t().empty.no_fleet_title}
+                hint={t().empty.no_fleet_hint}
                 actionHref="/"
-                actionLabel="Go to dashboard"
+                actionLabel={t().empty.no_fleet_cta}
               />
             }
           >

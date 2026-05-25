@@ -3,6 +3,7 @@ import { A } from '@solidjs/router';
 import { createQuery } from '@tanstack/solid-query';
 import { taskListQuery } from '~/lib/api/queries';
 import type { Task } from '~/lib/api/gen/jarvis_pb';
+import { useT } from '~/lib/i18n';
 
 type Project = {
   workdir: string;
@@ -16,6 +17,7 @@ const folderName = (path: string): string => {
 };
 
 const SidebarLeft: Component = () => {
+  const t = useT();
   const tasksQ = createQuery(() => taskListQuery(true));
 
   const projects = createMemo<Project[]>(() => {
@@ -36,19 +38,19 @@ const SidebarLeft: Component = () => {
       <h3 class="section-title">Navigation</h3>
       <div style="display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 1.2rem">
         <A href="/" class="nav-link" activeClass="nav-active" end>
-          ⌂ Dashboard
+          ⌂ {t().nav.dashboard}
         </A>
         <A href="/fleet" class="nav-link" activeClass="nav-active">
-          ⌹ Fleet DAG
+          ⌹ {t().nav.fleet}
         </A>
         <A href="/memory" class="nav-link" activeClass="nav-active">
-          ⌥ Memory
+          ⌥ {t().nav.memory}
         </A>
         <A href="/schedules" class="nav-link" activeClass="nav-active">
-          ⏰ Schedules
+          ⏰ {t().nav.schedules}
         </A>
         <A href="/settings" class="nav-link" activeClass="nav-active">
-          ⚙ Settings
+          ⚙ {t().nav.settings}
         </A>
       </div>
 

@@ -17,11 +17,13 @@ import { toggleTheme, useTheme } from '~/lib/stores/theme';
 import { useAppearance } from '~/lib/theme-apply';
 import { useGlobalShortcuts, setHelpOpenSig } from '~/lib/stores/shortcuts';
 import { useTaskNotifications } from '~/lib/stores/notifications';
+import { useT } from '~/lib/i18n';
 
 const App: ParentComponent = (props) => {
   const loc = useLocation();
   const isTaskRoute = () => loc.pathname.startsWith('/task/');
   const theme = useTheme();
+  const t = useT();
   useAppearance();
   useGlobalShortcuts();
   useTaskNotifications();
@@ -45,16 +47,16 @@ const App: ParentComponent = (props) => {
           type="button"
           class="hamburger"
           onClick={() => setNavOpen((v) => !v)}
-          aria-label="Toggle navigation"
+          aria-label={t().app.toggle_nav}
         >
           ☰
         </button>
-        <a href="/" class="brand">jarvis</a>
+        <a href="/" class="brand">{t().app.brand}</a>
         <span class="fade">·</span>
-        <span class="dim">web</span>
+        <span class="dim">{t().app.surface}</span>
         <Show when={!hasToken()}>
           <span class="warn" style="margin-left: 1rem">
-            no token — append <code>#token=&lt;web.token&gt;</code>
+            {t().app.no_token} <code>#token=&lt;web.token&gt;</code> {t().app.no_token_hint}
           </span>
         </Show>
         <div style="margin-left: auto; display: flex; gap: 0.4rem; align-items: center">
@@ -63,7 +65,7 @@ const App: ParentComponent = (props) => {
             class="btn ghost"
             style="padding: 0.2rem 0.5rem; font-size: 11px"
             onClick={toggleTheme}
-            title="Toggle theme (t)"
+            title={t().app.toggle_theme}
           >
             {theme() === 'dark' ? '☾' : '☀'}
           </button>
@@ -72,7 +74,7 @@ const App: ParentComponent = (props) => {
             class="btn ghost"
             style="padding: 0.2rem 0.5rem; font-size: 11px"
             onClick={() => setHelpOpenSig(true)}
-            title="Keyboard shortcuts (?)"
+            title={t().app.keyboard_shortcuts}
           >
             ?
           </button>

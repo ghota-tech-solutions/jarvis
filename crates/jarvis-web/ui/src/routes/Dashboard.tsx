@@ -8,6 +8,7 @@ import QuickAsk from '~/components/QuickAsk';
 import AppErrorBoundary from '~/components/ErrorBoundary';
 import { SkeletonList } from '~/components/Skeleton';
 import { EmptyState } from '~/components/EmptyState';
+import { useT } from '~/lib/i18n';
 
 type Conversation = {
   root: Task;
@@ -169,6 +170,7 @@ const NewTaskForm: Component = () => {
 };
 
 const Dashboard: Component = () => {
+  const t = useT();
   const tasksQ = createQuery(() => taskListQuery(true));
   const [filter, setFilter] = createSignal('');
   const [statusFilter, setStatusFilter] = createSignal<string>('');
@@ -255,8 +257,8 @@ const Dashboard: Component = () => {
             when={conversations().length > 0}
             fallback={
               <EmptyState
-                title="No tasks yet"
-                hint="Submit your first goal below — jarvis runs them in the background and you can close the window any time."
+                title={t().empty.no_tasks_title}
+                hint={t().empty.no_tasks_hint}
               />
             }
           >

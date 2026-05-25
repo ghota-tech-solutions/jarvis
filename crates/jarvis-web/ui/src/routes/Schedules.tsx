@@ -11,6 +11,7 @@ import type { Schedule } from '~/lib/api/gen/jarvis_pb';
 import AppErrorBoundary from '~/components/ErrorBoundary';
 import { SkeletonList } from '~/components/Skeleton';
 import { EmptyState } from '~/components/EmptyState';
+import { useT } from '~/lib/i18n';
 
 const fmtNext = (micros: bigint): string => {
   const n = Number(micros);
@@ -192,6 +193,7 @@ const ScheduleRow: Component<{ s: Schedule; onChange: () => void }> = (p) => {
 };
 
 const Schedules: Component = () => {
+  const t = useT();
   const qc = useQueryClient();
   const q = createQuery(() => ({
     queryKey: ['schedules'],
@@ -225,8 +227,8 @@ const Schedules: Component = () => {
               when={list().length > 0}
               fallback={
                 <EmptyState
-                  title="No scheduled tasks"
-                  hint="Recurring tasks let jarvis run audits, syncs, and checks on its own — create your first cron job with the form above."
+                  title={t().empty.no_schedules_title}
+                  hint={t().empty.no_schedules_hint}
                 />
               }
             >
