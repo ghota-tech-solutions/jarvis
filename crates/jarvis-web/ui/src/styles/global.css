@@ -1778,3 +1778,95 @@ kbd {
   font-size: 10px;
   letter-spacing: 0.05em;
 }
+
+/* § F1.8 — Shiki-rendered unified diff. Shiki emits a <pre><code> tree
+ * with inline `--shiki-light` / `--shiki-dark` CSS variables on every
+ * span; we just switch which one wins via [data-theme]. */
+.diff-shiki .shiki {
+  background: var(--bg-elev, #f6f8fa);
+  color: var(--shiki-light, #24292e);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+.diff-shiki .shiki span {
+  color: var(--shiki-light, inherit);
+}
+[data-theme="dark"] .diff-shiki .shiki {
+  background: var(--bg-elev, #161b22);
+  color: var(--shiki-dark, #c9d1d9);
+}
+[data-theme="dark"] .diff-shiki .shiki span {
+  color: var(--shiki-dark, inherit);
+}
+
+/* § F1.3 — skeleton loaders */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-elev, #eee) 0%,
+    var(--border, #ddd) 50%,
+    var(--bg-elev, #eee) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+@keyframes skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton-card {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; opacity: 0.7; }
+}
+
+/* § F1.4 — empty states */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--dim);
+  min-height: 200px;
+  gap: 0.75rem;
+}
+.empty-state-illustration {
+  opacity: 0.45;
+  margin-bottom: 0.25rem;
+}
+.empty-state-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--heading);
+}
+.empty-state-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  max-width: 32ch;
+  line-height: 1.5;
+}
+.empty-state-action {
+  margin-top: 0.5rem;
+  display: inline-block;
+}

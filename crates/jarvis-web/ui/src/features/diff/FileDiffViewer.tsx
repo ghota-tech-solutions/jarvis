@@ -5,10 +5,22 @@
 // to the accumulated diff text. The previous implementation shipped full
 // file contents inside the DiffGroup response and rendered them through
 // `@codemirror/merge`; large refactors used to make that response huge.
+//
+// § F1.8: rendered via Shiki (lazy-loaded) with the `diff` grammar — gives
+// proper colors for +/-/@@/--- lines via the active theme. Falls back to a
+// manually-classed <pre> rendering while Shiki is loading or if it errors.
 
-import { For, Show, createSignal, onMount, type Component } from 'solid-js';
+import {
+  For,
+  Show,
+  createEffect,
+  createSignal,
+  onMount,
+  type Component,
+} from 'solid-js';
 import { jarvis } from '~/lib/api/client';
 import type { FileDiff } from '~/lib/api/gen/jarvis_pb';
+import { highlightDiff } from '~/lib/highlight';
 
 type Props = {
   taskId: string;
@@ -25,6 +37,24 @@ const FileDiffViewer: Component<Props> = (p) => {
   const [hasMore, setHasMore] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [html, setHtml] = createSignal<string | null>(null);
+
+  // Re-highlight whenever the accumulated diff text grows. The async call
+  // returns the latest text rendered; a stale resolve can land out of order
+  // (e.g. user spams "load more"). We guard with a token to drop staler
+  // results.
+  let highlightToken = 0;
+  createEffect(() => {
+    const t = text();
+    if (!t) {
+      setHtml(null);
+      return;
+    }
+    const token = ++highlightToken;
+    void highlightDiff(t).then((out) => {
+      if (token === highlightToken) setHtml(out);
+    });
+  });
 
   const loadChunk = async () => {
     if (busy()) return;
@@ -73,10 +103,25 @@ const FileDiffViewer: Component<Props> = (p) => {
           (empty diff — likely a binary file or whitespace-only change)
         </p>
       </Show>
-      <Show when={text()}>
-        <pre class="unified-diff">
-          <For each={text().split('\n')}>{(line) => <DiffLine line={line} />}</For>
-        </pre>
+      <Show
+        when={text()}
+      >
+        <Show
+          when={html()}
+          fallback={
+            // Plain-text fallback while Shiki is loading the grammar or if
+            // it errored. Uses the manual per-line class coloring as before
+            // so the user always sees +/-/@@ markers.
+            <pre class="unified-diff">
+              <For each={text().split('\n')}>
+                {(line) => <DiffLine line={line} />}
+              </For>
+            </pre>
+          }
+        >
+          {/* eslint-disable-next-line solid/no-innerhtml */}
+          <div class="diff-shiki" innerHTML={html() ?? ''} />
+        </Show>
       </Show>
       <Show when={hasMore()}>
         <button

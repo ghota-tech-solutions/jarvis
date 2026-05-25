@@ -9,6 +9,8 @@ import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { jarvis } from '~/lib/api/client';
 import type { Schedule } from '~/lib/api/gen/jarvis_pb';
 import AppErrorBoundary from '~/components/ErrorBoundary';
+import { SkeletonList } from '~/components/Skeleton';
+import { EmptyState } from '~/components/EmptyState';
 
 const fmtNext = (micros: bigint): string => {
   const n = Number(micros);
@@ -212,16 +214,30 @@ const Schedules: Component = () => {
 
       <NewScheduleForm onCreated={refresh} />
 
-      <h3 class="section-title" style="margin-top: 1.5rem">
-        Active · {list().length}
-      </h3>
       <Show
-        when={list().length > 0}
-        fallback={<p class="dim">no schedules yet — create one above</p>}
+        when={q.isPending && !q.data}
+        fallback={
+          <>
+            <h3 class="section-title" style="margin-top: 1.5rem">
+              Active · {list().length}
+            </h3>
+            <Show
+              when={list().length > 0}
+              fallback={
+                <EmptyState
+                  title="No scheduled tasks"
+                  hint="Recurring tasks let jarvis run audits, syncs, and checks on its own — create your first cron job with the form above."
+                />
+              }
+            >
+              <ul class="schedule-list">
+                <For each={list()}>{(s) => <ScheduleRow s={s} onChange={refresh} />}</For>
+              </ul>
+            </Show>
+          </>
+        }
       >
-        <ul class="schedule-list">
-          <For each={list()}>{(s) => <ScheduleRow s={s} onChange={refresh} />}</For>
-        </ul>
+        <SkeletonList count={3} lines={2} />
       </Show>
     </section>
   );

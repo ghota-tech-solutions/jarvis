@@ -2,6 +2,8 @@ import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { jarvis } from '~/lib/api/client';
 import type { Memory } from '~/lib/api/gen/jarvis_pb';
+import { SkeletonList } from '~/components/Skeleton';
+import { EmptyState } from '~/components/EmptyState';
 
 const STATUS_LABEL: Record<string, string> = {
   candidate: 'pending',
@@ -168,30 +170,44 @@ const MemoryList: Component<{ workdirFilter?: string }> = (p) => {
         </p>
       </header>
 
-      <h3 class="section-title">Candidates · {grouped().candidate.length}</h3>
       <Show
-        when={grouped().candidate.length > 0}
-        fallback={<p class="dim">none — finish a task to see proposals</p>}
-      >
-        <ul class="memory-list">
-          <For each={grouped().candidate}>
-            {(m) => <MemoryRow m={m} onChange={() => q.refetch()} />}
-          </For>
-        </ul>
-      </Show>
+        when={q.isPending && !q.data}
+        fallback={
+          <>
+            <h3 class="section-title">Candidates · {grouped().candidate.length}</h3>
+            <Show
+              when={grouped().candidate.length > 0}
+              fallback={<p class="dim">none — finish a task to see proposals</p>}
+            >
+              <ul class="memory-list">
+                <For each={grouped().candidate}>
+                  {(m) => <MemoryRow m={m} onChange={() => q.refetch()} />}
+                </For>
+              </ul>
+            </Show>
 
-      <h3 class="section-title" style="margin-top: 1.5rem">
-        Active · {grouped().active.length}
-      </h3>
-      <Show
-        when={grouped().active.length > 0}
-        fallback={<p class="dim">no promoted memories yet</p>}
+            <h3 class="section-title" style="margin-top: 1.5rem">
+              Active · {grouped().active.length}
+            </h3>
+            <Show
+              when={grouped().active.length > 0}
+              fallback={
+                <EmptyState
+                  title="No active memories"
+                  hint="When jarvis completes a task, it proposes patterns and facts it learned. Promote them here to keep them in mind for future tasks."
+                />
+              }
+            >
+              <ul class="memory-list">
+                <For each={grouped().active}>
+                  {(m) => <MemoryRow m={m} onChange={() => q.refetch()} />}
+                </For>
+              </ul>
+            </Show>
+          </>
+        }
       >
-        <ul class="memory-list">
-          <For each={grouped().active}>
-            {(m) => <MemoryRow m={m} onChange={() => q.refetch()} />}
-          </For>
-        </ul>
+        <SkeletonList count={4} lines={2} />
       </Show>
     </section>
   );

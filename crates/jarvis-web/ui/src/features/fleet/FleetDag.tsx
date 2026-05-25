@@ -2,6 +2,7 @@ import { For, Show, createMemo, type Component } from 'solid-js';
 import { A } from '@solidjs/router';
 import { useFleetStream } from '~/lib/api/streams';
 import { defaultLayoutOptions, layoutFleet, type PositionedNode } from './layout';
+import { EmptyState } from '~/components/EmptyState';
 
 const statusColor = (s: string): string => {
   switch (s) {
@@ -106,39 +107,51 @@ const FleetDag: Component = () => {
       </header>
       <Show when={layout()} fallback={<p class="dim">waiting for fleet snapshot…</p>}>
         {(l) => (
-          <div style="overflow: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--bg)">
-            <svg
-              width={l().width}
-              height={Math.max(l().height, 200)}
-              style="display: block"
-            >
-              <defs>
-                <marker
-                  id="arrow"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="5"
-                  markerHeight="5"
-                  orient="auto"
-                >
-                  <path d="M0,0 L10,5 L0,10 z" fill="var(--fade)" />
-                </marker>
-              </defs>
-              <For each={l().edges}>
-                {(pe) => (
-                  <path
-                    d={pe.path}
-                    fill="none"
-                    stroke="var(--fade)"
-                    stroke-width="1.5"
-                    marker-end="url(#arrow)"
-                  />
-                )}
-              </For>
-              <For each={l().nodes}>{(pn) => <Node pn={pn} />}</For>
-            </svg>
-          </div>
+          <Show
+            when={l().nodes.length > 0}
+            fallback={
+              <EmptyState
+                title="No fleet activity"
+                hint="The fleet graph appears once you have running or recently completed tasks with parent/child relationships."
+                actionHref="/"
+                actionLabel="Go to dashboard"
+              />
+            }
+          >
+            <div style="overflow: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--bg)">
+              <svg
+                width={l().width}
+                height={Math.max(l().height, 200)}
+                style="display: block"
+              >
+                <defs>
+                  <marker
+                    id="arrow"
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="5"
+                    markerHeight="5"
+                    orient="auto"
+                  >
+                    <path d="M0,0 L10,5 L0,10 z" fill="var(--fade)" />
+                  </marker>
+                </defs>
+                <For each={l().edges}>
+                  {(pe) => (
+                    <path
+                      d={pe.path}
+                      fill="none"
+                      stroke="var(--fade)"
+                      stroke-width="1.5"
+                      marker-end="url(#arrow)"
+                    />
+                  )}
+                </For>
+                <For each={l().nodes}>{(pn) => <Node pn={pn} />}</For>
+              </svg>
+            </div>
+          </Show>
         )}
       </Show>
     </section>

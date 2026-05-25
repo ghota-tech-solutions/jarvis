@@ -19,6 +19,7 @@ import DiffByIntent from '~/features/diff/DiffByIntent';
 import TerminalLogs from '~/components/TerminalLogs';
 import Telemetry from '~/components/Telemetry';
 import AppErrorBoundary from '~/components/ErrorBoundary';
+import { SkeletonList } from '~/components/Skeleton';
 
 const Task: Component = () => {
   const params = useParams<{ id: string }>();
@@ -217,7 +218,7 @@ const Task: Component = () => {
               </p>
             </header>
 
-            <Show when={stream.loaded()} fallback={<p class="dim">loading events…</p>}>
+            <Show when={stream.loaded()} fallback={<SkeletonList count={4} lines={3} />}>
               <div class="task-split-container">
                 {/* Left Pane: Timeline, Event Transcript, and follow-up form */}
                 <div class="task-pane-left">

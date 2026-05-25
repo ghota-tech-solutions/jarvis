@@ -6,6 +6,8 @@ import { jarvis } from '~/lib/api/client';
 import type { Task } from '~/lib/api/gen/jarvis_pb';
 import QuickAsk from '~/components/QuickAsk';
 import AppErrorBoundary from '~/components/ErrorBoundary';
+import { SkeletonList } from '~/components/Skeleton';
+import { EmptyState } from '~/components/EmptyState';
 
 type Conversation = {
   root: Task;
@@ -246,11 +248,28 @@ const Dashboard: Component = () => {
         </select>
       </div>
 
-      <div
-        style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.7rem"
+      <Show
+        when={tasksQ.isPending && !tasksQ.data}
+        fallback={
+          <Show
+            when={conversations().length > 0}
+            fallback={
+              <EmptyState
+                title="No tasks yet"
+                hint="Submit your first goal below — jarvis runs them in the background and you can close the window any time."
+              />
+            }
+          >
+            <div
+              style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.7rem"
+            >
+              <For each={filtered()}>{(conv) => <TaskCard conv={conv} />}</For>
+            </div>
+          </Show>
+        }
       >
-        <For each={filtered()}>{(conv) => <TaskCard conv={conv} />}</For>
-      </div>
+        <SkeletonList count={5} lines={3} />
+      </Show>
 
       <NewTaskForm />
     </section>
