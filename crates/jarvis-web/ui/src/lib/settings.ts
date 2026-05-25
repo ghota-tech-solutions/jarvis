@@ -59,3 +59,14 @@ export const $notificationsEnabled = persistentAtom<boolean>(
   true,
   { encode: String, decode: (v) => v === 'true' },
 );
+
+/** § F2.10 — contrast mode override. `auto` defers to the OS
+ *  `prefers-contrast: more` media query; `high` forces the AAA-grade
+ *  palette regardless of OS preference. `normal` overrides the OS
+ *  preference too — useful when the system reports high-contrast but
+ *  the user explicitly wants the regular palette. */
+export type ContrastMode = 'auto' | 'normal' | 'high';
+export const $contrast = persistentAtom<ContrastMode>(
+  'jarvis:contrast',
+  'auto',
+);

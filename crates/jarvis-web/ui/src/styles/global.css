@@ -35,6 +35,83 @@
   --border: rgb(220, 215, 205);
 }
 
+/* § F2.10 — high-contrast variant. Honours `prefers-contrast: more`
+ * automatically, and is also exposed via `[data-contrast="high"]` on
+ * <html> for users who want it forced via Settings. Pure WCAG AAA
+ * (foreground/background contrast ratio ≥ 7:1). */
+@media (prefers-contrast: more) {
+  :root,
+  [data-theme='dark'] {
+    --body: rgb(245, 245, 245);
+    --dim: rgb(195, 195, 195);
+    --fade: rgb(140, 140, 140);
+    --heading: rgb(255, 255, 255);
+    --border: rgb(120, 120, 120);
+    --focus: rgb(255, 255, 80);
+  }
+  [data-theme='light'] {
+    --body: rgb(10, 10, 10);
+    --dim: rgb(70, 70, 70);
+    --fade: rgb(130, 130, 130);
+    --heading: rgb(0, 0, 0);
+    --border: rgb(150, 150, 150);
+    --focus: rgb(20, 20, 200);
+  }
+}
+[data-contrast='high'][data-theme='dark'],
+[data-contrast='high']:root {
+  --body: rgb(245, 245, 245);
+  --dim: rgb(195, 195, 195);
+  --fade: rgb(140, 140, 140);
+  --heading: rgb(255, 255, 255);
+  --border: rgb(120, 120, 120);
+  --focus: rgb(255, 255, 80);
+}
+[data-contrast='high'][data-theme='light'] {
+  --body: rgb(10, 10, 10);
+  --dim: rgb(70, 70, 70);
+  --fade: rgb(130, 130, 130);
+  --heading: rgb(0, 0, 0);
+  --border: rgb(150, 150, 150);
+  --focus: rgb(20, 20, 200);
+}
+
+/* § F2.10 — density tokens. Components that opt-in read these vars
+ * instead of hard-coding paddings/font sizes. `comfortable` keeps the
+ * existing rhythm; `compact` shaves ~25% off vertical space for
+ * power-user dense lists. */
+:root,
+[data-density='comfortable'] {
+  --density-pad-y: 0.6rem;
+  --density-pad-x: 0.8rem;
+  --density-row-gap: 0.5rem;
+  --density-font-size: 13px;
+  --density-list-gap: 0.4rem;
+}
+[data-density='compact'] {
+  --density-pad-y: 0.35rem;
+  --density-pad-x: 0.55rem;
+  --density-row-gap: 0.3rem;
+  --density-font-size: 12px;
+  --density-list-gap: 0.2rem;
+}
+/* Density-aware overrides for the most repeated row patterns. */
+[data-density='compact'] .task-card,
+[data-density='compact'] .schedule-row,
+[data-density='compact'] .memory-row,
+[data-density='compact'] .skeleton-card {
+  padding: var(--density-pad-y) var(--density-pad-x);
+  font-size: var(--density-font-size);
+}
+[data-density='compact'] .memory-list,
+[data-density='compact'] .schedule-list,
+[data-density='compact'] .skeleton-list {
+  gap: var(--density-list-gap);
+}
+[data-density='compact'] .nav-link {
+  padding: 0.25rem 0.4rem;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -1903,3 +1980,97 @@ kbd {
   flex: 0 0 auto;
 }
 .bulk-row > .bulk-row-content { flex: 1; min-width: 0; }
+
+/* § F2.5 — markdown tables (GFM pipe-table syntax). */
+.markdown .md-table {
+  border-collapse: collapse;
+  margin: 0.6rem 0;
+  font-size: 12px;
+}
+.markdown .md-table th,
+.markdown .md-table td {
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.55rem;
+  text-align: left;
+}
+.markdown .md-table th {
+  background: var(--bg-elev);
+  color: var(--heading);
+  font-weight: 600;
+}
+.markdown .md-table tbody tr:nth-child(odd) td {
+  background: color-mix(in srgb, var(--bg-elev) 50%, transparent);
+}
+.markdown del {
+  color: var(--dim);
+}
+/* Shiki-enhanced md code blocks inherit theme via the diff-shiki rules
+ * already in place; we just remove the default border so the Shiki
+ * background stays clean. */
+.markdown pre.md-code[data-shiki='on'] {
+  border: none;
+  padding: 0;
+}
+
+/* § F2.4 — Analytics page */
+.analytics-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+.analytics-header { margin-bottom: 0.3rem; }
+.analytics-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.6rem;
+}
+.analytics-stat {
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+}
+.analytics-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--heading);
+  line-height: 1.1;
+}
+.analytics-stat-label {
+  margin-top: 0.2rem;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+}
+.analytics-stat-hint {
+  margin-top: 0.15rem;
+  font-size: 10px;
+}
+.analytics-panel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  padding: 0.8rem 1rem 1rem;
+}
+.analytics-panel-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 13px;
+  color: var(--heading);
+  font-weight: 600;
+}
+.analytics-chart {
+  width: 100%;
+  min-height: 200px;
+}
+/* uPlot dark-mode tweak — its default cursor line + legend are too bright
+ * against our dark elev background. */
+[data-theme='dark'] .u-cursor-x,
+[data-theme='dark'] .u-cursor-y {
+  background: rgba(255, 255, 255, 0.25);
+}
+[data-theme='dark'] .u-legend {
+  color: var(--body);
+}

@@ -27,7 +27,10 @@ type Dict = {
     'brand' | 'surface' | 'no_token' | 'no_token_hint' | 'toggle_theme' | 'keyboard_shortcuts' | 'toggle_nav',
     string
   >;
-  nav: Record<'dashboard' | 'fleet' | 'memory' | 'schedules' | 'settings', string>;
+  nav: Record<
+    'dashboard' | 'fleet' | 'memory' | 'schedules' | 'analytics' | 'settings',
+    string
+  >;
   common: Record<
     'cancel' | 'reload' | 'reset' | 'clear' | 'quit' | 'loading' | 'select_all' | 'select_none' | 'selected',
     string
@@ -94,6 +97,7 @@ export const en: Dict = {
     fleet: 'Fleet',
     memory: 'Memory',
     schedules: 'Schedules',
+    analytics: 'Analytics',
     settings: 'Settings',
   },
   common: {
@@ -177,6 +181,7 @@ export const fr: Dict = {
     fleet: 'Flotte',
     memory: 'Mémoire',
     schedules: 'Planifications',
+    analytics: 'Analyses',
     settings: 'Paramètres',
   },
   common: {

@@ -16,6 +16,7 @@ import {
   $defaultRouting,
   $defaultMaxSteps,
   $notificationsEnabled,
+  $contrast,
   ACCENT_PRESETS,
   type ThemeMode,
   type Density,
@@ -86,6 +87,7 @@ const AppearanceSection: Component = () => {
   const theme = useStore($theme);
   const accent = useStore($accent);
   const density = useStore($density);
+  const contrast = useStore($contrast);
 
   const themeOpts: ReadonlyArray<RadioOption<ThemeMode>> = [
     { value: 'light', label: 'Light' },
@@ -125,12 +127,24 @@ const AppearanceSection: Component = () => {
           </For>
         </div>
       </Row>
-      <Row label="Density" hint="Tighter paddings on compact (full effect lands in F2).">
+      <Row label="Density" hint="Tighter paddings + smaller type on compact.">
         <RadioGroup
           name="density"
           value={density()}
           options={densityOpts}
           onChange={(v) => $density.set(v)}
+        />
+      </Row>
+      <Row label="Contrast" hint="High forces an AAA-grade palette; auto follows the OS preference.">
+        <RadioGroup
+          name="contrast"
+          value={contrast()}
+          options={[
+            { value: 'auto', label: 'Auto' },
+            { value: 'normal', label: 'Normal' },
+            { value: 'high', label: 'High' },
+          ] as const}
+          onChange={(v) => $contrast.set(v)}
         />
       </Row>
     </Section>

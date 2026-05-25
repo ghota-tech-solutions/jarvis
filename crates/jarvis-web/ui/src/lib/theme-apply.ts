@@ -13,7 +13,7 @@
 import { useStore } from '@nanostores/solid';
 import { createEffect, onCleanup, onMount } from 'solid-js';
 import { themeAtom, type ThemeName } from './stores/theme';
-import { $theme, $accent, $density } from './settings';
+import { $theme, $accent, $density, $contrast } from './settings';
 
 const MQ = '(prefers-color-scheme: dark)';
 
@@ -34,6 +34,7 @@ export function useAppearance(): void {
   const themeMode = useStore($theme);
   const accent = useStore($accent);
   const density = useStore($density);
+  const contrast = useStore($contrast);
 
   // Theme: respond both to store changes and to OS-level preference changes
   // (so users in `system` mode get live updates).
@@ -70,9 +71,20 @@ export function useAppearance(): void {
     document.documentElement.style.setProperty('--accent', accent());
   });
 
-  // Density: posed as a data attribute. CSS rules under
-  // `[data-density="compact"]` can tighten paddings — follow-up ticket.
+  // Density: written as `data-density`. CSS in `global.css` under the
+  // `[data-density="compact"]` selectors does the actual layout tightening.
   createEffect(() => {
     document.documentElement.dataset.density = density();
+  });
+
+  // § F2.10 — contrast override. `auto` removes the attribute and lets
+  // `prefers-contrast: more` decide; `high` / `normal` force it.
+  createEffect(() => {
+    const mode = contrast();
+    if (mode === 'auto') {
+      delete document.documentElement.dataset.contrast;
+    } else {
+      document.documentElement.dataset.contrast = mode;
+    }
   });
 }

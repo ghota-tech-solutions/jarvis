@@ -41,6 +41,41 @@ describe('renderMarkdown', () => {
     expect(ol).toContain('<li>first</li>');
     expect(ol).toContain('<li>second</li>');
   });
+
+  // § F2.5 — GFM extras.
+
+  it('renders strikethrough', () => {
+    const out = renderMarkdown('this is ~~deleted~~ text');
+    expect(out).toContain('<del>deleted</del>');
+  });
+
+  it('renders a GFM pipe table with header + rows', () => {
+    const md = ['| col1 | col2 |', '|---|---|', '| a | b |', '| c | d |'].join(
+      '\n',
+    );
+    const out = renderMarkdown(md);
+    expect(out).toContain('<table class="md-table">');
+    expect(out).toContain('<th>col1</th>');
+    expect(out).toContain('<th>col2</th>');
+    expect(out).toContain('<td>a</td>');
+    expect(out).toContain('<td>d</td>');
+  });
+
+  it('honours per-column alignment markers in tables', () => {
+    const md = ['| L | C | R |', '|:---|:---:|---:|', '| a | b | c |'].join(
+      '\n',
+    );
+    const out = renderMarkdown(md);
+    expect(out).toContain('style="text-align: left"');
+    expect(out).toContain('style="text-align: center"');
+    expect(out).toContain('style="text-align: right"');
+  });
+
+  it('ignores pipe lines that are not followed by a separator row', () => {
+    const md = 'first | line\nsecond line';
+    const out = renderMarkdown(md);
+    expect(out).not.toContain('<table');
+  });
 });
 
 describe('<Markdown />', () => {

@@ -20,7 +20,10 @@ const DARK_THEME = 'github-dark';
 let highlighterPromise: Promise<Highlighter> | null = null;
 const loadedLangs = new Set<BundledLanguage>();
 
-async function getHighlighter(): Promise<Highlighter> {
+/** Shared Shiki highlighter — created once, lazily. Exposed so other
+ *  callers (e.g. `<Markdown>` code-block enhancer) reuse the same
+ *  runtime instance instead of spinning up a second one. */
+export async function getHighlighter(): Promise<Highlighter> {
   if (!highlighterPromise) {
     const { createHighlighter } = await import('shiki');
     highlighterPromise = createHighlighter({
@@ -31,11 +34,17 @@ async function getHighlighter(): Promise<Highlighter> {
   return highlighterPromise;
 }
 
-async function ensureLang(h: Highlighter, lang: BundledLanguage): Promise<void> {
+/** Lazy-load a language grammar onto the shared highlighter. Idempotent. */
+export async function ensureLang(
+  h: Highlighter,
+  lang: BundledLanguage,
+): Promise<void> {
   if (loadedLangs.has(lang)) return;
   await h.loadLanguage(lang);
   loadedLangs.add(lang);
 }
+
+export const SHIKI_THEMES = { light: LIGHT_THEME, dark: DARK_THEME } as const;
 
 /** Maps a file path's extension to a Shiki bundled language. Returns null
  *  when the extension is unknown — caller should fall back to plain text. */

@@ -1,17 +1,24 @@
-// § C front-fix — minimal markdown renderer for LLM-emitted text.
+// § C front-fix + F2.5 — markdown renderer for LLM-emitted text.
 //
-// No external dependency: keeps the SPA under the 2 MB bundle cap and
-// dodges the XSS-via-third-party-parser surface. Handles the subset the
-// agent actually emits: headers, paragraphs, bullets, ordered lists,
-// inline / fenced code, bold, italic, links, hr.
+// No external dependency for the *parser*: keeps the SPA under the 2 MB
+// bundle cap and dodges the XSS-via-third-party-parser surface. Handles
+// the subset the agent actually emits: headers, paragraphs, bullets,
+// ordered lists, inline / fenced code, bold, italic, strikethrough,
+// links, horizontal rule, GFM-style pipe tables, plus our custom
+// step-divider / reasoning / answer sections.
 //
 // The input is HTML-escaped before any markdown rule runs, so the only
 // HTML in the output comes from our own template strings — no raw user
-// HTML leaks through. Use this component for any text that originated
-// from the model (decision.thought, decision.message, verdict.message,
-// tool_result.output when we know the tool produces markdown).
+// HTML leaks through.
+//
+// § F2.5 enhancement: code blocks are lazy-syntax-highlighted via Shiki
+// (loaded on demand by the component, not the pure renderer). The
+// renderer emits `<pre class="md-code" data-lang="...">` and the
+// component walks those nodes after mount to swap them for highlighted
+// HTML — falls back to plain-text rendering when Shiki is loading or
+// errors, so the user always sees their code.
 
-import { createMemo, type Component } from 'solid-js';
+import { createEffect, createMemo, type Component } from 'solid-js';
 
 const escapeHtml = (s: string): string =>
   s
@@ -27,6 +34,8 @@ const renderInline = (s: string): string => {
   let out = s;
   // Inline code first so its content isn't mangled by * / _ rules.
   out = out.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  // Strikethrough: ~~text~~  (GFM).
+  out = out.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
   // Bold: **text** or __text__
   out = out.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
   out = out.replace(/__([^_\n]+)__/g, '<strong>$1</strong>');
@@ -159,6 +168,56 @@ export const renderMarkdown = (md: string): string => {
       continue;
     }
 
+    // 3.5 § F2.5 — GFM pipe tables.
+    // Header row `| col | col |` immediately followed by a separator
+    // `|---|---|` (optional `:` for alignment). Subsequent `| ... |`
+    // rows become tbody. Stops at the first non-pipe line.
+    if (line.trim().startsWith('|') && i + 1 < lines.length) {
+      const sep = lines[i + 1].trim();
+      const looksLikeSep = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(sep);
+      if (looksLikeSep) {
+        flushPara();
+        flushList();
+        const splitRow = (l: string): string[] =>
+          l
+            .trim()
+            .replace(/^\||\|$/g, '')
+            .split('|')
+            .map((c) => c.trim());
+        const aligns = splitRow(sep).map((cell) => {
+          const left = cell.startsWith(':');
+          const right = cell.endsWith(':');
+          if (left && right) return 'center';
+          if (right) return 'right';
+          if (left) return 'left';
+          return null;
+        });
+        const headerCells = splitRow(line);
+        html += '<table class="md-table">\n<thead>\n<tr>';
+        for (let c = 0; c < headerCells.length; c++) {
+          const a = aligns[c];
+          const alignAttr = a ? ` style="text-align: ${a}"` : '';
+          html += `<th${alignAttr}>${renderInline(escapeHtml(headerCells[c]))}</th>`;
+        }
+        html += '</tr>\n</thead>\n<tbody>\n';
+        let j = i + 2;
+        while (j < lines.length && lines[j].trim().startsWith('|')) {
+          const row = splitRow(lines[j]);
+          html += '<tr>';
+          for (let c = 0; c < row.length; c++) {
+            const a = aligns[c];
+            const alignAttr = a ? ` style="text-align: ${a}"` : '';
+            html += `<td${alignAttr}>${renderInline(escapeHtml(row[c]))}</td>`;
+          }
+          html += '</tr>\n';
+          j++;
+        }
+        html += '</tbody>\n</table>\n';
+        i = j - 1; // outer for-loop will i++; skip to the line after the table
+        continue;
+      }
+    }
+
     // 4. Horizontal Rule
     if (/^\s*(-{3,}|_{3,}|\*{3,})$/.test(line.trim())) {
       flushPara();
@@ -222,10 +281,68 @@ export const renderMarkdown = (md: string): string => {
   return html;
 };
 
+/** § F2.5 — post-mount Shiki highlight pass for `pre.md-code[data-lang]`.
+ *
+ *  We don't run Shiki inside `renderMarkdown` (the pure function stays
+ *  dep-free + dirt-cheap to test). Instead the component walks its own
+ *  DOM after each render and progressively replaces unhighlighted code
+ *  blocks with Shiki output. Failures fall back silently to the plain
+ *  escaped text already on the page. */
+async function highlightCodeBlocks(root: HTMLElement) {
+  const nodes = root.querySelectorAll(
+    'pre.md-code[data-lang]:not([data-shiki])',
+  );
+  if (nodes.length === 0) return;
+  try {
+    const { getHighlighter, ensureLang, SHIKI_THEMES } = await import(
+      '~/lib/highlight'
+    );
+    const h = await getHighlighter();
+    for (const node of Array.from(nodes)) {
+      const el = node as HTMLElement;
+      const lang = el.dataset.lang || '';
+      const codeEl = node.querySelector('code');
+      if (!codeEl) continue;
+      const src = codeEl.textContent ?? '';
+      try {
+        await ensureLang(h, lang as never);
+      } catch {
+        el.dataset.shiki = 'skipped'; // unknown grammar; keep plain
+        continue;
+      }
+      try {
+        const out = h.codeToHtml(src, {
+          lang,
+          themes: SHIKI_THEMES,
+          defaultColor: false,
+        });
+        el.innerHTML = out;
+        el.dataset.shiki = 'on';
+      } catch {
+        el.dataset.shiki = 'failed';
+      }
+    }
+  } catch {
+    // Shiki itself failed to load — keep plain rendering.
+  }
+}
+
 const Markdown: Component<{ text: string }> = (p) => {
   const html = createMemo(() => renderMarkdown(p.text ?? ''));
-  // eslint-disable-next-line solid/no-innerhtml
-  return <div class="markdown" innerHTML={html()} />;
+  let rootEl: HTMLDivElement | undefined;
+  createEffect(() => {
+    // Re-run highlight whenever the rendered HTML changes.
+    html();
+    if (rootEl) void highlightCodeBlocks(rootEl);
+  });
+  return (
+    <div
+      class="markdown"
+      ref={(el) => (rootEl = el)}
+      // eslint-disable-next-line solid/no-innerhtml
+      innerHTML={html()}
+    />
+  );
 };
 
 export default Markdown;
