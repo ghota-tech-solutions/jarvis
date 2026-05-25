@@ -1870,3 +1870,36 @@ kbd {
   margin-top: 0.5rem;
   display: inline-block;
 }
+
+/* § F1.7 — bulk-actions sticky bar + per-row checkbox slot */
+.bulk-actions-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  margin-bottom: 0.6rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.bulk-count strong {
+  color: var(--heading);
+  margin-right: 0.15rem;
+}
+.bulk-spacer { flex: 1; }
+.bulk-clear { font-size: 11px; }
+.bulk-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.bulk-row > input[type="checkbox"] {
+  margin-top: 0.4rem;
+  flex: 0 0 auto;
+}
+.bulk-row > .bulk-row-content { flex: 1; min-width: 0; }

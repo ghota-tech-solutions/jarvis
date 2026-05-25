@@ -1,12 +1,20 @@
-// Browser-notification side-effect.
+// § F1.10 — task-verdict notification side-effect.
 //
-// Subscribes to TaskList + GetStatus to detect verdict transitions
-// (running/pending → completed/failed/cancelled) and fires a Notification.
-// The user must grant permission first; if denied, this is a silent no-op.
+// Subscribes to TaskList query updates and detects verdict transitions
+// (running/pending → completed/failed/cancelled). Each transition fires
+// one OS notification via the adapter in `~/lib/notify.ts`, which prefers
+// the Tauri plugin when available and falls back to the browser
+// Notification API on the web surface.
+//
+// Permission is requested once on mount. Firing is gated on the user's
+// `$notificationsEnabled` preference; when off, the subscription still
+// runs (to keep `seen` in sync) but never calls `notify()`.
 
 import { onMount } from 'solid-js';
 import { useQueryClient } from '@tanstack/solid-query';
 import type { Task } from '~/lib/api/gen/jarvis_pb';
+import { $notificationsEnabled } from '~/lib/settings';
+import { notify, requestNotificationPermission } from '~/lib/notify';
 
 const STORAGE_KEY = 'jarvis-notif-seen';
 
@@ -26,16 +34,10 @@ export function useTaskNotifications() {
   const qc = useQueryClient();
 
   onMount(async () => {
-    if (typeof Notification === 'undefined') return;
-    if (Notification.permission === 'default') {
-      // Ask once on mount. If denied, we never ask again this session.
-      try {
-        await Notification.requestPermission();
-      } catch {
-        /* ignored */
-      }
-    }
-    if (Notification.permission !== 'granted') return;
+    // Ask once on mount via whichever backend is active. If denied, we
+    // still wire the subscription so the "seen" tracker stays consistent
+    // when permission is granted later in the session.
+    await requestNotificationPermission();
 
     const seen = loadSeen();
     const unsub = qc.getQueryCache().subscribe((event) => {
@@ -43,7 +45,10 @@ export function useTaskNotifications() {
       const data = event.query.state.data as { tasks?: Task[] } | undefined;
       if (!data?.tasks) return;
       for (const t of data.tasks) {
-        const finished = t.status === 'completed' || t.status === 'failed' || t.status === 'cancelled';
+        const finished =
+          t.status === 'completed' ||
+          t.status === 'failed' ||
+          t.status === 'cancelled';
         if (!finished) continue;
         if (seen[t.id] === t.status) continue;
         if (!seen[t.id]) {
@@ -52,8 +57,11 @@ export function useTaskNotifications() {
           continue;
         }
         seen[t.id] = t.status;
-        const icon = t.status === 'completed' ? '✓' : t.status === 'failed' ? '✗' : '⊘';
-        new Notification(`${icon} ${t.goal.slice(0, 60)}`, {
+        if (!$notificationsEnabled.get()) continue;
+        const icon =
+          t.status === 'completed' ? '✓' : t.status === 'failed' ? '✗' : '⊘';
+        void notify({
+          title: `${icon} ${t.goal.slice(0, 60)}`,
           body: `task ${t.status} · ${t.id.slice(0, 8)}`,
           tag: `task-${t.id}`,
         });

@@ -49,3 +49,13 @@ export const $defaultMaxSteps = persistentAtom<number>(
   20,
   { encode: String, decode: (v) => Number(v) || 20 },
 );
+
+/** § F1.10 — fire OS-level notifications on task verdict transitions
+ *  (completed / failed / cancelled). Default: true. The notification
+ *  adapter prefers the Tauri plugin when running inside the desktop
+ *  shell, falling back to the browser Notification API on web. */
+export const $notificationsEnabled = persistentAtom<boolean>(
+  'jarvis:notifications-enabled',
+  true,
+  { encode: String, decode: (v) => v === 'true' },
+);

@@ -4,6 +4,8 @@ import { jarvis } from '~/lib/api/client';
 import type { Memory } from '~/lib/api/gen/jarvis_pb';
 import { SkeletonList } from '~/components/Skeleton';
 import { EmptyState } from '~/components/EmptyState';
+import BulkActionsBar from '~/components/BulkActionsBar';
+import { createBulkSelect } from '~/lib/bulk-select';
 
 const STATUS_LABEL: Record<string, string> = {
   candidate: 'pending',
@@ -160,6 +162,29 @@ const MemoryList: Component<{ workdirFilter?: string }> = (p) => {
     };
   });
 
+  // § F1.7 — bulk select on the Candidates section. The most operationally
+  // painful case is reviewing N proposals one-by-one after a long task.
+  const bulk = createBulkSelect<bigint>();
+  const [bulkBusy, setBulkBusy] = createSignal(false);
+  const runBulk = async (op: 'promote' | 'forget') => {
+    const ids = bulk.ids();
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    try {
+      for (const id of ids) {
+        if (op === 'promote') {
+          await jarvis.promoteMemory({ id, text: '' });
+        } else {
+          await jarvis.forgetMemory({ id });
+        }
+      }
+      bulk.clear();
+      await q.refetch();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   return (
     <section class="memory-page">
       <header style="margin-bottom: 1rem">
@@ -179,9 +204,55 @@ const MemoryList: Component<{ workdirFilter?: string }> = (p) => {
               when={grouped().candidate.length > 0}
               fallback={<p class="dim">none — finish a task to see proposals</p>}
             >
+              <BulkActionsBar
+                count={bulk.count()}
+                onClear={() => bulk.clear()}
+                busy={bulkBusy()}
+                actions={[
+                  {
+                    label: bulkBusy() ? 'Promoting…' : 'Promote selected',
+                    variant: 'primary',
+                    onClick: () => runBulk('promote'),
+                  },
+                  {
+                    label: bulkBusy() ? 'Forgetting…' : 'Forget selected',
+                    variant: 'danger',
+                    onClick: () => runBulk('forget'),
+                    confirm: 'Forget the selected candidate memories?',
+                  },
+                ]}
+              />
+              <div style="margin-bottom: 0.4rem; font-size: 11px">
+                <button
+                  type="button"
+                  class="btn ghost"
+                  style="padding: 0.15rem 0.4rem"
+                  onClick={() =>
+                    bulk.count() === grouped().candidate.length
+                      ? bulk.clear()
+                      : bulk.selectAll(grouped().candidate.map((m) => m.id))
+                  }
+                >
+                  {bulk.count() === grouped().candidate.length
+                    ? 'Select none'
+                    : 'Select all'}
+                </button>
+              </div>
               <ul class="memory-list">
                 <For each={grouped().candidate}>
-                  {(m) => <MemoryRow m={m} onChange={() => q.refetch()} />}
+                  {(m) => (
+                    <li class="bulk-row" style="list-style: none">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select memory ${m.text.slice(0, 40)}`}
+                        checked={bulk.isSelected(m.id)}
+                        onChange={() => bulk.toggle(m.id)}
+                      />
+                      <div class="bulk-row-content">
+                        <MemoryRow m={m} onChange={() => q.refetch()} />
+                      </div>
+                    </li>
+                  )}
                 </For>
               </ul>
             </Show>

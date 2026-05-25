@@ -15,12 +15,14 @@ import {
   $defaultSandbox,
   $defaultRouting,
   $defaultMaxSteps,
+  $notificationsEnabled,
   ACCENT_PRESETS,
   type ThemeMode,
   type Density,
   type DefaultSandbox,
   type DefaultRouting,
 } from '~/lib/settings';
+import { requestNotificationPermission } from '~/lib/notify';
 
 // --- Generic helpers -----------------------------------------------------
 
@@ -191,6 +193,37 @@ const DefaultsSection: Component = () => {
   );
 };
 
+const NotificationsSection: Component = () => {
+  const enabled = useStore($notificationsEnabled);
+
+  const onToggle = async (next: boolean) => {
+    $notificationsEnabled.set(next);
+    if (next) {
+      // Best-effort: re-ask permission when the user turns it back on,
+      // so a previous "denied" state isn't silently honoured forever.
+      await requestNotificationPermission();
+    }
+  };
+
+  return (
+    <Section
+      title="Notifications"
+      desc="OS-level pings when a task finishes. Uses the Tauri plugin on desktop, the browser Notification API on web."
+    >
+      <Row label="Enable task notifications">
+        <label class="switch">
+          <input
+            type="checkbox"
+            checked={enabled()}
+            onChange={(e) => void onToggle(e.currentTarget.checked)}
+          />
+          <span>{enabled() ? 'on' : 'off'}</span>
+        </label>
+      </Row>
+    </Section>
+  );
+};
+
 // Source of truth for the hotkeys table is `HelpOverlay.tsx`. Keep this in
 // sync with that file — F2 will lift hotkeys into their own store with
 // rebind support, at which point this becomes editable.
@@ -276,6 +309,7 @@ const Settings: Component = () => {
       </header>
       <AppearanceSection />
       <DefaultsSection />
+      <NotificationsSection />
       <HotkeysSection />
       <AboutSection />
     </section>
