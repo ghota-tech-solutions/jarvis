@@ -47,6 +47,9 @@ const SidebarLeft: Component = () => {
         <A href="/schedules" class="nav-link" activeClass="nav-active">
           ⏰ Schedules
         </A>
+        <A href="/settings" class="nav-link" activeClass="nav-active">
+          ⚙ Settings
+        </A>
       </div>
 
       <h3 class="section-title">Projects</h3>

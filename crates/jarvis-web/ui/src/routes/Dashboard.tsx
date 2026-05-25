@@ -5,6 +5,7 @@ import { taskListQuery, qkTaskList } from '~/lib/api/queries';
 import { jarvis } from '~/lib/api/client';
 import type { Task } from '~/lib/api/gen/jarvis_pb';
 import QuickAsk from '~/components/QuickAsk';
+import AppErrorBoundary from '~/components/ErrorBoundary';
 
 type Conversation = {
   root: Task;
@@ -266,4 +267,10 @@ function rootOf(t: Task, byId: Map<string, Task>): string {
   return t.id;
 }
 
-export default Dashboard;
+const DashboardRoute: Component = () => (
+  <AppErrorBoundary name="Dashboard">
+    <Dashboard />
+  </AppErrorBoundary>
+);
+
+export default DashboardRoute;

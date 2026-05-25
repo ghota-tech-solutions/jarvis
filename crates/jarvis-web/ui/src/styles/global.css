@@ -810,6 +810,32 @@ kbd {
   color: var(--body);
 }
 
+/* --- Error boundary fallback --------------------------------------- */
+
+.error-boundary-fallback {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--error);
+  border-radius: 6px;
+  padding: 1rem 1.2rem;
+  margin: 1rem 0;
+  max-width: 720px;
+}
+
+.error-boundary-stack {
+  margin: 0.5rem 0 0 0;
+  padding: 0.5rem 0.7rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* --- Filter bar ---------------------------------------------------- */
 
 .filter-bar {
@@ -1244,6 +1270,182 @@ kbd {
   .turn-header {
     padding: 0.35rem 0.45rem;
   }
+}
+
+/* --- Settings page ----------------------------------------------------- */
+
+.settings-page {
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.settings-header {
+  margin-bottom: 0.4rem;
+}
+
+.settings-section {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  padding: 1rem 1.2rem;
+}
+
+.settings-section-head {
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section-title {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+}
+
+.settings-section-desc {
+  margin: 0.25rem 0 0 0;
+  font-size: 12px;
+}
+
+.settings-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.settings-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.2rem;
+  padding: 0.3rem 0;
+}
+
+.settings-row-label {
+  flex: 0 0 180px;
+  font-size: 13px;
+  color: var(--body);
+  line-height: 1.4;
+  padding-top: 0.2rem;
+}
+
+.settings-row-hint {
+  font-size: 11px;
+  margin-top: 0.15rem;
+  font-weight: normal;
+}
+
+.settings-row-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.settings-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  user-select: none;
+  transition: border-color 100ms, color 100ms;
+}
+
+.settings-radio:hover {
+  border-color: var(--accent);
+}
+
+.settings-radio input[type='radio'] {
+  /* The clickable label is the chip; the actual radio input is just a
+     hidden a11y anchor. */
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.settings-radio.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(212, 180, 120, 0.08);
+}
+
+.settings-radio-hint {
+  font-size: 10px;
+}
+
+.settings-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.settings-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--swatch, var(--accent));
+  cursor: pointer;
+  padding: 0;
+  transition: transform 100ms, border-color 100ms;
+}
+
+.settings-swatch:hover {
+  transform: scale(1.1);
+}
+
+.settings-swatch.is-active {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 2px var(--bg-elev), 0 0 0 3px var(--swatch);
+}
+
+.settings-hotkeys {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.settings-hotkeys th,
+.settings-hotkeys td {
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.settings-hotkeys th {
+  color: var(--dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.settings-hotkeys td:first-child {
+  white-space: nowrap;
+  width: 120px;
+}
+
+/* Density posed for future use. Compact tightens vertical rhythm; a
+   follow-up ticket will plumb it through `.app-main`, `.form`, `.task-card`,
+   etc. Kept minimal here so the toggle is visibly noticeable. */
+[data-density='compact'] .settings-row {
+  padding: 0.15rem 0;
+}
+[data-density='compact'] .settings-section {
+  padding: 0.75rem 0.9rem;
 }
 
 /* --- Premium Devin-Style Revamp Extensions ----------------------------- */

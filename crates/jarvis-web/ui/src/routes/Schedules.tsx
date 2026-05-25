@@ -8,6 +8,7 @@ import {
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { jarvis } from '~/lib/api/client';
 import type { Schedule } from '~/lib/api/gen/jarvis_pb';
+import AppErrorBoundary from '~/components/ErrorBoundary';
 
 const fmtNext = (micros: bigint): string => {
   const n = Number(micros);
@@ -226,4 +227,10 @@ const Schedules: Component = () => {
   );
 };
 
-export default Schedules;
+const SchedulesRoute: Component = () => (
+  <AppErrorBoundary name="Schedules">
+    <Schedules />
+  </AppErrorBoundary>
+);
+
+export default SchedulesRoute;

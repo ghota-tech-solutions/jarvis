@@ -11,8 +11,10 @@ import SidebarLeft from '~/components/SidebarLeft';
 import SidebarRight from '~/components/SidebarRight';
 import HelpOverlay from '~/components/HelpOverlay';
 import CommandPalette from '~/components/CommandPalette';
+import AppErrorBoundary from '~/components/ErrorBoundary';
 import CostHud from '~/features/hud/CostHud';
-import { bindThemeToDom, toggleTheme, useTheme } from '~/lib/stores/theme';
+import { toggleTheme, useTheme } from '~/lib/stores/theme';
+import { useAppearance } from '~/lib/theme-apply';
 import { useGlobalShortcuts, setHelpOpenSig } from '~/lib/stores/shortcuts';
 import { useTaskNotifications } from '~/lib/stores/notifications';
 
@@ -20,7 +22,7 @@ const App: ParentComponent = (props) => {
   const loc = useLocation();
   const isTaskRoute = () => loc.pathname.startsWith('/task/');
   const theme = useTheme();
-  bindThemeToDom();
+  useAppearance();
   useGlobalShortcuts();
   useTaskNotifications();
 
@@ -86,7 +88,11 @@ const App: ParentComponent = (props) => {
           aria-hidden="true"
         />
       </Show>
-      <main class="app-main">{props.children}</main>
+      <main class="app-main">
+        <AppErrorBoundary name="App">
+          {props.children}
+        </AppErrorBoundary>
+      </main>
       <aside class="sidebar-right">
         <SidebarRight expanded={isTaskRoute()} />
       </aside>

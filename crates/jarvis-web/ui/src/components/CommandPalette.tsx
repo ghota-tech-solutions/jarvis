@@ -79,6 +79,11 @@ const CommandPalette: Component = () => {
       run: () => nav('/memory'),
     },
     {
+      id: 'goto-settings',
+      label: 'Go to Settings',
+      run: () => nav('/settings'),
+    },
+    {
       id: 'toggle-theme',
       label: 'Toggle theme dark/light',
       hint: 't',

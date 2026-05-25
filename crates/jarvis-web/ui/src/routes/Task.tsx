@@ -18,6 +18,7 @@ import Timeline from '~/features/timeline/Timeline';
 import DiffByIntent from '~/features/diff/DiffByIntent';
 import TerminalLogs from '~/components/TerminalLogs';
 import Telemetry from '~/components/Telemetry';
+import AppErrorBoundary from '~/components/ErrorBoundary';
 
 const Task: Component = () => {
   const params = useParams<{ id: string }>();
@@ -366,4 +367,10 @@ const statusClass = (s: string): 'good' | 'warn' | 'error' | '' => {
   }
 };
 
-export default Task;
+const TaskRoute: Component = () => (
+  <AppErrorBoundary name="Task">
+    <Task />
+  </AppErrorBoundary>
+);
+
+export default TaskRoute;

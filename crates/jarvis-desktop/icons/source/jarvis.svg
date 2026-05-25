@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Jarvis logo.
+    Stylised "J" mark on a deep-blue rounded square. Designed to stay
+    legible at 16x16 (favicon / tray) and crisp at 512x512 (icns master).
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#0b1d52"/>
+    </linearGradient>
+    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#cfe1ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="512" height="512" rx="96" ry="96" fill="url(#bg)"/>
+
+  <!-- Subtle inner ring for depth -->
+  <rect x="28" y="28" width="456" height="456" rx="76" ry="76"
+        fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="4"/>
+
+  <!--
+    Glyph "J":
+      - top serif/bar: a chunky horizontal stroke
+      - vertical stem
+      - bottom hook curving left
+    Drawn as a single filled path to stay crisp at small sizes.
+  -->
+  <path fill="url(#fg)" d="
+    M 152 116
+    L 372 116
+    L 372 176
+    L 312 176
+    L 312 332
+    Q 312 396 256 396
+    Q 200 396 200 332
+    L 200 304
+    L 260 304
+    L 260 332
+    Q 260 344 256 344
+    Q 252 344 252 332
+    L 252 176
+    L 152 176
+    Z
+  "/>
+
+  <!-- Accent dot above the J (signature mark) -->
+  <circle cx="256" cy="80" r="18" fill="#38bdf8"/>
+</svg>

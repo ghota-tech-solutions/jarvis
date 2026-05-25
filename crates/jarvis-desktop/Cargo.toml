@@ -13,7 +13,7 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
@@ -25,3 +25,15 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true
 which = "8"
+
+# Used only by `examples/gen_icons.rs` (icon ladder generation).
+# Kept out of the shipped binary to avoid bloating it with SVG/ICNS deps.
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+resvg = "0.45"
+ico = "0.5"
+icns = "0.3"
+
+[[example]]
+name = "gen_icons"
+path = "examples/gen_icons.rs"

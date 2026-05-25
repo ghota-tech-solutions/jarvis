@@ -17,11 +17,11 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
-    "types": ["vite/client", "node"],
+    "types": ["vite/client", "node", "vitest/globals", "@testing-library/jest-dom"],
     "paths": {
       "~/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "index.html"],
+  "include": ["src/**/*", "index.html", "vitest.config.ts", "vitest.setup.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
