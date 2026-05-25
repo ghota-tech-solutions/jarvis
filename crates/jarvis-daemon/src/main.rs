@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
+mod file_watch;
 mod recipes;
 mod scheduler;
 mod service;

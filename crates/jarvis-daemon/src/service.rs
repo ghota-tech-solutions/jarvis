@@ -1722,6 +1722,46 @@ impl Jarvis for JarvisService {
             .await;
         Ok(Response::new(handle))
     }
+
+    // § T2.10 — ambient interrupt channel v1.
+    type WatchWorkdirStream = Pin<
+        Box<dyn Stream<Item = std::result::Result<jarvis_api::FsEvent, Status>> + Send + 'static>,
+    >;
+
+    #[instrument(skip_all, fields(workdir = %request.get_ref().workdir))]
+    async fn watch_workdir(
+        &self,
+        request: Request<jarvis_api::WatchWorkdirRequest>,
+    ) -> std::result::Result<Response<Self::WatchWorkdirStream>, Status> {
+        let req = request.into_inner();
+        let workdir = std::path::PathBuf::from(&req.workdir);
+        let (rx, debouncer) = crate::file_watch::spawn(&workdir)
+            .map_err(|e| Status::invalid_argument(format!("watch: {e}")))?;
+
+        // Bridge the mpsc receiver to a `Result`-yielding tonic stream.
+        // The watcher must live as long as the stream — wrap them in a
+        // small struct whose Drop kills the watcher when the client
+        // disconnects.
+        struct WatcherStream<S> {
+            inner: S,
+            _watcher: notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>,
+        }
+        impl<S: Stream + Unpin> Stream for WatcherStream<S> {
+            type Item = S::Item;
+            fn poll_next(
+                mut self: Pin<&mut Self>,
+                cx: &mut std::task::Context<'_>,
+            ) -> std::task::Poll<Option<Self::Item>> {
+                Pin::new(&mut self.inner).poll_next(cx)
+            }
+        }
+        let inner = tokio_stream::wrappers::ReceiverStream::new(rx).map(Ok);
+        let stream = WatcherStream {
+            inner,
+            _watcher: debouncer,
+        };
+        Ok(Response::new(Box::pin(stream) as Self::WatchWorkdirStream))
+    }
 }
 
 fn schedule_to_api(r: &jarvis_ledger::ScheduleRecord) -> ApiSchedule {

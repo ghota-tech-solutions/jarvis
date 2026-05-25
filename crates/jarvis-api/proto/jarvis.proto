@@ -67,6 +67,11 @@ service Jarvis {
   rpc ListSchedules(Empty) returns (ScheduleList);
   rpc DeleteSchedule(ScheduleHandle) returns (Empty);
   rpc RunScheduleNow(ScheduleHandle) returns (TaskHandle);
+
+  // § T2.10 — ambient interrupt channel: stream filesystem events for a
+  // given workdir. v1 is observability only; the agent does not yet
+  // auto-preempt running tasks on events.
+  rpc WatchWorkdir(WatchWorkdirRequest) returns (stream FsEvent);
 }
 
 // ---------- M1 ----------
@@ -152,6 +157,31 @@ message DaemonStatus {
   // § F2.7 — connected MCP servers + their tool catalogs, so the SPA's
   // MCP Tool Explorer can render the inventory without a separate RPC.
   repeated McpServerStatus mcp_servers = 5;
+}
+
+// § T2.10 — ambient interrupt channel v1. The daemon watches a workdir
+// via the OS file-notification API (`notify` crate) and streams every
+// create / modify / remove event back to the client. v1 is pure
+// observability — the agent does NOT yet auto-preempt on events; that
+// arrives with v2 alongside policy gating.
+//
+// Backpressure: the daemon sends events on a bounded channel and drops
+// the OLDEST when the SPA can't keep up — better stale than blocking.
+// Debounce: rapid bursts on the same path are coalesced to a single
+// event every 100 ms (so a save-on-each-keystroke editor doesn't melt
+// the SPA).
+message WatchWorkdirRequest {
+  // Absolute path to watch. Must exist and be a directory.
+  string workdir = 1;
+}
+
+message FsEvent {
+  // Path relative to the watched workdir, forward-slash separated.
+  string path = 1;
+  // One of: "created" | "modified" | "removed" | "renamed" | "other".
+  string kind = 2;
+  // Wall-clock micros at which the daemon saw the OS notification.
+  int64 ts_micros = 3;
 }
 
 message McpServerStatus {
