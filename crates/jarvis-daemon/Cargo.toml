@@ -45,5 +45,12 @@ regex.workspace = true
 notify = "8"
 notify-debouncer-mini = "0.7"
 
+[features]
+default = []
+# § T2.9 — opt-in browser sidecar. Propagates to jarvis-tools so the
+# three browser_* tools get compiled in and registered. Build with
+# `cargo build -p jarvis-daemon --features browser`.
+browser = ["jarvis-tools/browser"]
+
 [dev-dependencies]
 tempfile = "3"

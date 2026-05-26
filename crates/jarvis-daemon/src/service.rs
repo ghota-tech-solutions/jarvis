@@ -454,6 +454,18 @@ async fn build_tool_registry(cfg: &Config) -> (ToolRegistry, Arc<Vec<McpServerSt
     r.register(jarvis_tools::GhPrCommentTool);
     r.register(jarvis_tools::GhPrCreateTool);
 
+    // § T2.9 — browser sidecar (browser_navigate / browser_read /
+    // browser_screenshot). Only compiled in when jarvis-tools is
+    // built with `--features browser`; the daemon picks them up
+    // automatically when its dependency on jarvis-tools enables the
+    // same feature.
+    #[cfg(feature = "browser")]
+    {
+        r.register(jarvis_tools::BrowserNavigateTool);
+        r.register(jarvis_tools::BrowserReadTool);
+        r.register(jarvis_tools::BrowserScreenshotTool);
+    }
+
     let mut statuses: Vec<McpServerStatus> = Vec::new();
     for (name, spec) in &cfg.mcp.servers {
         if !spec.enable {

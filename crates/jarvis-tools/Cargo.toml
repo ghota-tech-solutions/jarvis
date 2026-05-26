@@ -22,6 +22,20 @@ regex.workspace = true
 ignore.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 jsonschema = { version = "0.46", default-features = false }
+# § T2.9 — browser sidecar. Optional + heavy: pulls in CDP types + a
+# full HTTP stack. Off by default so the workspace build stays fast.
+# Enable with `cargo build -p jarvis-tools --features browser` (or
+# propagated through `--features jarvis-tools/browser` from downstream
+# crates). Requires a Chromium/Chrome binary present on the host at
+# runtime; the tool fails with a clear hint when the launcher can't
+# find one.
+chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"], optional = true }
+futures = { workspace = true, optional = true }
+base64 = { version = "0.22", optional = true }
+
+[features]
+default = []
+browser = ["dep:chromiumoxide", "dep:futures", "dep:base64"]
 
 [dev-dependencies]
 tempfile = "3"

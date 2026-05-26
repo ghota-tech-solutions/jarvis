@@ -4,6 +4,8 @@
 //! (M3 adds Docker/Native sandbox backends). Use within trusted workspaces only.
 
 pub mod apply_patch;
+#[cfg(feature = "browser")]
+pub mod browser;
 pub mod fetch_url;
 mod gh;
 pub mod git_status;
@@ -20,6 +22,8 @@ mod tools;
 pub mod view_symbols;
 mod web_search;
 
+#[cfg(feature = "browser")]
+pub use browser::{BrowserNavigateTool, BrowserReadTool, BrowserScreenshotTool};
 pub use fetch_url::FetchUrlTool;
 pub use gh::{GhPrCommentTool, GhPrCreateTool, GhPrListTool, GhPrViewTool};
 pub use git_status::GitStatusTool;
