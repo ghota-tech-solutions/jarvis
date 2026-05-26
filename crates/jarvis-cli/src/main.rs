@@ -1,3 +1,5 @@
+mod dist;
+
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use futures::StreamExt;
@@ -8,6 +10,7 @@ use jarvis_api::{
     jarvis_client::JarvisClient,
 };
 use std::io::{self, Write};
+use std::path::PathBuf;
 use std::time::Duration;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, Endpoint};
@@ -55,6 +58,24 @@ enum Cmd {
     Task {
         #[command(subcommand)]
         cmd: TaskCmd,
+    },
+    /// § T2.6 — distribution toolchain (build / package).
+    Dist {
+        #[command(subcommand)]
+        cmd: DistCmd,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DistCmd {
+    /// Build a pre-configured bundle from a YAML manifest.
+    /// The result is written to `target/dist/<name>/` and contains
+    /// the CLI + daemon binaries, the baked config, and any
+    /// skills / recipes / README declared in the manifest.
+    Build {
+        /// Path to the YAML manifest describing the distribution.
+        #[arg(long, default_value = "dist.yaml")]
+        manifest: PathBuf,
     },
 }
 
@@ -138,6 +159,18 @@ struct AddTaskArgs {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    // § T2.6 — `dist` runs offline (it shells out to cargo and
+    // touches the local filesystem only). Skip the daemon connect
+    // so users can package distributions without a running daemon.
+    if let Cmd::Dist { cmd } = &cli.cmd {
+        return match cmd {
+            DistCmd::Build { manifest } => {
+                dist::run_build(manifest)?;
+                Ok(())
+            }
+        };
+    }
+
     let channel = connect(&cli.daemon, cli.connect_timeout).await?;
     let mut client = build_client(channel)?;
 
@@ -210,6 +243,7 @@ async fn main() -> Result<()> {
             }
         }
         Cmd::Task { cmd } => task_cmd(&mut client, cmd).await?,
+        Cmd::Dist { .. } => unreachable!("handled in the early-return branch above"),
     }
     Ok(())
 }

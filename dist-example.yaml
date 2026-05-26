@@ -1,0 +1,43 @@
+# § T2.6 — example distribution manifest.
+# Build with:  jarvis dist build --manifest dist-example.yaml
+# Output:      target/dist/acme-team/
+#
+# The bundle contains: bin/jarvis(.exe), bin/jarvis-daemon(.exe),
+# jarvis.toml, skills/, recipes/, README.md (if present) and a
+# MANIFEST.json describing what was built and when.
+
+name: acme-team
+# Cargo target triple. Omit to build for the host platform.
+# target: x86_64-pc-windows-msvc
+profile: release
+
+bundle:
+  # Bake a team-specific jarvis.toml into the bundle. One of:
+  #   inline: |<literal toml content>
+  #   path:   ./path/to/jarvis.toml
+  config:
+    inline: |
+      [daemon]
+      addr = "127.0.0.1:7777"
+      data_dir = ".jarvis"
+
+      [providers.local.gemma]
+      url = "${HERMES_LOCAL_URL}"
+      model = "${HERMES_LOCAL_MODEL}"
+      api_key = "${HERMES_LOCAL_API_KEY}"
+      priority = 10
+      capabilities = { ctx_len = 128000, tool_calls = true, json_schema = true, vision = false }
+      tool_dialect = "gemma4_strict"
+
+  # Directories or files to ship under bundle/skills/.
+  # Useful for shipping a curated .skill.md library with the dist.
+  # skills:
+  #   - ./team-skills/
+
+  # Directories or files to ship under bundle/recipes/.
+  # The daemon auto-loads any *.yaml inside recipes/ on startup.
+  # recipes:
+  #   - ./team-recipes/
+
+  # Optional README copied as bundle/README.md.
+  # readme: ./TEAM-README.md
