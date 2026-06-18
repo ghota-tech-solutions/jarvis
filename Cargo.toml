@@ -95,7 +95,7 @@ tower-http = { version = "0.6", features = ["trace", "compression-gzip"] }
 maud = "0.27"
 
 # Diffs (M6.5)
-similar = "2"
+similar = "3"
 async-stream = "0.3"
 
 # Markdown rendering (M6.6)
