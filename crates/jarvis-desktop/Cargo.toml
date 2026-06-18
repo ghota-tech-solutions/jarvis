@@ -30,7 +30,7 @@ which = "8"
 # Kept out of the shipped binary to avoid bloating it with SVG/ICNS deps.
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
-resvg = "0.45"
+resvg = "0.47"
 ico = "0.5"
 icns = "0.3"
 
