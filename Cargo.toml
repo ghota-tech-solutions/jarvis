@@ -86,7 +86,7 @@ git2 = { version = "0.21", default-features = false }
 
 # TUI (M4)
 ratatui = "0.30"
-crossterm = { version = "0.28", features = ["event-stream"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
 tui-input = "0.14"
 
 # Web (M6)
