@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.0](https://github.com/ghota-tech-solutions/jarvis/compare/v0.1.1...v0.2.0) (2026-06-18)
+
+
+### Features
+
+* **agent, web:** T2.7 v0 — Plan/Act/Verify/Ship phase metadata ([67ddc3b](https://github.com/ghota-tech-solutions/jarvis/commit/67ddc3be11042ec85f06e23503f34b3baee36cc2))
+* **agent:** T2.2 — self-authored skills (post-verdict + prompt injection) ([d0e81e4](https://github.com/ghota-tech-solutions/jarvis/commit/d0e81e4789b3027d838d20d1df9cc924971afde6))
+* **agent:** T2.7 v1 — enforce phase restrictions on tool calls ([33defbf](https://github.com/ghota-tech-solutions/jarvis/commit/33defbf7918dbcc082879098c808f85eda5bc169))
+* **api, agent, web:** close backend↔frontend cycle — Recipes, Skills, workdir watch (F2.2 + F2.3 + F2.6) ([73e2b84](https://github.com/ghota-tech-solutions/jarvis/commit/73e2b8488cfbcd315d4427da64ac7909e3722943))
+* **api, daemon, web:** fleet deltas + chunked file diffs (M7.1 + M8.1) ([f95a599](https://github.com/ghota-tech-solutions/jarvis/commit/f95a5997f9f6e7c97abc7eed30658b48bf60a40d))
+* **api, daemon:** T2.10 v1 — ambient interrupt channel (file watcher RPC) ([a238dea](https://github.com/ghota-tech-solutions/jarvis/commit/a238dea54717d0ad54e7bb680fbdc73f75235acf))
+* **api, web:** MCP Tool Explorer + task transcript export (F2.7 + F2.9) ([00674af](https://github.com/ghota-tech-solutions/jarvis/commit/00674af30f7f163442ca7f8336ad995ea00f6148))
+* **cli:** T2.6 v0 — `jarvis dist build` for pre-configured bundles ([c197156](https://github.com/ghota-tech-solutions/jarvis/commit/c197156307ca712bc351337087d20f6babf147a1))
+* **daemon:** T2.4 — declarative YAML recipes auto-loaded at startup ([346b091](https://github.com/ghota-tech-solutions/jarvis/commit/346b0919861ded481d116c35fbd8085172b79f0a))
+* **ledger, agent:** T2.1 — five-tier memory layers (Hermes-style) ([e4c840e](https://github.com/ghota-tech-solutions/jarvis/commit/e4c840e69a4ce543f835f3b901ac676dba35ea30))
+* **mcp-server:** expose jarvis as an MCP server over stdio ([b445580](https://github.com/ghota-tech-solutions/jarvis/commit/b445580dcde3624d6008e42be4ebc72f99f81332))
+* ship Tier 1 evolutions across agent, tools, ledger, repomap, bench ([217ae8e](https://github.com/ghota-tech-solutions/jarvis/commit/217ae8e4316bc7c473b40a0b2f934033edbb7553))
+* **tools, config, daemon:** T2.3 v1 — Architect/Editor pipeline ([d34210f](https://github.com/ghota-tech-solutions/jarvis/commit/d34210f875e02a41c114c8a55a7ea4c8a56a5f15))
+* **tools, daemon:** T2.9 v0 — browser sidecar tools (feature-gated) ([40bd92e](https://github.com/ghota-tech-solutions/jarvis/commit/40bd92e4a9ffdc855ff0af2d7a91d2afa2f32202))
+* **web, desktop:** frontend Tier 1 Wave 1 — ErrorBoundary, Vitest, Settings, Tauri tray ([7c64bed](https://github.com/ghota-tech-solutions/jarvis/commit/7c64bed8fcdcf61756b399f823f7476744fe6cc8))
+* **web:** F2.1 v0 — phase swimlanes on the reasoning timeline ([e0eaa00](https://github.com/ghota-tech-solutions/jarvis/commit/e0eaa0004b8950c3740d095004e69e723a1e8ee0))
+* **web:** frontend Tier 1 final — i18n scaffold (en + fr) for high-visibility surfaces ([746ff94](https://github.com/ghota-tech-solutions/jarvis/commit/746ff94c194dd99aa569158c47453a2bf9a18f42))
+* **web:** frontend Tier 1 Wave 2 — Shiki diff highlight, Skeleton loaders, EmptyState ([5a66421](https://github.com/ghota-tech-solutions/jarvis/commit/5a66421f586481c0d94b26a6e301205bacb9ed19))
+* **web:** frontend Tier 1 Wave 3 part 1 — Tauri notifications + bulk actions ([43f8c4c](https://github.com/ghota-tech-solutions/jarvis/commit/43f8c4c4eb09a9ac59bb03d423d9a1ce175ac9be))
+* **web:** frontend Tier 2 batch — Theme 2.0 polish, rich Markdown, Analytics route ([dd1f8ad](https://github.com/ghota-tech-solutions/jarvis/commit/dd1f8ad31b408aadd194a7bdcc62a38b8e29895e))
+
 ## [0.1.1](https://github.com/ghota-tech-solutions/jarvis/compare/v0.1.0...v0.1.1) (2026-05-21)
 
 
