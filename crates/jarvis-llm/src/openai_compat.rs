@@ -6,9 +6,14 @@
 use async_openai::{
     Client,
     config::OpenAIConfig,
-    types::{
-        ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+    types::chat::{
+        ChatCompletionRequestAssistantMessageArgs,
+        ChatCompletionRequestAssistantMessageContent,
+        ChatCompletionRequestMessage,
+        ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestSystemMessageContent,
+        ChatCompletionRequestUserMessageArgs,
+        ChatCompletionRequestUserMessageContent,
         CreateChatCompletionRequestArgs,
     },
 };
@@ -49,21 +54,33 @@ impl OpenAiCompatProvider {
         msgs.iter()
             .map(|m| -> Result<ChatCompletionRequestMessage> {
                 match m.role {
-                    ChatRole::System => Ok(ChatCompletionRequestSystemMessageArgs::default()
-                        .content(m.content.clone())
-                        .build()
-                        .map_err(|e| Error::Provider(format!("system msg: {e}")))?
-                        .into()),
-                    ChatRole::User => Ok(ChatCompletionRequestUserMessageArgs::default()
-                        .content(m.content.clone())
-                        .build()
-                        .map_err(|e| Error::Provider(format!("user msg: {e}")))?
-                        .into()),
-                    ChatRole::Assistant => Ok(ChatCompletionRequestAssistantMessageArgs::default()
-                        .content(m.content.clone())
-                        .build()
-                        .map_err(|e| Error::Provider(format!("assistant msg: {e}")))?
-                        .into()),
+                    ChatRole::System => {
+                        let msg = ChatCompletionRequestSystemMessageArgs::default()
+                            .content(ChatCompletionRequestSystemMessageContent::Text(
+                                m.content.clone(),
+                            ))
+                            .build()
+                            .map_err(|e| Error::Provider(format!("system msg: {e}")))?;
+                        Ok(ChatCompletionRequestMessage::System(msg))
+                    }
+                    ChatRole::User => {
+                        let msg = ChatCompletionRequestUserMessageArgs::default()
+                            .content(ChatCompletionRequestUserMessageContent::Text(
+                                m.content.clone(),
+                            ))
+                            .build()
+                            .map_err(|e| Error::Provider(format!("user msg: {e}")))?;
+                        Ok(ChatCompletionRequestMessage::User(msg))
+                    }
+                    ChatRole::Assistant => {
+                        let msg = ChatCompletionRequestAssistantMessageArgs::default()
+                            .content(ChatCompletionRequestAssistantMessageContent::Text(
+                                m.content.clone(),
+                            ))
+                            .build()
+                            .map_err(|e| Error::Provider(format!("assistant msg: {e}")))?;
+                        Ok(ChatCompletionRequestMessage::Assistant(msg))
+                    }
                     ChatRole::Tool => Err(Error::Invalid(
                         "tool messages not supported in M1".to_string(),
                     )),
@@ -75,19 +92,9 @@ impl OpenAiCompatProvider {
 
 fn is_rate_limit_error(err: &async_openai::error::OpenAIError) -> bool {
     let err_str = err.to_string().to_lowercase();
-    if err_str.contains("429")
+    err_str.contains("429")
         || err_str.contains("too many requests")
         || err_str.contains("rate limit")
-    {
-        return true;
-    }
-    if let async_openai::error::OpenAIError::Reqwest(req_err) = err
-        && let Some(status) = req_err.status()
-        && status.as_u16() == 429
-    {
-        return true;
-    }
-    false
 }
 
 #[async_trait]
