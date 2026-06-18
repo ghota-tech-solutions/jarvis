@@ -32,7 +32,7 @@ which = "8"
 image = { version = "0.25", default-features = false, features = ["png"] }
 resvg = "0.45"
 ico = "0.5"
-icns = "0.3"
+icns = "0.4"
 
 [[example]]
 name = "gen_icons"
